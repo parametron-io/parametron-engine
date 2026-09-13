@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    name: Go test and vet
+    name: Engine test suite
     runs-on: ubuntu-latest
 
     steps:
@@ -26,3 +26,6 @@ jobs:
 
       - name: Run vet
         run: nix develop --command go vet ./...
+
+      - name: Run Python proof tests
+        run: nix develop --command python -m unittest discover -s scripts/tests -p 'test_*.py' -v
