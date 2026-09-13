@@ -1,0 +1,70 @@
+{
+  "schemaVersion": "1.0",
+  "captureId": "cap.minimal",
+  "adapter": {
+    "name": "freecad",
+    "version": ""
+  },
+  "cadSystem": {
+    "name": "FreeCAD",
+    "version": ""
+  },
+  "sourceDocument": {
+    "logicalId": "first_model",
+    "path": "input/First.FCStd",
+    "fingerprint": "sha256:minimal"
+  },
+  "rootProduct": {
+    "id": "cmp.root"
+  },
+  "annotations": {
+    "description": "",
+    "comment": "",
+    "purpose": ""
+  },
+  "entities": {
+    "components": [
+      {
+        "id": "cmp.root",
+        "kind": "assembly",
+        "name": "RootAssembly",
+        "displayName": "Root Assembly",
+        "cadType": "App::Part",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root"
+        },
+        "stabilityClass": "stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      }
+    ],
+    "features": [],
+    "relationships": [],
+    "parameterGroups": [],
+    "parameters": [],
+    "metadata": []
+  },
+  "structure": {
+    "rootComponentId": "cmp.root",
+    "nodes": [
+      {
+        "componentId": "cmp.root",
+        "parentComponentId": "",
+        "children": []
+      }
+    ]
+  }
+}

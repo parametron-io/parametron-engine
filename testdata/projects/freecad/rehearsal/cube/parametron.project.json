@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "projectId": "cube-rehearsal",
+  "dsl": "cube.project.dsl",
+  "resources": {
+    "models": {
+      "cube_rehearsal_model": "input/cube.FCStd"
+    }
+  },
+  "tables": {
+    "cube_variants": "tables/cube_variants.json"
+  }
+}

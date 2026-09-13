@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0",
+  "name": "fastener_catalog",
+  "keyColumn": "sku",
+  "columns": [
+    {
+      "name": "sku",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "diameter",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "label",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "rows": [
+    {
+      "sku": "M8x20",
+      "diameter": 8,
+      "label": "M8 bolt"
+    }
+  ]
+}

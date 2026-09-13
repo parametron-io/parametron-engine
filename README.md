@@ -1,0 +1,245 @@
+# Parametron Engine
+
+Parametron Engine is a deterministic execution engine for engineering automation.
+
+It parses and validates Parametron DSL inputs, builds deterministic execution
+plans, invokes external CAD/runtime capabilities through Engine-owned contracts,
+verifies returned evidence, and produces normalized records and local run
+artifacts.
+
+The Engine is designed to remain independent from CAD application internals,
+workflow systems, and durable storage. CAD-specific execution is delegated to
+external runtimes such as
+[`parametron-freecad`](https://github.com/parametron-io/parametron-freecad).
+
+## Features
+
+Parametron Engine currently provides:
+
+- deterministic DSL parsing and validation
+- semantic analysis and intermediate representation generation
+- deterministic planning and execution identities
+- scheduling and local execution
+- cache-aware execution
+- simulation and plan inspection
+- CAD adapter and runtime capability contracts
+- aligned external FreeCAD runtime invocation
+- runtime evidence validation and verification
+- normalized engineering record contracts
+- local record-package generation
+- artifact and raw-evidence preservation
+- target-action authoring for suppression, visibility, and deletion intent
+- CLI and HTTP API foundations
+
+Equivalent inputs and execution context are designed to produce stable
+Engine-owned identities and normalized outputs.
+
+## Architecture
+
+At a high level:
+
+```text
+Parametron DSL
+      │
+      ▼
+Validation / IR
+      │
+      ▼
+Deterministic planning
+      │
+      ▼
+Execution / scheduling
+      │
+      ├── local Engine operations
+      │
+      └── external runtime capability
+                │
+                ▼
+          parametron-freecad
+                │
+                ▼
+       runtime evidence/results
+                │
+                ▼
+        verification / records
+````
+
+Engine owns the engineering contract and interpretation of runtime results.
+
+External runtimes own application-specific behavior. For FreeCAD, document
+loading, mutation, recompute, saving, export, and native observation belong to
+`parametron-freecad`, not to Engine.
+
+See:
+
+* [System overview](docs/architecture/system-overview.md)
+* [Execution model](docs/architecture/execution-model.md)
+* [Adapter architecture](docs/adapters/adapter-architecture.md)
+* [CAD authoring contract](docs/authoring/cad-contract.md)
+
+## Command-line interface
+
+The local CLI lives under `cmd/parametron`.
+
+Show available commands:
+
+```bash
+go run ./cmd/parametron --help
+```
+
+The CLI includes command families for validation, simulation, execution, sweep,
+snapshot, diff, and related engineering workflows.
+
+Command-specific documentation is available under
+[`docs/cli/`](docs/cli/).
+
+## External CAD runtimes
+
+CAD execution is performed through Engine-owned runtime contracts rather than
+embedded CAD implementation code.
+
+FreeCAD execution is provided by the separate
+[`parametron-freecad`](https://github.com/parametron-io/parametron-freecad)
+runtime.
+
+The Engine-facing executable can be selected with:
+
+```text
+PARAMETRON_FREECAD_RUNTIME
+```
+
+When not explicitly configured, Engine can resolve the
+`parametron-freecad` executable from `PATH`.
+
+This separation keeps Engine independent from FreeCAD APIs and allows CAD
+runtime implementations to evolve behind a stable Engine boundary.
+
+## Records and runtime evidence
+
+Engine defines normalized record contracts for:
+
+* execution
+* artifacts
+* observations
+* references
+* failures
+* verification
+
+Normal runs can materialize a local record package under the run directory:
+
+```text
+parametron-record-package/
+```
+
+The package separates normalized records from raw runtime evidence.
+
+Typical raw evidence includes runtime results, metadata, verification material,
+observations, manifests, and runtime handoff data. Raw evidence is preserved as
+evidence and is not treated as equivalent to normalized Engine records.
+
+See:
+
+* [Record contracts](docs/reference/record-contracts.md)
+* [Execution runtime](docs/engine/execution-runtime.md)
+
+## Target actions
+
+The authoring layer supports target actions for engineering-model intent such
+as:
+
+* suppression
+* visibility
+* deletion
+
+Engine resolves and validates this intent and projects it into the external
+runtime contract. The external CAD runtime remains responsible for applying
+native document mutations.
+
+See
+[Target-action contract](docs/reference/target-action-contract.md).
+
+## Repository structure
+
+The primary implementation areas are:
+
+```text
+cmd/
+  parametron/          Local CLI
+  parametron-engine/   Engine API/server entry point
+
+internal/
+  authoring/           DSL, IR, validation, and planning
+  engine/              execution, adapters, runtime contracts, records,
+                       verification, scheduling, and related Engine services
+
+docs/                  Architecture, authoring, CLI, runtime, and development docs
+testdata/              Canonical test fixtures and example inputs
+```
+
+For a more detailed map, see
+[Repository structure](docs/architecture/repository-structure.md).
+
+## Development
+
+Requirements depend on the area being developed, but the Go toolchain is the
+canonical interface for Engine development.
+
+Run the full Go test suite:
+
+```bash
+go test ./...
+```
+
+Run static analysis:
+
+```bash
+go vet ./...
+```
+
+Run a specific package:
+
+```bash
+go test ./internal/engine/recordmap/...
+```
+
+Additional Python-based validation and opt-in real-runtime tests are documented
+under [`docs/development/`](docs/development/).
+
+A Nix development environment is also available for contributors who prefer a
+reproducible local toolchain, but Nix is not required as the canonical command
+interface for the project.
+
+See:
+
+* [Local development](docs/development/local-development.md)
+* [Testing strategy](docs/development/testing-strategy.md)
+* [Fixture governance](docs/development/fixture-governance.md)
+
+## Documentation
+
+Repository documentation is organized under [`docs/`](docs/).
+
+Useful starting points:
+
+* [System overview](docs/architecture/system-overview.md)
+* [DSL overview](docs/authoring/dsl-overview.md)
+* [IR and planning](docs/authoring/ir-and-planning.md)
+* [Adapter architecture](docs/adapters/adapter-architecture.md)
+* [Execution runtime](docs/engine/execution-runtime.md)
+* [API overview](docs/engine/api-overview.md)
+* [Record contracts](docs/reference/record-contracts.md)
+* [Target-action contract](docs/reference/target-action-contract.md)
+* [Documentation map](docs/development/docs-map.md)
+
+## Contributing
+
+See the organization-wide contribution guidelines for contribution workflow,
+coding expectations, and community standards.
+
+Repository-specific development documentation is available under
+[`docs/development/`](docs/development/).
+
+## License
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE). and is part of the Parametron ecosystem.
+
+If you use this software over a network, you must make the source code available under the same license.

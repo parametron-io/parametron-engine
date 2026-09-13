@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "projectId": "firstcad-valid-project-with-table",
+  "dsl": "firstCad.project.dsl",
+  "resources": {
+    "models": {
+      "box_model": "input/box.FCStd"
+    }
+  },
+  "tables": {
+    "fasteners": "tables/fasteners.json"
+  }
+}

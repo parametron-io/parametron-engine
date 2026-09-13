@@ -1,0 +1,7 @@
+# Native CAD documents
+*.FCStd  filter=lfs diff=lfs merge=lfs -text
+*.SLDPRT filter=lfs diff=lfs merge=lfs -text
+*.SLDASM filter=lfs diff=lfs merge=lfs -text
+*.IPT    filter=lfs diff=lfs merge=lfs -text
+*.IAM    filter=lfs diff=lfs merge=lfs -text
+*.PRT    filter=lfs diff=lfs merge=lfs -text

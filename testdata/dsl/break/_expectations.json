@@ -1,0 +1,266 @@
+{
+  "break_cache_poisoning.dsl": {
+    "expect": "pass"
+  },
+  "break_circular_hidden.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_circular_dependency"
+  },
+  "break_circular_profile.dsl": {
+    "expect": "fail",
+    "stage": "parse",
+    "class": "parse_syntax_error"
+  },
+  "break_concurrent_file_access.dsl": {
+    "expect": "pass"
+  },
+  "break_const_to_param_ref.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_constant_runtime_dependency"
+  },
+  "break_deep_nesting.dsl": {
+    "expect": "pass"
+  },
+  "break_division_zero.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_division_by_zero"
+  },
+  "break_duplicate_definitions.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_namespace_collision"
+  },
+  "break_enum_case.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_enum_value_invalid"
+  },
+  "break_enum_duplicate_values.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_equality_type_mismatch.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_type_mismatch"
+  },
+  "break_extreme_cardinality.dsl": {
+    "expect": "pass"
+  },
+  "break_file_pattern_const_case_sensitivity.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_file_pattern_invalid"
+  },
+  "break_file_pattern_const_placeholder_empty_name.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_file_pattern_invalid"
+  },
+  "break_file_pattern_const_placeholder_extra_segment.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_file_pattern_invalid"
+  },
+  "break_file_pattern_const_placeholder_no_name.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_file_pattern_invalid"
+  },
+  "break_file_pattern_injection.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_file_pattern_invalid"
+  },
+  "break_file_pattern_undefined_param.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_file_pattern_invalid"
+  },
+  "break_function_wrong_arity.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_infinite_recursion_function.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_undefined_identifier"
+  },
+  "break_invalid_version.dsl": {
+    "expect": "fail",
+    "stage": "parse",
+    "class": "parse_version_unsupported"
+  },
+  "break_ir_circular_via_constant.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_circular_dependency"
+  },
+  "break_ir_deep_nesting.dsl": {
+    "expect": "timeout",
+    "stage": "plan",
+    "class": "plan_timeout",
+    "timeout_ms": 1200
+  },
+  "break_ir_large_program.dsl": {
+    "expect": "pass"
+  },
+  "break_missing_version.dsl": {
+    "expect": "fail",
+    "stage": "parse",
+    "class": "parse_syntax_error"
+  },
+  "break_numeric_clamp_bounds.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_numeric_overflow.dsl": {
+    "expect": "fail",
+    "stage": "parse",
+    "class": "parse_numeric_literal_invalid"
+  },
+  "break_numeric_round_down_negative_step.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_numeric_round_up_zero_step.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_outputs_unsupported_format.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_path_traversal.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_security_path_traversal"
+  },
+  "break_profile_no_selection.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_relational_type_mismatch.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_type_mismatch"
+  },
+  "break_reserved_keywords.dsl": {
+    "expect": "fail",
+    "stage": "parse",
+    "class": "parse_reserved_keyword"
+  },
+  "break_string_concat_type_mismatch.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_string_interp_malformed.dsl": {
+    "expect": "fail",
+    "stage": "parse",
+    "class": "parse_syntax_error"
+  },
+  "break_string_interp_undefined_param.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_undefined_identifier"
+  },
+  "break_string_interpolation_type_mismatch.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_type_mismatch"
+  },
+  "break_string_invalid_escape.dsl": {
+    "expect": "fail",
+    "stage": "parse",
+    "class": "parse_syntax_error"
+  },
+  "break_table_cell_exact_match_miss.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_error"
+  },
+  "break_table_cell_missing_row.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_error"
+  },
+  "break_table_cell_missing_value.dsl": {
+    "expect": "fail",
+    "stage": "plan",
+    "class": "plan_error"
+  },
+  "break_table_cell_nonliteral_column.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_table_cell_nonliteral_table.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_table_cell_nonstring_row_key.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_table_cell_type_mismatch.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_table_cell_wrong_arity.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_type_confusion.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_type_mismatch"
+  },
+  "break_unary_not_type_mismatch.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_type_mismatch"
+  },
+  "break_unclosed_block_comment.dsl": {
+    "expect": "fail",
+    "stage": "parse",
+    "class": "lex_unclosed_block_comment"
+  },
+  "break_undefined_const.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_undefined_constant"
+  },
+  "break_unicode_injection.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_undefined_identifier"
+  },
+  "break_unknown_function.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_error"
+  },
+  "break_very_long_identifiers.dsl": {
+    "expect": "pass"
+  },
+  "break_yaml_metadata_injection.dsl": {
+    "expect": "fail",
+    "stage": "validate",
+    "class": "validation_string_control_character"
+  }
+}

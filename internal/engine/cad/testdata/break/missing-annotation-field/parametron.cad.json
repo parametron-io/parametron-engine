@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0",
+  "captureId": "cap.missing.annotation",
+  "adapter": {
+    "name": "freecad",
+    "version": ""
+  },
+  "cadSystem": {
+    "name": "FreeCAD",
+    "version": ""
+  },
+  "sourceDocument": {
+    "logicalId": "m",
+    "path": "input/M.FCStd",
+    "fingerprint": "sha256:x"
+  },
+  "rootProduct": {
+    "id": "cmp.root"
+  },
+  "annotations": {
+    "description": "",
+    "comment": ""
+  },
+  "entities": {
+    "components": [],
+    "features": [],
+    "relationships": [],
+    "parameterGroups": [],
+    "parameters": [],
+    "metadata": []
+  },
+  "structure": {
+    "rootComponentId": "cmp.root",
+    "nodes": []
+  }
+}

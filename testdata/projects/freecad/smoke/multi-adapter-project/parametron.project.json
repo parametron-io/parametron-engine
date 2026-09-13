@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "firstcad-multi-adapter-project",
+  "dsl": "multi-adapter.project.dsl",
+  "resources": {
+    "models": {
+      "box_model": "input/box.FCStd"
+    }
+  }
+}

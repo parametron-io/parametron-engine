@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "projectId": "firstcad-break-missing-table-file",
+  "dsl": "firstCad.project.dsl",
+  "resources": {
+    "models": {
+      "box_model": "input/box.FCStd"
+    }
+  },
+  "tables": {
+    "fasteners": "tables/missing.json"
+  }
+}

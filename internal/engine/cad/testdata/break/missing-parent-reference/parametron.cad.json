@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "1.0",
+  "captureId": "cap.missing.parent",
+  "adapter": {
+    "name": "freecad",
+    "version": ""
+  },
+  "cadSystem": {
+    "name": "FreeCAD",
+    "version": ""
+  },
+  "sourceDocument": {
+    "logicalId": "m",
+    "path": "input/M.FCStd",
+    "fingerprint": "sha256:x"
+  },
+  "rootProduct": {
+    "id": "cmp.root"
+  },
+  "annotations": {
+    "description": "",
+    "comment": "",
+    "purpose": ""
+  },
+  "entities": {
+    "components": [
+      {
+        "id": "cmp.root",
+        "kind": "assembly",
+        "name": "RootAssembly",
+        "displayName": "Root Assembly",
+        "cadType": "App::Part",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root"
+        },
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "cmp.part",
+        "kind": "part",
+        "name": "Leaf",
+        "displayName": "Leaf",
+        "cadType": "PartDesign::Body",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root/leaf"
+        },
+        "targetability": {
+          "suppress": true,
+          "unsuppress": true,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      }
+    ],
+    "features": [],
+    "relationships": [],
+    "parameterGroups": [],
+    "parameters": [],
+    "metadata": []
+  },
+  "structure": {
+    "rootComponentId": "cmp.root",
+    "nodes": [
+      {
+        "componentId": "cmp.root",
+        "parentComponentId": "",
+        "children": [
+          "cmp.part"
+        ]
+      },
+      {
+        "componentId": "cmp.part",
+        "parentComponentId": "cmp.missing",
+        "children": []
+      }
+    ]
+  }
+}

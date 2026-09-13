@@ -1,0 +1,70 @@
+# =========================
+# Build & Runtime Artifacts
+# =========================
+
+/output/
+/.cache/
+/.gocache/
+/cmd/parametron/.cache/
+
+# Temporary / intermediate files
+*.tmp
+*.out
+
+# =========================
+# Go
+# =========================
+
+# Binaries
+*.exe
+*.exe~
+*.test
+*.prof
+
+# Coverage / profiling
+*.cover
+coverage.out
+
+# =========================
+# Python
+# =========================
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+# =========================
+# Archives & Packages
+# =========================
+
+*.zip
+*.vsix
+*.tar
+*.gz
+
+# =========================
+# Logs
+# =========================
+
+*.log
+
+# =========================
+# OS & Editor State
+# =========================
+
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# =========================
+# Local Tooling State
+# =========================
+
+.claude/
+.codex/
+.direnv/

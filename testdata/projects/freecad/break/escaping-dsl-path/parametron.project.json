@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "firstcad-break-escaping-dsl-path",
+  "dsl": "../outside.project.dsl",
+  "resources": {
+    "models": {
+      "box_model": "input/box.FCStd"
+    }
+  }
+}

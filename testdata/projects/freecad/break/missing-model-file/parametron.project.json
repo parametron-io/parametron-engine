@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "firstcad-break-missing-model-file",
+  "dsl": "firstCad.project.dsl",
+  "resources": {
+    "models": {
+      "box_model": "input/missing.FCStd"
+    }
+  }
+}

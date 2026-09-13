@@ -1,0 +1,382 @@
+{
+  "schemaVersion": "1.0",
+  "captureId": "cap.firstcad.rehearsal.cube.v1",
+  "adapter": {
+    "name": "freecad",
+    "version": ""
+  },
+  "cadSystem": {
+    "name": "FreeCAD",
+    "version": "1.1.1"
+  },
+  "sourceDocument": {
+    "logicalId": "cube_rehearsal_model",
+    "path": "testdata/projects/freecad/rehearsal/cube/input/cube.FCStd",
+    "fingerprint": "sha256:27dab4f85b2e585bd6573a6d5498989f4dbbeb30f8f6f45d69fab9eb99d0eb5c"
+  },
+  "rootProduct": {
+    "id": "cmp.root"
+  },
+  "annotations": {
+    "description": "Manually materialized capture of the real cube.FCStd rehearsal fixture (Phase 5).",
+    "comment": "Captured via read-only headless FreeCAD probing (read_varset.py) against testdata/projects/freecad/rehearsal/cube/input/cube.FCStd; no automated capture producer exists yet.",
+    "purpose": "Prove the current parametron.cad.json contract against a real FreeCAD model before designing DSL, semantic-map, or suppression projection layers."
+  },
+  "entities": {
+    "components": [
+      {
+        "id": "cmp.root",
+        "kind": "assembly",
+        "name": "cube",
+        "displayName": "cube",
+        "cadType": "App::Document",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root",
+          "nativeRef": "cube"
+        },
+        "stabilityClass": "stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": false,
+          "unhide": false,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "This document has no native App::Part container; the FreeCAD document itself is captured as the required root assembly-kind component.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "cmp.body",
+        "kind": "part",
+        "name": "Body",
+        "displayName": "Body",
+        "cadType": "PartDesign::Body",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root/Body",
+          "nativeRef": "Body"
+        },
+        "stabilityClass": "stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "Verified via headless probe: Body has no native Suppressed property (suppress/unsuppress left false); Body.Visibility is real and settable (hide/unhide true). Body.Tip=Chamfer and Body.Shape.isNull()=false.",
+          "purpose": ""
+        }
+      }
+    ],
+    "features": [
+      {
+        "id": "fea.body.sketch",
+        "componentId": "cmp.body",
+        "name": "Sketch",
+        "displayName": "Sketch",
+        "cadType": "Sketcher::SketchObject",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "Sketch",
+          "nativeRef": "Sketch"
+        },
+        "stabilityClass": "conditionally_stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": false,
+          "unhide": false,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "Sketcher::SketchObject has no native Suppressed property; ExpressionEngine binds Constraints[9] and Constraints[10] to VarSet.boxLength and VarSet.boxWidth.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "fea.body.pad",
+        "componentId": "cmp.body",
+        "name": "Pad",
+        "displayName": "Pad",
+        "cadType": "PartDesign::Pad",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "Pad",
+          "nativeRef": "Pad"
+        },
+        "stabilityClass": "conditionally_stable",
+        "targetability": {
+          "suppress": true,
+          "unsuppress": true,
+          "hide": false,
+          "unhide": false,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "Verified via headless probe: Pad has a native writable Suppressed property. ExpressionEngine binds Length to VarSet.boxHeight.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "fea.body.sketch001",
+        "componentId": "cmp.body",
+        "name": "Sketch001",
+        "displayName": "Sketch001",
+        "cadType": "Sketcher::SketchObject",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "Sketch001",
+          "nativeRef": "Sketch001"
+        },
+        "stabilityClass": "conditionally_stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": false,
+          "unhide": false,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "Sketcher::SketchObject has no native Suppressed property; ExpressionEngine binds Constraints[0] (Diameter) to VarSet.holeDia.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "fea.body.pocket",
+        "componentId": "cmp.body",
+        "name": "Pocket",
+        "displayName": "Pocket",
+        "cadType": "PartDesign::Pocket",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "Pocket",
+          "nativeRef": "Pocket"
+        },
+        "stabilityClass": "conditionally_stable",
+        "targetability": {
+          "suppress": true,
+          "unsuppress": true,
+          "hide": false,
+          "unhide": false,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "Verified via headless probe: Pocket has a native writable Suppressed property. Controlled experiment (Pocket.Suppressed=true, doc.recompute()) left Body.Tip=Chamfer, Body.Shape valid, and Chamfer.State=['Up-to-date']; no ExpressionEngine bindings on Pocket itself.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "fea.body.chamfer",
+        "componentId": "cmp.body",
+        "name": "Chamfer",
+        "displayName": "Chamfer",
+        "cadType": "PartDesign::Chamfer",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "Chamfer",
+          "nativeRef": "Chamfer"
+        },
+        "stabilityClass": "conditionally_stable",
+        "targetability": {
+          "suppress": true,
+          "unsuppress": true,
+          "hide": false,
+          "unhide": false,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "Verified via headless probe: Chamfer has a native writable Suppressed property. This is the Body.Tip feature; ExpressionEngine binds Size to VarSet.boxChamfer.",
+          "purpose": ""
+        }
+      }
+    ],
+    "relationships": [],
+    "parameterGroups": [
+      {
+        "id": "grp.root.varset",
+        "ownerComponentId": "cmp.root",
+        "name": "VarSet",
+        "displayName": "box_body",
+        "groupKind": "varset",
+        "cadType": "App::VarSet",
+        "observable": true,
+        "writable": true,
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "VarSet",
+          "nativeRef": "VarSet"
+        },
+        "stabilityClass": "stable",
+        "annotations": {
+          "description": "",
+          "comment": "FreeCAD Name='VarSet' and Label='box_body' differ; Name is the stable capture identity anchor used above, Label is descriptive only. VarSet is a top-level document object, not a member of Body.Group.",
+          "purpose": ""
+        }
+      }
+    ],
+    "parameters": [
+      {
+        "id": "par.root.varset.boxLength",
+        "ownerKind": "group",
+        "ownerId": "grp.root.varset",
+        "componentId": "cmp.root",
+        "name": "boxLength",
+        "displayName": "",
+        "cadType": "App::PropertyLength",
+        "valueType": "number",
+        "observable": true,
+        "writable": true,
+        "currentValue": 50,
+        "unit": "mm",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "boxLength",
+          "groupScopedKey": "boxLength",
+          "nativeRef": "VarSet.boxLength"
+        },
+        "stabilityClass": "stable",
+        "annotations": {
+          "description": "",
+          "comment": "Drives Sketch.Constraints[9] (Distance) via expression <<box_body>>.boxLength.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "par.root.varset.boxWidth",
+        "ownerKind": "group",
+        "ownerId": "grp.root.varset",
+        "componentId": "cmp.root",
+        "name": "boxWidth",
+        "displayName": "",
+        "cadType": "App::PropertyLength",
+        "valueType": "number",
+        "observable": true,
+        "writable": true,
+        "currentValue": 30,
+        "unit": "mm",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "boxWidth",
+          "groupScopedKey": "boxWidth",
+          "nativeRef": "VarSet.boxWidth"
+        },
+        "stabilityClass": "stable",
+        "annotations": {
+          "description": "",
+          "comment": "Drives Sketch.Constraints[10] (Distance) via expression <<box_body>>.boxWidth.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "par.root.varset.boxHeight",
+        "ownerKind": "group",
+        "ownerId": "grp.root.varset",
+        "componentId": "cmp.root",
+        "name": "boxHeight",
+        "displayName": "",
+        "cadType": "App::PropertyLength",
+        "valueType": "number",
+        "observable": true,
+        "writable": true,
+        "currentValue": 40,
+        "unit": "mm",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "boxHeight",
+          "groupScopedKey": "boxHeight",
+          "nativeRef": "VarSet.boxHeight"
+        },
+        "stabilityClass": "stable",
+        "annotations": {
+          "description": "",
+          "comment": "Drives Pad.Length via expression <<box_body>>.boxHeight.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "par.root.varset.holeDia",
+        "ownerKind": "group",
+        "ownerId": "grp.root.varset",
+        "componentId": "cmp.root",
+        "name": "holeDia",
+        "displayName": "",
+        "cadType": "App::PropertyLength",
+        "valueType": "number",
+        "observable": true,
+        "writable": true,
+        "currentValue": 12,
+        "unit": "mm",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "holeDia",
+          "groupScopedKey": "holeDia",
+          "nativeRef": "VarSet.holeDia"
+        },
+        "stabilityClass": "stable",
+        "annotations": {
+          "description": "",
+          "comment": "Drives Sketch001.Constraints[0] (Diameter) via expression <<box_body>>.holeDia.",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "par.root.varset.boxChamfer",
+        "ownerKind": "group",
+        "ownerId": "grp.root.varset",
+        "componentId": "cmp.root",
+        "name": "boxChamfer",
+        "displayName": "",
+        "cadType": "App::PropertyLength",
+        "valueType": "number",
+        "observable": true,
+        "writable": true,
+        "currentValue": 3,
+        "unit": "mm",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "boxChamfer",
+          "groupScopedKey": "boxChamfer",
+          "nativeRef": "VarSet.boxChamfer"
+        },
+        "stabilityClass": "stable",
+        "annotations": {
+          "description": "",
+          "comment": "Drives Chamfer.Size via expression <<box_body>>.boxChamfer.",
+          "purpose": ""
+        }
+      }
+    ],
+    "metadata": []
+  },
+  "structure": {
+    "rootComponentId": "cmp.root",
+    "nodes": [
+      {
+        "componentId": "cmp.root",
+        "parentComponentId": "",
+        "children": ["cmp.body"]
+      },
+      {
+        "componentId": "cmp.body",
+        "parentComponentId": "cmp.root",
+        "children": []
+      }
+    ]
+  }
+}

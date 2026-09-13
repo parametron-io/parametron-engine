@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "1.0",
+  "captureId": "cap.hierarchy",
+  "adapter": {
+    "name": "freecad",
+    "version": ""
+  },
+  "cadSystem": {
+    "name": "FreeCAD",
+    "version": ""
+  },
+  "sourceDocument": {
+    "logicalId": "hierarchy_model",
+    "path": "input/Hierarchy.FCStd",
+    "fingerprint": "sha256:hierarchy"
+  },
+  "rootProduct": {
+    "id": "cmp.root"
+  },
+  "annotations": {
+    "description": "",
+    "comment": "",
+    "purpose": ""
+  },
+  "entities": {
+    "components": [
+      {
+        "id": "cmp.part.leaf",
+        "kind": "part",
+        "name": "LeafPart",
+        "displayName": "Leaf Part",
+        "cadType": "PartDesign::Body",
+        "quantity": 2,
+        "material": "Steel",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root/sub/leaf"
+        },
+        "stabilityClass": "stable",
+        "sourceFile": {
+          "path": "parts/leaf.FCStd"
+        },
+        "targetability": {
+          "suppress": true,
+          "unsuppress": true,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "cmp.root",
+        "kind": "assembly",
+        "name": "RootAssembly",
+        "displayName": "Root Assembly",
+        "cadType": "App::Part",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root"
+        },
+        "stabilityClass": "stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "cmp.sub",
+        "kind": "assembly",
+        "name": "SubAssembly",
+        "displayName": "Sub Assembly",
+        "cadType": "App::Part",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root/sub"
+        },
+        "stabilityClass": "stable",
+        "targetability": {
+          "suppress": true,
+          "unsuppress": true,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      }
+    ],
+    "features": [],
+    "relationships": [],
+    "parameterGroups": [],
+    "parameters": [],
+    "metadata": []
+  },
+  "structure": {
+    "rootComponentId": "cmp.root",
+    "nodes": [
+      {
+        "componentId": "cmp.part.leaf",
+        "parentComponentId": "cmp.sub",
+        "children": []
+      },
+      {
+        "componentId": "cmp.root",
+        "parentComponentId": "",
+        "children": [
+          "cmp.sub"
+        ]
+      },
+      {
+        "componentId": "cmp.sub",
+        "parentComponentId": "cmp.root",
+        "children": [
+          "cmp.part.leaf"
+        ]
+      }
+    ]
+  }
+}

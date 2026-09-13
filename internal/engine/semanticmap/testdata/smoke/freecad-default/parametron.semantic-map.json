@@ -1,0 +1,185 @@
+{
+  "schemaVersion": "1.0",
+  "mappingId": "freecad-default-v1",
+  "adapter": "freecad",
+  "cadSystem": {
+    "name": "FreeCAD",
+    "minVersion": "1.1.0"
+  },
+  "semanticTypes": {
+    "parameterTypes": {
+      "length": {
+        "valueKind": "number",
+        "defaultUnit": "mm",
+        "coercion": "number_to_length"
+      },
+      "count": {
+        "valueKind": "integer",
+        "defaultUnit": "count",
+        "coercion": "number_to_integer_exact"
+      },
+      "dimensionless": {
+        "valueKind": "number",
+        "defaultUnit": "none",
+        "coercion": "number_to_dimensionless"
+      }
+    },
+    "resolutionPolicy": {
+      "precedence": [
+        "explicit_parameter_mapping",
+        "capture_native_type_mapping"
+      ],
+      "allowEngineDefault": false,
+      "allowEngineInference": false
+    }
+  },
+  "captureToSemantic": {
+    "parameterGroups": [
+      {
+        "captureKind": "parameter_group",
+        "cadContainerType": "VarSet",
+        "semanticKind": "parameter_group"
+      }
+    ],
+    "parameters": [
+      {
+        "captureKind": "parameter",
+        "semanticKind": "parameter",
+        "identity": "capture.id",
+        "name": "capture.name",
+        "group": "capture.groupId",
+        "semanticType": {
+          "from": "capture.nativeType",
+          "map": {
+            "Length": "length",
+            "Integer": "count",
+            "Float": "dimensionless"
+          }
+        }
+      }
+    ],
+    "components": [
+      {
+        "captureKind": "component",
+        "semanticKinds": {
+          "assembly": "assembly",
+          "part": "part"
+        },
+        "identity": "capture.id",
+        "targetability": "capture.targetability"
+      }
+    ],
+    "metadata": [
+      {
+        "captureKind": "metadata",
+        "semanticKind": "metadata",
+        "identity": "capture.id",
+        "key": "capture.key",
+        "valueKind": "capture.nativeType"
+      }
+    ]
+  },
+  "semanticToManifest": {
+    "parameters": {
+      "target": "parameterAssignments",
+      "name": "semantic.parameter.name",
+      "value": "resolved.value",
+      "type": "number",
+      "unit": "resolved.unit"
+    },
+    "outputs": {
+      "step": {
+        "manifestType": "step",
+        "targetField": "object",
+        "targetSource": "semantic.output.target.manifestName"
+      },
+      "csv": {
+        "manifestType": "csv",
+        "targetField": "target",
+        "targetSource": "semantic.output.target.manifestName",
+        "scopeField": "rollup",
+        "scopeMap": {
+          "flat": "flat",
+          "assembly": "assembly",
+          "subtree": "assembly"
+        }
+      },
+      "pdf": {
+        "manifestType": "pdf"
+      }
+    },
+    "mutations": {
+      "set_parameter": {
+        "manifestCollection": "partMutations.parameters",
+        "targetField": "object",
+        "propertyField": "property",
+        "valueField": "valueParam"
+      },
+      "suppress": {
+        "manifestCollection": "partMutations.suppression",
+        "targetField": "object",
+        "valueField": "suppressed",
+        "value": true
+      },
+      "unsuppress": {
+        "manifestCollection": "partMutations.suppression",
+        "targetField": "object",
+        "valueField": "suppressed",
+        "value": false
+      },
+      "set_property": {
+        "manifestCollection": "partMutations.properties",
+        "targetField": "object",
+        "propertyField": "property",
+        "valueField": "value"
+      }
+    }
+  },
+  "overridePolicy": {
+    "allowAdapterOverrides": false,
+    "allowProjectOverrides": false,
+    "allowUserOverrides": false
+  },
+  "operationCapabilities": {
+    "suppress": {
+      "requiresTargetability": "suppress",
+      "allowedSemanticTargets": [
+        "assembly",
+        "part",
+        "feature"
+      ]
+    },
+    "hide": {
+      "requiresTargetability": "hide",
+      "allowedSemanticTargets": [
+        "assembly",
+        "part",
+        "feature"
+      ]
+    },
+    "delete": {
+      "requiresTargetability": "delete",
+      "allowedSemanticTargets": [
+        "feature"
+      ]
+    },
+    "write_parameter": {
+      "requiresWritable": true,
+      "allowedSemanticTargets": [
+        "parameter"
+      ]
+    },
+    "write_metadata": {
+      "requiresWritable": true,
+      "allowedSemanticTargets": [
+        "metadata"
+      ]
+    }
+  },
+  "determinism": {
+    "allowImplicitFallback": false,
+    "allowCaseInsensitiveMatch": false,
+    "allowDisplayNameIdentity": false,
+    "allowAdapterInference": false
+  }
+}

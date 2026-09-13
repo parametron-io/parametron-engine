@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "firstcad-break-dot-dsl-path",
+  "dsl": ".",
+  "resources": {
+    "models": {
+      "box_model": "input/box.FCStd"
+    }
+  }
+}

@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0",
+  "captureId": "cap.authoring.display-name-only",
+  "adapter": {
+    "name": "freecad",
+    "version": ""
+  },
+  "cadSystem": {
+    "name": "FreeCAD",
+    "version": ""
+  },
+  "sourceDocument": {
+    "logicalId": "box_model",
+    "path": "input/box.FCStd",
+    "fingerprint": "sha256:box"
+  },
+  "rootProduct": {
+    "id": "cmp.root"
+  },
+  "annotations": {
+    "description": "",
+    "comment": "",
+    "purpose": ""
+  },
+  "entities": {
+    "components": [
+      {
+        "id": "cmp.root",
+        "kind": "assembly",
+        "name": "RootAssembly",
+        "displayName": "Root Assembly",
+        "cadType": "App::Part",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root"
+        },
+        "stabilityClass": "stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      }
+    ],
+    "features": [],
+    "relationships": [],
+    "parameterGroups": [],
+    "parameters": [
+      {
+        "id": "par.root.d1",
+        "ownerKind": "component",
+        "ownerId": "cmp.root",
+        "componentId": "cmp.root",
+        "name": "D1",
+        "displayName": "length",
+        "cadType": "App::PropertyLength",
+        "valueType": "number",
+        "observable": true,
+        "writable": true,
+        "currentValue": 35,
+        "unit": "mm",
+        "stabilityClass": "stable",
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      }
+    ],
+    "metadata": []
+  },
+  "structure": {
+    "rootComponentId": "cmp.root",
+    "nodes": [
+      {
+        "componentId": "cmp.root",
+        "parentComponentId": "",
+        "children": []
+      }
+    ]
+  }
+}

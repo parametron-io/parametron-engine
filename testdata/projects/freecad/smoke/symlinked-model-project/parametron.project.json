@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "firstcad-symlinked-model-project",
+  "dsl": "firstCad.project.dsl",
+  "resources": {
+    "models": {
+      "box_model": "input/box.FCStd"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "firstcad-break-case-mismatched-model-id",
+  "dsl": "firstCad.project.dsl",
+  "resources": {
+    "models": {
+      "BoxModel": "input/box.FCStd"
+    }
+  }
+}

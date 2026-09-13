@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.0",
+  "name": "bolts",
+  "keyColumn": "key",
+  "columns": [
+    { "name": "key", "type": "string", "required": true },
+    { "name": "nominal", "type": "number", "required": true },
+    { "name": "hole_dia", "type": "number", "required": true }
+  ],
+  "rows": [
+    { "key": "M4",  "nominal": 4,  "hole_dia": 5 },
+    { "key": "M5",  "nominal": 5,  "hole_dia": 6 },
+    { "key": "M6",  "nominal": 6,  "hole_dia": 7 },
+    { "key": "M8",  "nominal": 8,  "hole_dia": 9 },
+    { "key": "M10", "nominal": 10, "hole_dia": 11 },
+    { "key": "M12", "nominal": 12, "hole_dia": 13 },
+    { "key": "M16", "nominal": 16, "hole_dia": 17 }
+  ]
+}

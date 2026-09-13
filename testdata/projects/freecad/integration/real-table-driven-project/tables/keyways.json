@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "1.0",
+  "name": "keyways",
+  "keyColumn": "key",
+  "columns": [
+    { "name": "key", "type": "string", "required": true },
+    { "name": "key_width", "type": "number", "required": true },
+    { "name": "key_height", "type": "number", "required": true },
+    { "name": "t2", "type": "number", "required": true }
+  ],
+  "rows": [
+    { "key": "10",  "key_width": 3,  "key_height": 3,  "t2": 1.4 },
+    { "key": "12",  "key_width": 4,  "key_height": 4,  "t2": 1.8 },
+    { "key": "17",  "key_width": 5,  "key_height": 5,  "t2": 2.3 },
+    { "key": "22",  "key_width": 6,  "key_height": 6,  "t2": 2.8 },
+    { "key": "30",  "key_width": 8,  "key_height": 7,  "t2": 3.3 },
+    { "key": "38",  "key_width": 10, "key_height": 8,  "t2": 3.3 },
+    { "key": "44",  "key_width": 12, "key_height": 8,  "t2": 3.3 },
+    { "key": "50",  "key_width": 14, "key_height": 9,  "t2": 3.8 },
+    { "key": "58",  "key_width": 16, "key_height": 10, "t2": 4.3 },
+    { "key": "65",  "key_width": 18, "key_height": 11, "t2": 4.4 },
+    { "key": "75",  "key_width": 20, "key_height": 12, "t2": 4.9 },
+    { "key": "85",  "key_width": 22, "key_height": 14, "t2": 5.4 },
+    { "key": "95",  "key_width": 25, "key_height": 14, "t2": 5.4 },
+    { "key": "110", "key_width": 28, "key_height": 16, "t2": 6.4 },
+    { "key": "130", "key_width": 32, "key_height": 18, "t2": 7.4 },
+    { "key": "150", "key_width": 36, "key_height": 20, "t2": 8.4 },
+    { "key": "170", "key_width": 40, "key_height": 22, "t2": 9.4 }
+  ]
+}

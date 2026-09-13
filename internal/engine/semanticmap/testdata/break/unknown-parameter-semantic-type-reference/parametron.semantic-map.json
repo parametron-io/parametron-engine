@@ -1,0 +1,60 @@
+{
+  "schemaVersion": "1.0",
+  "mappingId": "freecad-default-v1",
+  "adapter": "freecad",
+  "cadSystem": {
+    "name": "FreeCAD"
+  },
+  "semanticTypes": {
+    "parameterTypes": {
+      "length": {
+        "valueKind": "number",
+        "defaultUnit": "mm",
+        "coercion": "number_to_length"
+      }
+    }
+  },
+  "captureToSemantic": {
+    "parameterGroups": [],
+    "parameters": [
+      {
+        "captureKind": "parameter",
+        "semanticKind": "parameter",
+        "identity": "capture.id",
+        "name": "capture.name",
+        "group": "capture.groupId",
+        "semanticType": {
+          "from": "capture.nativeType",
+          "map": {
+            "Length": "unknown"
+          }
+        }
+      }
+    ],
+    "components": [],
+    "metadata": []
+  },
+  "semanticToManifest": {
+    "parameters": {
+      "target": "parameterAssignments",
+      "name": "semantic.parameter.name",
+      "value": "resolved.value",
+      "type": "number",
+      "unit": "resolved.unit"
+    },
+    "outputs": {},
+    "mutations": {}
+  },
+  "overridePolicy": {
+    "allowAdapterOverrides": false,
+    "allowProjectOverrides": false,
+    "allowUserOverrides": false
+  },
+  "operationCapabilities": {},
+  "determinism": {
+    "allowImplicitFallback": false,
+    "allowCaseInsensitiveMatch": false,
+    "allowDisplayNameIdentity": false,
+    "allowAdapterInference": false
+  }
+}

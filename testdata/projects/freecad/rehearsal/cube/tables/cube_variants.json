@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "1.0",
+  "name": "cube_variants",
+  "keyColumn": "variant",
+  "columns": [
+    {
+      "name": "variant",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "boxLength",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "boxWidth",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "boxHeight",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "holeDia",
+      "type": "number",
+      "required": true
+    },
+    {
+      "name": "boxChamfer",
+      "type": "number",
+      "required": true
+    }
+  ],
+  "rows": [
+    {
+      "variant": "small",
+      "boxLength": 50,
+      "boxWidth": 30,
+      "boxHeight": 40,
+      "holeDia": 12,
+      "boxChamfer": 3
+    },
+    {
+      "variant": "large",
+      "boxLength": 80,
+      "boxWidth": 50,
+      "boxHeight": 60,
+      "holeDia": 18,
+      "boxChamfer": 5
+    }
+  ]
+}

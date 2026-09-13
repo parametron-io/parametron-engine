@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "projectId": "coupling-rehearsal",
+  "dsl": "rehearsal.project.dsl",
+  "resources": {
+    "models": {
+      "coupling": "input/Coupling.FCStd"
+    }
+  },
+  "tables": {
+    "variants": "tables/variants.json",
+    "bolts": "tables/bolts.json",
+    "keyways": "tables/keyways.json"
+  }
+}

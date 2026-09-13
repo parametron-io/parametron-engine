@@ -1,0 +1,30 @@
+{
+  "Left": {
+    "Left": {
+      "Left": {
+        "Name": "a"
+      },
+      "Operator": "+",
+      "Right": {
+        "Left": {
+          "Name": "b"
+        },
+        "Operator": "*",
+        "Right": {
+          "Name": "c"
+        }
+      }
+    },
+    "Operator": "==",
+    "Right": {
+      "Name": "d"
+    }
+  },
+  "Operator": "\u0026\u0026",
+  "Right": {
+    "Operator": "!",
+    "Operand": {
+      "Name": "e"
+    }
+  }
+}

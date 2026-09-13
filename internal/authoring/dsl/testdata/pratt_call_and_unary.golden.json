@@ -1,0 +1,26 @@
+{
+  "Left": {
+    "Name": "foo",
+    "Args": [
+      {
+        "Value": 1
+      },
+      {
+        "Left": {
+          "Value": 2
+        },
+        "Operator": "+",
+        "Right": {
+          "Value": 3
+        }
+      }
+    ]
+  },
+  "Operator": "*",
+  "Right": {
+    "Operator": "-",
+    "Operand": {
+      "Name": "x"
+    }
+  }
+}

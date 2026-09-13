@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0",
+  "name": "variants",
+  "keyColumn": "key",
+  "columns": [
+    { "name": "key", "type": "string", "required": true },
+    { "name": "hole_dia", "type": "number", "required": true },
+    { "name": "mid_dia", "type": "number", "required": true },
+    { "name": "out_dia", "type": "number", "required": true },
+    { "name": "thickness", "type": "number", "required": true },
+    { "name": "con_plate", "type": "number", "required": true },
+    { "name": "bolt_center", "type": "number", "required": true },
+    { "name": "has_keyway", "type": "boolean", "required": true }
+  ],
+  "rows": [
+    {
+      "key": "small_plain",
+      "hole_dia": 28,
+      "mid_dia": 60,
+      "out_dia": 100,
+      "thickness": 24,
+      "con_plate": 10,
+      "bolt_center": 45,
+      "has_keyway": false
+    },
+    {
+      "key": "medium_keyed",
+      "hole_dia": 40,
+      "mid_dia": 80,
+      "out_dia": 140,
+      "thickness": 32,
+      "con_plate": 12,
+      "bolt_center": 110,
+      "has_keyway": true
+    }
+  ]
+}

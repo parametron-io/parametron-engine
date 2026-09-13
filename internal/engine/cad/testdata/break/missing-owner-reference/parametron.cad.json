@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0",
+  "captureId": "cap.missing.owner",
+  "adapter": {
+    "name": "freecad",
+    "version": ""
+  },
+  "cadSystem": {
+    "name": "FreeCAD",
+    "version": ""
+  },
+  "sourceDocument": {
+    "logicalId": "m",
+    "path": "input/M.FCStd",
+    "fingerprint": "sha256:x"
+  },
+  "rootProduct": {
+    "id": "cmp.root"
+  },
+  "annotations": {
+    "description": "",
+    "comment": "",
+    "purpose": ""
+  },
+  "entities": {
+    "components": [
+      {
+        "id": "cmp.root",
+        "kind": "assembly",
+        "name": "RootAssembly",
+        "displayName": "Root Assembly",
+        "cadType": "App::Part",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root"
+        },
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      }
+    ],
+    "features": [],
+    "relationships": [],
+    "parameterGroups": [],
+    "parameters": [],
+    "metadata": [
+      {
+        "id": "meta.root.part_number",
+        "ownerKind": "feature",
+        "ownerId": "fea.missing",
+        "componentId": "cmp.root",
+        "key": "part_number",
+        "displayName": "Part Number",
+        "cadType": "App::PropertyString",
+        "valueType": "string",
+        "observable": true,
+        "writable": true,
+        "currentValue": "PN-001",
+        "identitySource": {
+          "kind": "owner_scoped_key",
+          "ownerScopedKey": "part_number"
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      }
+    ]
+  },
+  "structure": {
+    "rootComponentId": "cmp.root",
+    "nodes": [
+      {
+        "componentId": "cmp.root",
+        "parentComponentId": "",
+        "children": []
+      }
+    ]
+  }
+}
