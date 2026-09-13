@@ -17,14 +17,16 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
+        with:
+          lfs: true
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
 
-      - name: Run test suite
+      - name: Run Go test suite
         run: nix develop --command go test ./...
 
-      - name: Run vet
+      - name: Run Go vet
         run: nix develop --command go vet ./...
 
       - name: Run Python proof tests
