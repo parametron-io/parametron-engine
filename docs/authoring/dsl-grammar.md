@@ -8,6 +8,7 @@ Inside a `product { ... }` block, the DSL currently supports:
 
 - `let <name> = <expression>`
 - `param <name>: <type> = <expression>`
+- `target <semantic-target>: action = <expression>`
 - `adapter = <expression>`
 - `source_model = <expression>`
 - `outputs = <expression>`
