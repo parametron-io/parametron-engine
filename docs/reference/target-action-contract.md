@@ -6,6 +6,14 @@ native lookup, mutation, recompute, post-delete validity, save/reopen persistenc
 observation, and native failures. Engine owns verification decisions and record
 normalization. Engine handoff tests do not prove native mutation correctness.
 
+Current runtime limitation: Engine currently supports planning, capability
+validation, lowering, routing, and schema 2.0 manifest projection for target
+actions, but the current `parametron-freecad` execution runtime does not yet
+execute schema 2.0 target mutations. Engine-side planning and manifest handoff
+support therefore must not be interpreted as proof of end-to-end native
+mutation support. FreeCAD remains the owner of native lookup, mutation,
+recompute, persistence, observation, and native failure behavior.
+
 ## Authoring and action evaluation
 
 ```dsl
