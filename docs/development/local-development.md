@@ -41,10 +41,10 @@ go build ./cmd/parametron ./cmd/parametron-engine
 
 ```bash
 # Validate a DSL file
-go run ./cmd/parametron validate --file testdata/dsl/smoke/minimal.dsl
+go run ./cmd/parametron validate --file testdata/dsl/smoke/smoke_constants.dsl
 
 # Simulate an execution plan
-go run ./cmd/parametron simulate --file testdata/dsl/smoke/minimal.dsl
+go run ./cmd/parametron simulate --file testdata/dsl/smoke/smoke_constants.dsl
 
 # Execute a project
 go run ./cmd/parametron --project testdata/projects/freecad/smoke/minimal-valid-project --out /tmp/run-out
