@@ -56,6 +56,7 @@ Each case produces a subdirectory `case-<NNN>` under `--out`, containing:
 - `metadata.json`
 - `manifest.json`
 - Generated artifacts
+- `parametron-record-package/`
 
 After all cases complete, a `simulate_report.json` is written to `--out`.
 
