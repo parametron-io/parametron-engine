@@ -206,3 +206,5 @@ Unknown identifiers outside an enum context are rejected. The fallback of treati
 - `docs/authoring/dsl-overview.md` — file structure and top-level constructs
 - `docs/authoring/dsl-semantics.md` — evaluation model, dependency resolution, type rules, table lookup semantics
 - `docs/engine/json-table-resources.md` — JSON table resource format and validation rules
+- `docs/reference/target-action-contract.md` — target-action semantics,
+  resolution, capability validation, mutation routing, and runtime contract
