@@ -491,7 +491,7 @@ func TestWriteFreeCADRuntimeObservationRequest_MaterializesRequest(t *testing.T)
 	if err != nil || !reflect.DeepEqual(*parsed, got.Contract) {
 		t.Fatalf("persisted contract: %v %#v", err, parsed)
 	}
-	for _, path := range append([]string{got.Manifest.Attempt.Layout.ResultPath, filepath.Join(got.Manifest.Attempt.Layout.WorkingCopyDir, "parametron.observed.json")}, observationOutputPaths(req, got.Manifest.Attempt)...) {
+	for _, path := range append([]string{got.Manifest.Attempt.Layout.ResultPath, filepath.Join(got.Manifest.Attempt.Layout.WorkingCopyDir, "prm.observed.json")}, observationOutputPaths(req, got.Manifest.Attempt)...) {
 		assertObservationAbsent(t, path)
 	}
 }
@@ -778,7 +778,7 @@ func TestWriteFreeCADRuntimeObservationRequest_DoesNotMaterializeTask10Outputs(t
 	if _, err := os.Stat(got.Manifest.Attempt.Layout.OutputDir); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range append([]string{got.Manifest.Attempt.Layout.ResultPath, filepath.Join(got.Manifest.Attempt.Layout.WorkingCopyDir, "parametron.observed.json")}, observationOutputPaths(req, got.Manifest.Attempt)...) {
+	for _, path := range append([]string{got.Manifest.Attempt.Layout.ResultPath, filepath.Join(got.Manifest.Attempt.Layout.WorkingCopyDir, "prm.observed.json")}, observationOutputPaths(req, got.Manifest.Attempt)...) {
 		assertObservationAbsent(t, path)
 	}
 }

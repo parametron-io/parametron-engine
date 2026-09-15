@@ -601,8 +601,8 @@ func TestMapReferenceTraversalCanonicalEvidenceLinkage(t *testing.T) {
 	if edge.Evidence.SourceKind != "reference-traversal" {
 		t.Fatalf("Evidence.SourceKind = %q, want reference-traversal", edge.Evidence.SourceKind)
 	}
-	if edge.Evidence.SourceRef != "raw/runtime/parametron.reference-traversal.json" {
-		t.Fatalf("Evidence.SourceRef = %q, want raw/runtime/parametron.reference-traversal.json", edge.Evidence.SourceRef)
+	if edge.Evidence.SourceRef != "raw/runtime/prm.reference-traversal.json" {
+		t.Fatalf("Evidence.SourceRef = %q, want raw/runtime/prm.reference-traversal.json", edge.Evidence.SourceRef)
 	}
 	if edge.Evidence.SourceRef != recordpackage.RawRuntimeReferenceTraversalContractPath() {
 		t.Fatalf("Evidence.SourceRef = %q, want %q", edge.Evidence.SourceRef, recordpackage.RawRuntimeReferenceTraversalContractPath())

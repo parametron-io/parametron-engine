@@ -16,7 +16,7 @@ func cadRuntimeTestPlan(payload RunCADRuntimePayload) *ExecutionPlan {
 }
 
 func testCADRuntimePayload() RunCADRuntimePayload {
-	return RunCADRuntimePayload{ProductKey: "widget", Adapter: "freecad", ManifestFilename: ExportManifestFilename, ResultFilename: "result.json"}
+	return RunCADRuntimePayload{ProductKey: "widget", Adapter: "freecad", ManifestFilename: ExportManifestFilename, ResultFilename: FreeCADRuntimeResultFilename}
 }
 
 func TestRunCADRuntimePayload_ImplementsStepPayload(t *testing.T) {

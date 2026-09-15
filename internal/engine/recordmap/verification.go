@@ -5,13 +5,15 @@ import (
 	"strings"
 
 	"parametron/internal/engine/recordcontract"
+	"parametron/internal/engine/recordpackage"
 	"parametron/internal/engine/verification"
 )
 
 const (
 	verificationEvidenceKind = "verification"
-	verificationEvidenceRef  = "raw/verification/parametron.verification.json"
 )
+
+var verificationEvidenceRef = recordpackage.RawVerificationContractPath()
 
 // VerificationMappingLinkage carries caller-supplied deterministic linkage material.
 // The mapper must not infer missing job/product/step identity from PDM or runtime paths.
@@ -36,7 +38,7 @@ type VerificationMappingInput struct {
 	// Optional deterministic linkage supplied by the caller.
 	Linkage VerificationMappingLinkage
 
-	// Optional digest of raw/verification/parametron.verification.json.
+	// Optional digest of raw/verification/prm.verification.json request evidence.
 	// If present, it must be a lowercase 64-character SHA-256 hex digest.
 	EvidenceDigestSHA256 string
 }

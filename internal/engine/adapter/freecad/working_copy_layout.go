@@ -15,7 +15,7 @@ import (
 const (
 	freeCADRuntimeWorkingRootName       = "_working"
 	freeCADRuntimeSourceDirName         = "source"
-	freeCADRuntimeResultFilename        = "result.json"
+	freeCADRuntimeResultFilename        = planner.FreeCADRuntimeResultFilename
 	freeCADRuntimeWorkingCopyHashLength = 16
 	freeCADRuntimeWorkingCopyPrefixMax  = 48
 )

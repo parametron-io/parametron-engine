@@ -93,7 +93,7 @@ func buildSubmission(productKey, sourceModel string) (*submissionRequest, error)
 			Outputs: []planner.ExportManifestOutput{{Type: "step", Filename: "outputs/" + productKey + ".step", Object: "Body"}},
 		}},
 		{Type: planner.StepRunCADRuntime, Payload: planner.RunCADRuntimePayload{
-			ProductKey: productKey, Adapter: "freecad", ManifestFilename: planner.ExportManifestFilename, ResultFilename: "result.json",
+			ProductKey: productKey, Adapter: "freecad", ManifestFilename: planner.ExportManifestFilename, ResultFilename: planner.FreeCADRuntimeResultFilename,
 		}},
 	}
 	j, err := job.New(productKey, steps)

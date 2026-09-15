@@ -121,11 +121,11 @@ func TestRawEvidenceEntriesAreSeparateFromNormalizedRecords(t *testing.T) {
 		{"raw/prm.metadata.json", recordpackage.EntryKindFile},
 		{"raw/artifact-store/manifest.json", recordpackage.EntryKindFile},
 		{"raw/handoff", recordpackage.EntryKindDirectory},
-		{"raw/observed/parametron.observed.json", recordpackage.EntryKindFile},
-		{"raw/verification/parametron.verification.json", recordpackage.EntryKindFile},
-		{"raw/runtime/result.json", recordpackage.EntryKindFile},
+		{"raw/observed/prm.observed.json", recordpackage.EntryKindFile},
+		{"raw/verification/prm.verification.json", recordpackage.EntryKindFile},
+		{"raw/runtime/prm.result.json", recordpackage.EntryKindFile},
 		// Traversal evidence follows runtime result immediately; both are raw runtime evidence.
-		{"raw/runtime/parametron.reference-traversal.json", recordpackage.EntryKindFile},
+		{"raw/runtime/prm.reference-traversal.json", recordpackage.EntryKindFile},
 	}
 
 	entries := recordpackage.RawEvidenceEntries()

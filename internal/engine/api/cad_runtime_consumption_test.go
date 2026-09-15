@@ -114,7 +114,7 @@ func (a *task12APIAdapter) OrchestrateCADRuntime(ctx context.Context, req adapte
 			return err
 		}
 		_ = os.WriteFile(filepath.Join(output, "unrelated.bin"), []byte("ignore"), 0o644)
-		_ = os.WriteFile(filepath.Join(working, "parametron.observed.json"), []byte("{}"), 0o644)
+		_ = os.WriteFile(filepath.Join(working, "prm.observed.json"), []byte("{}"), 0o644)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()

@@ -200,7 +200,7 @@ func TestCanonicalJSONAndWriteFileAreByteStable(t *testing.T) {
 		t.Fatalf("canonical JSON changed across repeated calls\nfirst:  %s\nsecond: %s", first, second)
 	}
 
-	path := filepath.Join(t.TempDir(), "execution", "parametron.verification.json")
+	path := filepath.Join(t.TempDir(), "execution", "prm.verification.json")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("failed to create parent dir: %v", err)
 	}
@@ -1655,7 +1655,7 @@ func TestDeriveVerifyMetadataPassAndFail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DeriveFromManifestAndWorkingCopy returned error: %v", err)
 	}
-	verificationPath := filepath.Join(outputDir, "parametron.verification.json")
+	verificationPath := filepath.Join(outputDir, "prm.verification.json")
 	if err := WriteFile(verificationPath, contract); err != nil {
 		t.Fatalf("WriteFile returned error: %v", err)
 	}

@@ -81,7 +81,7 @@ func TestComputeFreeCADRuntimeWorkingCopyLayout_ValidShape(t *testing.T) {
 		t.Errorf("ManifestPath = %q, want %q", layout.ManifestPath, expectedManifestPath)
 	}
 
-	expectedResultPath := filepath.Join(layout.WorkingCopyDir, "result.json")
+	expectedResultPath := filepath.Join(layout.WorkingCopyDir, "prm.result.json")
 	if layout.ResultPath != expectedResultPath {
 		t.Errorf("ResultPath = %q, want %q", layout.ResultPath, expectedResultPath)
 	}

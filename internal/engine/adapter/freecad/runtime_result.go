@@ -79,7 +79,7 @@ func (e *FreeCADRuntimeResultValidationError) Unwrap() error {
 	return ErrFreeCADRuntimeResultValidation
 }
 
-// FreeCADRuntimeResult is the normalized aligned FreeCAD result.json contract.
+// FreeCADRuntimeResult is the normalized aligned FreeCAD prm.result.json contract.
 type FreeCADRuntimeResult struct {
 	SchemaVersion string
 	Status        FreeCADRuntimeResultStatus
@@ -104,7 +104,7 @@ type FreeCADRuntimeResultFailure struct {
 	Stage    *string
 }
 
-// ParseFreeCADRuntimeResult decodes and validates aligned FreeCAD result.json bytes.
+// ParseFreeCADRuntimeResult decodes and validates aligned FreeCAD prm.result.json bytes.
 func ParseFreeCADRuntimeResult(data []byte) (*FreeCADRuntimeResult, error) {
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.UseNumber()
@@ -132,7 +132,7 @@ func ParseFreeCADRuntimeResult(data []byte) (*FreeCADRuntimeResult, error) {
 	return copyFreeCADRuntimeResult(result), nil
 }
 
-// LoadFreeCADRuntimeResult reads and parses aligned FreeCAD result.json from path.
+// LoadFreeCADRuntimeResult reads and parses aligned FreeCAD prm.result.json from path.
 func LoadFreeCADRuntimeResult(path string) (*FreeCADRuntimeResult, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

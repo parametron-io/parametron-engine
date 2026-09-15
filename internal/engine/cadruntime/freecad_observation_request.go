@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	FreeCADRuntimeObservationRequestFilename = "parametron.verification.json"
+	FreeCADRuntimeObservationRequestFilename = "prm.verification.json"
 
 	FreeCADRuntimeObservationRequestStageManifestPreflight       = "manifest_preflight"
 	FreeCADRuntimeObservationRequestStageRequestPath             = "request_path"

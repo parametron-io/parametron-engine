@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	FreeCADRuntimeObservedFilename           = "parametron.observed.json"
-	FreeCADRuntimeReferenceTraversalFilename = "parametron.reference-traversal.json"
+	FreeCADRuntimeObservedFilename           = "prm.observed.json"
+	FreeCADRuntimeReferenceTraversalFilename = "prm.reference-traversal.json"
 
 	FreeCADRuntimeRunStageRequestMaterialization   = "request_materialization"
 	FreeCADRuntimeRunStageExecutionRequest         = "execution_request"
@@ -440,6 +440,30 @@ func loadRegularFreeCADRuntimeObserved(workingCopyDir, observedPath string) (*ob
 		return nil, &observed.FileError{Path: observedPath, Err: err}
 	}
 	return observed.LoadFile(observedPath)
+}
+
+// ReadOptionalFreeCADRuntimeEvidence reads unchanged attempt evidence using the
+// runtime's working-copy containment and regular-file guards.
+func ReadOptionalFreeCADRuntimeEvidence(workingCopyDir, evidencePath string) ([]byte, error) {
+	if evidencePath == "" {
+		return nil, nil
+	}
+	if err := requireCanonicalAbsolutePath("WorkingCopyDir", workingCopyDir); err != nil {
+		return nil, err
+	}
+	if err := requireCanonicalAbsolutePath("EvidencePath", evidencePath); err != nil {
+		return nil, err
+	}
+	if err := requireNoSymlinkPathComponents(workingCopyDir, evidencePath); err != nil {
+		return nil, err
+	}
+	if err := requireRegularNonSymlinkFile(evidencePath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return os.ReadFile(evidencePath)
 }
 
 func loadOptionalRegularFreeCADRuntimeBytes(workingCopyDir, outputPath string) ([]byte, error) {

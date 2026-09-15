@@ -179,11 +179,11 @@ func TestCLI_NativeOnlyControlledRunProducesZeroArtifactsAndSucceeds(t *testing.
 		t.Fatal("expected the aligned RunCADRuntime step to have executed")
 	}
 
-	// result.json remains an eligible execution output; zero derived
+	// prm.result.json remains an eligible execution output; zero derived
 	// artifacts are added; no native CAD document is registered.
 	var sawResultJSON bool
 	for _, a := range report.Artifacts {
-		if a.Filename == "result.json" {
+		if a.Filename == planner.FreeCADRuntimeResultFilename {
 			sawResultJSON = true
 			continue
 		}
@@ -193,7 +193,7 @@ func TestCLI_NativeOnlyControlledRunProducesZeroArtifactsAndSucceeds(t *testing.
 		t.Fatalf("expected no other registered artifacts for native-only run, found %+v", a)
 	}
 	if !sawResultJSON {
-		t.Fatal("expected result.json to remain a registered execution output")
+		t.Fatal("expected prm.result.json to remain a registered execution output")
 	}
 	for _, filename := range job.ExpectedArtifacts {
 		if filename == "" {

@@ -460,3 +460,196 @@ func TestEmitRunPackage_ReferenceTraversal_MapperInvalidPayloadFailsClosed(t *te
 		t.Fatalf("expected no package to be written on mapper-invalid traversal failure, stat err=%v", statErr)
 	}
 }
+
+// --- CAD runtime evidence (result / verification-request / observed) integration ---
+
+// nonCanonicalCADEvidenceJSON builds deliberately non-canonically formatted
+// JSON (whitespace, indentation, key ordering) so tests can prove recordemit
+// preserves the exact raw attempt-evidence bytes rather than re-serializing.
+func nonCanonicalCADEvidenceJSON(marker string) []byte {
+	return []byte(fmt.Sprintf("{\n  \"marker\":   %q,\n \"schemaVersion\": \"1.0\"\n}\n", marker))
+}
+
+func TestEmitRunPackage_CADRuntime_CapturesResultVerificationObservedWithExactBytes(t *testing.T) {
+	runRoot := t.TempDir()
+	planHash := "cad-runtime-plan"
+	result := nonCanonicalCADEvidenceJSON("result")
+	verification := nonCanonicalCADEvidenceJSON("verification")
+	observed := nonCanonicalCADEvidenceJSON("observed")
+
+	if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
+		RunRoot:  runRoot,
+		PlanHash: planHash,
+		Report:   syntheticSuccessReport(planHash),
+		Metadata: syntheticMetadata(planHash),
+		CADRuntime: &recordemit.CADRuntimeRunEvidence{
+			Result: result, Verification: verification, Observed: observed,
+		},
+	}); err != nil {
+		t.Fatalf("EmitRunPackage returned error: %v", err)
+	}
+
+	packageRoot := filepath.Join(runRoot, recordpackage.PackageDirectoryName)
+
+	for contractPath, want := range map[string][]byte{
+		recordpackage.RawRuntimeResultContractPath(): result,
+		recordpackage.RawVerificationContractPath():  verification,
+		recordpackage.RawObservedContractPath():      observed,
+	} {
+		assertEmitFileExists(t, packageRoot, contractPath)
+		got := readEmitPackageFile(t, packageRoot, contractPath)
+		if !bytes.Equal(got, want) {
+			t.Fatalf("raw evidence %q bytes differ\nwant:\n%s\ngot:\n%s", contractPath, want, got)
+		}
+	}
+
+	manifest := readEmitManifest(t, packageRoot)
+	assertEmitRawEvidence(t, manifest, recordpackage.RawRuntimeResultContractPath())
+	assertEmitRawEvidence(t, manifest, recordpackage.RawVerificationContractPath())
+	assertEmitRawEvidence(t, manifest, recordpackage.RawObservedContractPath())
+
+	// Existing normal package surfaces remain present: CAD evidence capture is additive.
+	assertEmitFileExists(t, packageRoot, recordpackage.MustRecordContractPath("execution"))
+	assertEmitFileExists(t, packageRoot, recordpackage.RawReportContractPath())
+}
+
+func TestEmitRunPackage_CADRuntime_NilCADRuntimeOmitsAllThreeFamilies(t *testing.T) {
+	runRoot := t.TempDir()
+	planHash := "cad-runtime-nil"
+
+	if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
+		RunRoot:  runRoot,
+		PlanHash: planHash,
+		Report:   syntheticSuccessReport(planHash),
+		Metadata: syntheticMetadata(planHash),
+	}); err != nil {
+		t.Fatalf("EmitRunPackage returned error: %v", err)
+	}
+
+	packageRoot := filepath.Join(runRoot, recordpackage.PackageDirectoryName)
+	for _, contractPath := range []string{
+		recordpackage.RawRuntimeResultContractPath(),
+		recordpackage.RawVerificationContractPath(),
+		recordpackage.RawObservedContractPath(),
+	} {
+		if _, err := os.Stat(filepath.Join(packageRoot, filepath.FromSlash(contractPath))); !os.IsNotExist(err) {
+			t.Fatalf("expected no %q file when CADRuntime evidence is absent, stat err=%v", contractPath, err)
+		}
+	}
+}
+
+func TestEmitRunPackage_CADRuntime_PartialEvidenceOmitsOnlyMissingFamilies(t *testing.T) {
+	runRoot := t.TempDir()
+	planHash := "cad-runtime-partial"
+	result := nonCanonicalCADEvidenceJSON("result-only")
+
+	if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
+		RunRoot:  runRoot,
+		PlanHash: planHash,
+		Report:   syntheticSuccessReport(planHash),
+		Metadata: syntheticMetadata(planHash),
+		CADRuntime: &recordemit.CADRuntimeRunEvidence{
+			Result: result,
+			// Verification and Observed intentionally absent, mirroring an
+			// attempt whose optional evidence was never produced.
+		},
+	}); err != nil {
+		t.Fatalf("EmitRunPackage returned error: %v", err)
+	}
+
+	packageRoot := filepath.Join(runRoot, recordpackage.PackageDirectoryName)
+	assertEmitFileExists(t, packageRoot, recordpackage.RawRuntimeResultContractPath())
+	for _, contractPath := range []string{
+		recordpackage.RawVerificationContractPath(),
+		recordpackage.RawObservedContractPath(),
+	} {
+		if _, err := os.Stat(filepath.Join(packageRoot, filepath.FromSlash(contractPath))); !os.IsNotExist(err) {
+			t.Fatalf("expected no %q file for absent optional evidence, stat err=%v", contractPath, err)
+		}
+	}
+}
+
+// TestEmitRunPackage_CADRuntime_DoesNotFallBackToRunRootGuess is the key
+// regression proof for this fix: collectRawEvidence must never reconstruct
+// prm.result.json / prm.verification.json / prm.observed.json by guessing a
+// path directly under the run root. It plants files with those exact names
+// and different bytes at the run root (the old, broken lookup location) and
+// confirms the package instead contains the real attempt evidence supplied
+// through CADRuntimeRunEvidence -- and nothing at all when no such evidence
+// is supplied, even though the stale run-root files exist and are non-empty.
+func TestEmitRunPackage_CADRuntime_DoesNotFallBackToRunRootGuess(t *testing.T) {
+	staleResult := []byte(`{"marker":"stale-run-root-result"}`)
+	staleVerification := []byte(`{"marker":"stale-run-root-verification"}`)
+	staleObserved := []byte(`{"marker":"stale-run-root-observed"}`)
+	writeStaleRunRootFiles := func(t *testing.T, runRoot string) {
+		t.Helper()
+		for name, content := range map[string][]byte{
+			"prm.result.json":       staleResult,
+			"prm.verification.json": staleVerification,
+			"prm.observed.json":     staleObserved,
+		} {
+			if err := os.WriteFile(filepath.Join(runRoot, name), content, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	t.Run("real attempt evidence wins over stale run-root files", func(t *testing.T) {
+		runRoot := t.TempDir()
+		writeStaleRunRootFiles(t, runRoot)
+		planHash := "cad-runtime-stale-vs-real"
+		realResult := nonCanonicalCADEvidenceJSON("real-result")
+		realVerification := nonCanonicalCADEvidenceJSON("real-verification")
+		realObserved := nonCanonicalCADEvidenceJSON("real-observed")
+
+		if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
+			RunRoot:  runRoot,
+			PlanHash: planHash,
+			Report:   syntheticSuccessReport(planHash),
+			Metadata: syntheticMetadata(planHash),
+			CADRuntime: &recordemit.CADRuntimeRunEvidence{
+				Result: realResult, Verification: realVerification, Observed: realObserved,
+			},
+		}); err != nil {
+			t.Fatalf("EmitRunPackage returned error: %v", err)
+		}
+
+		packageRoot := filepath.Join(runRoot, recordpackage.PackageDirectoryName)
+		for contractPath, want := range map[string][]byte{
+			recordpackage.RawRuntimeResultContractPath(): realResult,
+			recordpackage.RawVerificationContractPath():  realVerification,
+			recordpackage.RawObservedContractPath():      realObserved,
+		} {
+			got := readEmitPackageFile(t, packageRoot, contractPath)
+			if !bytes.Equal(got, want) {
+				t.Fatalf("raw evidence %q = %q, want the real attempt evidence %q (not the stale run-root guess)", contractPath, got, want)
+			}
+		}
+	})
+
+	t.Run("no CADRuntime evidence means no capture even with stale run-root files present", func(t *testing.T) {
+		runRoot := t.TempDir()
+		writeStaleRunRootFiles(t, runRoot)
+		planHash := "cad-runtime-stale-only"
+
+		if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
+			RunRoot:  runRoot,
+			PlanHash: planHash,
+			Report:   syntheticSuccessReport(planHash),
+			Metadata: syntheticMetadata(planHash),
+		}); err != nil {
+			t.Fatalf("EmitRunPackage returned error: %v", err)
+		}
+
+		packageRoot := filepath.Join(runRoot, recordpackage.PackageDirectoryName)
+		for _, contractPath := range []string{
+			recordpackage.RawRuntimeResultContractPath(),
+			recordpackage.RawVerificationContractPath(),
+			recordpackage.RawObservedContractPath(),
+		} {
+			if _, err := os.Stat(filepath.Join(packageRoot, filepath.FromSlash(contractPath))); !os.IsNotExist(err) {
+				t.Fatalf("expected no %q file: the old runRoot-relative lookup must not have been used, stat err=%v", contractPath, err)
+			}
+		}
+	})
+}

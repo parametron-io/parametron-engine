@@ -62,10 +62,12 @@ record packaging.
   atomic source model preparation, and pre-invocation output cleaning.
 - **Manifest & Request Materialization (`internal/engine/cadruntime`, `internal/engine/adapter/freecad`)**:
   Ensures pure, deterministic projection of execution manifests, verification
-  requests (`parametron.verification.json`), and reference traversal requests.
+  requests (`prm.verification.json`), and reference traversal requests
+  (`prm.reference-traversal-request.json`).
 - **Evidence Intake Validation (`internal/engine/cadruntime`)**: Validates raw
-  `result.json` loading, strict artifact containment checks, and observed working
-  copy fingerprint correlation.
+  `prm.result.json` loading, strict artifact containment checks,
+  `prm.observed.json` working copy fingerprint correlation, and
+  `prm.reference-traversal.json` intake.
 
 ### 3. Verification and Normalized Records
 
@@ -77,11 +79,14 @@ record packaging.
   versioning, provenance structures, and identity derivation across execution,
   artifact, observation, reference, failure, and verification record families.
 - **Record Mapping (`internal/engine/recordmap`)**: Tests mapping from operational
-  files (`prm.report.json`, `prm.metadata.json`, `result.json`, `parametron.observed.json`,
-  traversals) to normalized record structures.
+  files (`prm.report.json`, `prm.metadata.json`, legacy `result.json` payloads,
+  observed state, traversals) to normalized record structures. This legacy
+  result-mapper coverage is distinct from the active runtime transport filename.
 - **Record Package Writer & Emission (`internal/engine/recordpackage`, `internal/engine/recordemit`)**:
   Verifies deterministic package generation, manifest indexing, and raw evidence
-  preservation under `raw/`.
+  preservation under `raw/`. CAD evidence tests read authoritative attempt
+  paths, preserve source bytes, reject run-root guessing, and avoid arbitrary
+  selection when multiple outcomes are eligible.
 
 ### 4. Scheduler, Executor, and Cache
 

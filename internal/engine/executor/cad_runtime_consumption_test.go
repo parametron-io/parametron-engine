@@ -278,6 +278,35 @@ func TestExecutorCADRuntimeConsumption_ConsumesReferenceTraversalWithAuthoritati
 	}
 }
 
+func TestExecutorCADRuntimeConsumption_PropagatesEvidenceReadingFields(t *testing.T) {
+	var wantWorkingCopyDir, wantObservationRequestPath, wantObservedPath string
+	e, err := consumeTask12(t, func(_ *adapter.CADRuntimeOrchestrationRequest, r *cadruntime.FreeCADRuntimeVerifiedRun) {
+		wantWorkingCopyDir = r.Runtime.ObservationRequest.Manifest.Attempt.Layout.WorkingCopyDir
+		r.Runtime.ExecutionRequest.WorkingCopyDir = wantWorkingCopyDir
+		wantObservationRequestPath = filepath.Join(wantWorkingCopyDir, "prm.verification.json")
+		r.Runtime.ObservationRequest.Path = wantObservationRequestPath
+		r.Runtime.ExecutionRequest.ObservationRequestPath = wantObservationRequestPath
+		wantObservedPath = filepath.Join(r.Runtime.ObservationRequest.Manifest.Attempt.Layout.OutputDir, cadruntime.FreeCADRuntimeObservedFilename)
+		r.Runtime.ObservedPath = wantObservedPath
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := e.CADRuntimeOutcome()
+	if wantWorkingCopyDir == "" || wantObservationRequestPath == "" || wantObservedPath == "" {
+		t.Fatal("fixture must produce non-empty paths for this test to be meaningful")
+	}
+	if got.WorkingCopyDir != wantWorkingCopyDir {
+		t.Fatalf("WorkingCopyDir = %q, want %q", got.WorkingCopyDir, wantWorkingCopyDir)
+	}
+	if got.ObservationRequestPath != wantObservationRequestPath {
+		t.Fatalf("ObservationRequestPath = %q, want %q", got.ObservationRequestPath, wantObservationRequestPath)
+	}
+	if got.ObservedPath != wantObservedPath {
+		t.Fatalf("ObservedPath = %q, want %q", got.ObservedPath, wantObservedPath)
+	}
+}
+
 func TestExecutorCADRuntimeConsumption_AcceptsLegacyEmptyReferenceTraversal(t *testing.T) {
 	e, err := consumeTask12(t, nil, nil)
 	if err != nil {

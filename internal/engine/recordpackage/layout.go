@@ -34,12 +34,12 @@ const (
 	rawArtifactStoreManifestName         = "manifest.json"
 	rawHandoffDirectoryName              = "handoff"
 	rawObservedDirectoryName             = "observed"
-	rawObservedFileName                  = "parametron.observed.json"
+	rawObservedFileName                  = "prm.observed.json"
 	rawVerificationDirectoryName         = "verification"
-	rawVerificationFileName              = "parametron.verification.json"
+	rawVerificationFileName              = "prm.verification.json"
 	rawRuntimeDirectoryName              = "runtime"
-	rawRuntimeResultFileName             = "result.json"
-	rawRuntimeReferenceTraversalFileName = "parametron.reference-traversal.json"
+	rawRuntimeResultFileName             = "prm.result.json"
+	rawRuntimeReferenceTraversalFileName = "prm.reference-traversal.json"
 )
 
 // EntryKind distinguishes file and directory layout entries.

@@ -7,8 +7,8 @@ import (
 // TestExportManifestFilenameConstantsUseCanonicalName locks the canonical
 // runtime-facing filename and its active Engine alias.
 func TestExportManifestFilenameConstantsUseCanonicalName(t *testing.T) {
-	if FreeCADRuntimeExportManifestFilename != "export_manifest_v1.json" {
-		t.Errorf("FreeCADRuntimeExportManifestFilename = %q, want %q", FreeCADRuntimeExportManifestFilename, "export_manifest_v1.json")
+	if FreeCADRuntimeExportManifestFilename != "prm.export-manifest.json" {
+		t.Errorf("FreeCADRuntimeExportManifestFilename = %q, want %q", FreeCADRuntimeExportManifestFilename, "prm.export-manifest.json")
 	}
 	if ExportManifestFilename != FreeCADRuntimeExportManifestFilename {
 		t.Errorf("ExportManifestFilename = %q, want FreeCADRuntimeExportManifestFilename %q", ExportManifestFilename, FreeCADRuntimeExportManifestFilename)
@@ -17,7 +17,7 @@ func TestExportManifestFilenameConstantsUseCanonicalName(t *testing.T) {
 
 // TestCreatePlan_WriteExportManifestPayloadFilenameUsesCurrentAlias proves that
 // the planner sets WriteExportManifestPayload.ManifestFilename to ExportManifestFilename,
-// which now resolves to the canonical underscore-form "export_manifest_v1.json".
+// which resolves to the canonical shared contract filename "prm.export-manifest.json".
 func TestCreatePlan_WriteExportManifestPayloadFilenameUsesCurrentAlias(t *testing.T) {
 	dslContent := `
 product Widget {
@@ -37,13 +37,14 @@ product Widget {
 	if manifestPayload.ManifestFilename != ExportManifestFilename {
 		t.Errorf("ManifestFilename = %q, want ExportManifestFilename %q", manifestPayload.ManifestFilename, ExportManifestFilename)
 	}
-	if manifestPayload.ManifestFilename != "export_manifest_v1.json" {
-		t.Errorf("ManifestFilename = %q, want canonical underscore-form %q", manifestPayload.ManifestFilename, "export_manifest_v1.json")
+	if manifestPayload.ManifestFilename != "prm.export-manifest.json" {
+		t.Errorf("ManifestFilename = %q, want canonical shared contract filename %q", manifestPayload.ManifestFilename, "prm.export-manifest.json")
 	}
 }
 
 // TestCreatePlan_RunCADRuntimeManifestFieldUsesCurrentAlias proves that the RunCADRuntime
-// step references ExportManifestFilename, which now resolves to the canonical underscore-form.
+// step references ExportManifestFilename, which resolves to the canonical shared contract
+// filename.
 func TestCreatePlan_RunCADRuntimeManifestFieldUsesCurrentAlias(t *testing.T) {
 	dslContent := `
 product Box {
@@ -66,7 +67,7 @@ product Box {
 	if runPayload.ManifestFilename != ExportManifestFilename {
 		t.Errorf("RunCADRuntimePayload.ManifestFilename = %q, want ExportManifestFilename %q", runPayload.ManifestFilename, ExportManifestFilename)
 	}
-	if runPayload.ManifestFilename != "export_manifest_v1.json" {
-		t.Errorf("RunCADRuntimePayload.ManifestFilename = %q, want canonical underscore-form %q", runPayload.ManifestFilename, "export_manifest_v1.json")
+	if runPayload.ManifestFilename != "prm.export-manifest.json" {
+		t.Errorf("RunCADRuntimePayload.ManifestFilename = %q, want canonical shared contract filename %q", runPayload.ManifestFilename, "prm.export-manifest.json")
 	}
 }

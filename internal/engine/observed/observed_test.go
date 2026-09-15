@@ -1300,7 +1300,7 @@ func TestParse_RejectsInvalidWorkingCopyFields(t *testing.T) {
 
 func TestLoadFileAndWriteFile_RoundTrip(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "parametron.observed.json")
+	path := filepath.Join(root, "prm.observed.json")
 	observed := validObserved()
 
 	if err := WriteFile(path, observed); err != nil {
@@ -1326,7 +1326,7 @@ func TestLoadFileAndWriteFile_RoundTrip(t *testing.T) {
 
 func TestWriteFile_WritesCanonicalBytesWithSingleTrailingNewline(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "parametron.observed.json")
+	path := filepath.Join(root, "prm.observed.json")
 	observed := validObserved()
 
 	canonical, err := CanonicalJSON(observed)
@@ -1354,7 +1354,7 @@ func TestWriteFile_WritesCanonicalBytesWithSingleTrailingNewline(t *testing.T) {
 
 func TestWriteFile_RepeatedIdenticalWritesPreserveByteIdentity(t *testing.T) {
 	root := t.TempDir()
-	path := filepath.Join(root, "parametron.observed.json")
+	path := filepath.Join(root, "prm.observed.json")
 	observed := validObserved()
 
 	if err := os.WriteFile(path, []byte("stale contents without newline"), 0o644); err != nil {
@@ -1464,7 +1464,7 @@ func TestCanonicalJSON_RepeatedParseAndCanonicalizePreservesByteIdentity(t *test
 	}
 
 	root := t.TempDir()
-	path := filepath.Join(root, "parametron.observed.json")
+	path := filepath.Join(root, "prm.observed.json")
 	if err := WriteFile(path, reparsedAgain); err != nil {
 		t.Fatalf("WriteFile returned error: %v", err)
 	}

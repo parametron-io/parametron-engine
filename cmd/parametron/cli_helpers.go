@@ -485,7 +485,10 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 			Metadata:           runMetadata,
 			ReferenceTraversal: referenceTraversalRunEvidence(schedulerResult, executionErr == nil),
 		}
-		packageEmitErr = recordemit.EmitRunPackage(emitInput)
+		emitInput.CADRuntime, packageEmitErr = cadRuntimeRunEvidence(schedulerResult, executionErr == nil)
+		if packageEmitErr == nil {
+			packageEmitErr = recordemit.EmitRunPackage(emitInput)
+		}
 	}
 
 	result := &executionResult{
@@ -517,6 +520,43 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 	}
 
 	return result, nil
+}
+
+func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecutionSucceeded bool) (*recordemit.CADRuntimeRunEvidence, error) {
+	if !overallExecutionSucceeded {
+		return nil, nil
+	}
+	var candidate *executor.CADRuntimeOutcome
+	for _, jobExecution := range execution.Jobs {
+		outcome := jobExecution.CADRuntimeOutcome
+		if jobExecution.Err != nil || outcome == nil || outcome.Verification != artifact.VerificationOutcomePassed {
+			continue
+		}
+		// Singular package destinations cannot represent multiple attempts.
+		if candidate != nil {
+			return nil, nil
+		}
+		candidate = outcome
+	}
+	if candidate == nil {
+		return nil, nil
+	}
+	evidence := &recordemit.CADRuntimeRunEvidence{}
+	for _, source := range []struct {
+		path    string
+		content *[]byte
+	}{
+		{candidate.ResultPath, &evidence.Result},
+		{candidate.ObservationRequestPath, &evidence.Verification},
+		{candidate.ObservedPath, &evidence.Observed},
+	} {
+		content, err := cadruntime.ReadOptionalFreeCADRuntimeEvidence(candidate.WorkingCopyDir, source.path)
+		if err != nil {
+			return nil, fmt.Errorf("read CAD runtime evidence %q: %w", source.path, err)
+		}
+		*source.content = content
+	}
+	return evidence, nil
 }
 
 func referenceTraversalRunEvidence(execution scheduler.ExecutionResult, overallExecutionSucceeded bool) *recordemit.ReferenceTraversalRunEvidence {
