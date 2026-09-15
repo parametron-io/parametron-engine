@@ -442,6 +442,30 @@ func loadRegularFreeCADRuntimeObserved(workingCopyDir, observedPath string) (*ob
 	return observed.LoadFile(observedPath)
 }
 
+// ReadOptionalFreeCADRuntimeEvidence reads unchanged attempt evidence using the
+// runtime's working-copy containment and regular-file guards.
+func ReadOptionalFreeCADRuntimeEvidence(workingCopyDir, evidencePath string) ([]byte, error) {
+	if evidencePath == "" {
+		return nil, nil
+	}
+	if err := requireCanonicalAbsolutePath("WorkingCopyDir", workingCopyDir); err != nil {
+		return nil, err
+	}
+	if err := requireCanonicalAbsolutePath("EvidencePath", evidencePath); err != nil {
+		return nil, err
+	}
+	if err := requireNoSymlinkPathComponents(workingCopyDir, evidencePath); err != nil {
+		return nil, err
+	}
+	if err := requireRegularNonSymlinkFile(evidencePath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return os.ReadFile(evidencePath)
+}
+
 func loadOptionalRegularFreeCADRuntimeBytes(workingCopyDir, outputPath string) ([]byte, error) {
 	if err := requireNoSymlinkPathComponents(workingCopyDir, outputPath); err != nil {
 		return nil, err

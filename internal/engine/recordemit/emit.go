@@ -27,6 +27,14 @@ type RunEmitInput struct {
 	Report             report.Report
 	Metadata           *metadata.Metadata
 	ReferenceTraversal *ReferenceTraversalRunEvidence
+	CADRuntime         *CADRuntimeRunEvidence
+}
+
+// CADRuntimeRunEvidence carries unchanged bytes read from one execution attempt.
+type CADRuntimeRunEvidence struct {
+	Result       []byte
+	Verification []byte
+	Observed     []byte
 }
 
 type ReferenceTraversalRunEvidence struct {
@@ -173,9 +181,6 @@ func collectRawEvidence(runRoot string, input RunEmitInput) ([]recordpackage.Raw
 		{contractPath: recordpackage.RawReportContractPath(), runPath: filepath.Join(runRoot, report.FileName)},
 		{contractPath: recordpackage.RawMetadataContractPath(), runPath: filepath.Join(runRoot, metadata.FileName)},
 		{contractPath: recordpackage.RawArtifactStoreManifestContractPath(), runPath: filepath.Join(runRoot, "manifest.json")},
-		{contractPath: recordpackage.RawObservedContractPath(), runPath: filepath.Join(runRoot, filepath.Base(recordpackage.RawObservedContractPath()))},
-		{contractPath: recordpackage.RawVerificationContractPath(), runPath: filepath.Join(runRoot, filepath.Base(recordpackage.RawVerificationContractPath()))},
-		{contractPath: recordpackage.RawRuntimeResultContractPath(), runPath: filepath.Join(runRoot, filepath.Base(recordpackage.RawRuntimeResultContractPath()))},
 	}
 
 	out := make([]recordpackage.RawEvidenceFile, 0, len(sources))
@@ -191,6 +196,17 @@ func collectRawEvidence(runRoot string, input RunEmitInput) ([]recordpackage.Raw
 			ContractPath: source.contractPath,
 			Content:      content,
 		})
+	}
+	if input.CADRuntime != nil {
+		for _, evidence := range []recordpackage.RawEvidenceFile{
+			{ContractPath: recordpackage.RawRuntimeResultContractPath(), Content: input.CADRuntime.Result},
+			{ContractPath: recordpackage.RawVerificationContractPath(), Content: input.CADRuntime.Verification},
+			{ContractPath: recordpackage.RawObservedContractPath(), Content: input.CADRuntime.Observed},
+		} {
+			if len(evidence.Content) > 0 {
+				out = append(out, evidence)
+			}
+		}
 	}
 	return out, nil
 }

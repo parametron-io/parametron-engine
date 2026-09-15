@@ -50,6 +50,9 @@ type CADRuntimeOutcome struct {
 	StepID                 string
 	Attempt                int
 	Adapter                string
+	WorkingCopyDir         string
+	ObservationRequestPath string
+	ObservedPath           string
 	ResultPath             string
 	ReferenceTraversalPath string
 	ReferenceTraversalJSON []byte
@@ -145,6 +148,9 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 	outcome := &CADRuntimeOutcome{
 		AttemptID: identity.ID, JobID: identity.JobID, ProductKey: identity.ProductKey,
 		StepID: identity.StepID, Attempt: identity.Attempt, Adapter: identity.Adapter,
+		WorkingCopyDir:         run.Runtime.ExecutionRequest.WorkingCopyDir,
+		ObservationRequestPath: run.Runtime.ExecutionRequest.ObservationRequestPath,
+		ObservedPath:           run.Runtime.ObservedPath,
 		ResultPath:             run.Runtime.ExecutionRequest.ResultPath,
 		ReferenceTraversalPath: run.Runtime.ReferenceTraversalPath,
 		ReferenceTraversalJSON: append([]byte(nil), run.Runtime.ReferenceTraversalJSON...),
