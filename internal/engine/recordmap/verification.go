@@ -38,7 +38,7 @@ type VerificationMappingInput struct {
 	// Optional deterministic linkage supplied by the caller.
 	Linkage VerificationMappingLinkage
 
-	// Optional digest of raw/verification/parametron.verification.json.
+	// Optional digest of raw/verification/prm.verification.json request evidence.
 	// If present, it must be a lowercase 64-character SHA-256 hex digest.
 	EvidenceDigestSHA256 string
 }

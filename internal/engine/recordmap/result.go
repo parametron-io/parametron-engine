@@ -57,7 +57,7 @@ type RuntimeResultMappingInput struct {
 	// Optional deterministic linkage supplied by the caller.
 	Linkage RuntimeResultMappingLinkage
 
-	// Optional digest of raw/runtime/result.json.
+	// Optional digest of raw/runtime/prm.result.json.
 	// If present, it must be a lowercase 64-character SHA-256 hex digest.
 	EvidenceDigestSHA256 string
 }

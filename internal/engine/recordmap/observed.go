@@ -47,7 +47,7 @@ type ObservedMappingInput struct {
 	// Optional deterministic linkage supplied by the caller.
 	Linkage ObservedMappingLinkage
 
-	// Optional digest of raw/observed/parametron.observed.json, if the caller has it.
+	// Optional digest of raw/observed/prm.observed.json, if the caller has it.
 	// Must be a lowercase 64-character SHA-256 hex digest if present.
 	EvidenceDigestSHA256 string
 }

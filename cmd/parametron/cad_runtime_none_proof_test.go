@@ -193,7 +193,7 @@ func TestCLI_NativeOnlyControlledRunProducesZeroArtifactsAndSucceeds(t *testing.
 		t.Fatalf("expected no other registered artifacts for native-only run, found %+v", a)
 	}
 	if !sawResultJSON {
-		t.Fatal("expected result.json to remain a registered execution output")
+		t.Fatal("expected prm.result.json to remain a registered execution output")
 	}
 	for _, filename := range job.ExpectedArtifacts {
 		if filename == "" {
