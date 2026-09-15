@@ -70,6 +70,19 @@ def find_one(root, name):
     return matches[0]
 
 
+def find_one_outside_record_package(root, name):
+    # The record package now additionally carries its own copy of this raw
+    # CAD attempt evidence file (see recordpackage raw/ layout), so an
+    # unfiltered rglob legitimately finds two matches: the original attempt
+    # evidence and the package's raw evidence copy. Callers that want the
+    # original attempt-produced file exclude the package copy explicitly,
+    # matching the existing manifest.json/prm.metadata.json filtering below.
+    matches = sorted(path for path in root.rglob(name)
+                      if "parametron-record-package" not in path.parts)
+    require(len(matches) == 1, f"expected one {name} beneath {root}, found {len(matches)}")
+    return matches[0]
+
+
 def invocations(path):
     if not path.exists():
         return []
@@ -121,8 +134,8 @@ def stable_cli_facts(item):
                          if "_working" in path.parts]
     require(len(runtime_manifests) == 1, f"expected one attempt manifest, found {len(runtime_manifests)}")
     runtime_manifest = runtime_manifests[0]
-    request = find_one(item["out"], "prm.verification.json")
-    result = find_one(item["out"], "prm.result.json")
+    request = find_one_outside_record_package(item["out"], "prm.verification.json")
+    result = find_one_outside_record_package(item["out"], "prm.result.json")
     steps = sorted(item["out"].rglob("*.step"))
     require(steps, "accepted STEP artifact missing")
     report = item["report"]
@@ -532,8 +545,8 @@ def real_proof(ctx):
         "recordPackageHash", "stepCount",
     )
     require(all(a[key] == b[key] for key in stable_keys), "real repeated Engine identity differs")
-    observed_a = find_one(runs[0][0]["out"], "prm.observed.json")
-    observed_b = find_one(runs[1][0]["out"], "prm.observed.json")
+    observed_a = find_one_outside_record_package(runs[0][0]["out"], "prm.observed.json")
+    observed_b = find_one_outside_record_package(runs[1][0]["out"], "prm.observed.json")
     require(normalized_observed_semantics(observed_a) == normalized_observed_semantics(observed_b),
             "real repeated observed semantics differ")
     require(normalized_report_outcome(runs[0][0]["report"]) ==

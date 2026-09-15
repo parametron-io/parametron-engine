@@ -1457,6 +1457,9 @@ func TestCLIProjectRun_EmitsRecordPackageFromNormalRun(t *testing.T) {
 		recordpackage.RawReportContractPath(),
 		recordpackage.RawMetadataContractPath(),
 		recordpackage.RawArtifactStoreManifestContractPath(),
+		recordpackage.RawObservedContractPath(),
+		recordpackage.RawVerificationContractPath(),
+		recordpackage.RawRuntimeResultContractPath(),
 	} {
 		assertPackageFileExists(t, packageRoot, contractPath)
 	}
@@ -1471,8 +1474,27 @@ func TestCLIProjectRun_EmitsRecordPackageFromNormalRun(t *testing.T) {
 		recordpackage.RawReportContractPath(),
 		recordpackage.RawMetadataContractPath(),
 		recordpackage.RawArtifactStoreManifestContractPath(),
+		recordpackage.RawObservedContractPath(),
+		recordpackage.RawVerificationContractPath(),
+		recordpackage.RawRuntimeResultContractPath(),
 	})
 	assertManifestOrdering(t, manifest)
+
+	// The single successful, verification-passed CAD outcome from this run
+	// must supply real attempt evidence, not merely present-but-empty files.
+	for _, contractPath := range []string{
+		recordpackage.RawObservedContractPath(),
+		recordpackage.RawVerificationContractPath(),
+		recordpackage.RawRuntimeResultContractPath(),
+	} {
+		data, err := os.ReadFile(filepath.Join(packageRoot, filepath.FromSlash(contractPath)))
+		if err != nil {
+			t.Fatalf("read package file %q: %v", contractPath, err)
+		}
+		if len(data) == 0 {
+			t.Fatalf("package file %q is empty, want real attempt evidence bytes", contractPath)
+		}
+	}
 }
 
 // validReferenceTraversalJSONFixture is a deliberately non-canonically
@@ -1605,6 +1627,9 @@ func TestCLIProjectRun_EmitsReferenceRecordFromRuntimeTraversal(t *testing.T) {
 		recordpackage.RawReportContractPath(),
 		recordpackage.RawMetadataContractPath(),
 		recordpackage.RawArtifactStoreManifestContractPath(),
+		recordpackage.RawObservedContractPath(),
+		recordpackage.RawVerificationContractPath(),
+		recordpackage.RawRuntimeResultContractPath(),
 		recordpackage.RawRuntimeReferenceTraversalContractPath(),
 	})
 
@@ -1870,11 +1895,21 @@ func TestRecordEmitRunPackage_ReemissionIntoSameRunRootIsIdempotent(t *testing.T
 	}
 	before := readRecordPackageFiles(t, packageRoot)
 
+	// Re-emission does not reconstruct CAD runtime evidence from run-root
+	// paths; a caller reproducing an equivalent package must resupply the
+	// same attempt evidence bytes it already holds.
+	cadRuntimeEvidence := &recordemit.CADRuntimeRunEvidence{
+		Result:       before[recordpackage.RawRuntimeResultContractPath()],
+		Verification: before[recordpackage.RawVerificationContractPath()],
+		Observed:     before[recordpackage.RawObservedContractPath()],
+	}
+
 	if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
-		RunRoot:  run.result.RunRoot,
-		PlanHash: run.planned.PlanHash,
-		Report:   run.report,
-		Metadata: &run.metadata,
+		RunRoot:    run.result.RunRoot,
+		PlanHash:   run.planned.PlanHash,
+		Report:     run.report,
+		Metadata:   &run.metadata,
+		CADRuntime: cadRuntimeEvidence,
 	}); err != nil {
 		t.Fatalf("EmitRunPackage(second) failed: %v", err)
 	}
@@ -2117,6 +2152,154 @@ func TestReferenceTraversalRunEvidence_MultipleEligibleCandidatesOmitProjection(
 	}}
 	if got := referenceTraversalRunEvidence(execution, true); got != nil {
 		t.Fatalf("expected nil projection for multiple eligible candidates (no arbitrary selection), got %#v", got)
+	}
+}
+
+// --- cadRuntimeRunEvidence candidate cardinality and raw evidence reading (helper-level) ---
+
+// cadRuntimeEvidenceOutcome builds an eligible CADRuntimeOutcome backed by
+// real files under a fresh working copy directory, so cadRuntimeRunEvidence
+// exercises its actual guarded filesystem reads rather than opaque struct
+// plumbing. A nil bytes value omits that evidence family's source file/path
+// entirely, matching how an attempt with no such optional output behaves.
+func cadRuntimeEvidenceOutcome(t *testing.T, jobID, productKey, stepID string, result, verification, observed []byte) *executor.CADRuntimeOutcome {
+	t.Helper()
+	working := t.TempDir()
+	outcome := &executor.CADRuntimeOutcome{
+		JobID: jobID, ProductKey: productKey, StepID: stepID,
+		Verification:   artifact.VerificationOutcomePassed,
+		WorkingCopyDir: working,
+	}
+	if result != nil {
+		path := filepath.Join(working, "prm.result.json")
+		if err := os.WriteFile(path, result, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		outcome.ResultPath = path
+	}
+	if verification != nil {
+		path := filepath.Join(working, "prm.verification.json")
+		if err := os.WriteFile(path, verification, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		outcome.ObservationRequestPath = path
+	}
+	if observed != nil {
+		dir := filepath.Join(working, "outputs")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(dir, "prm.observed.json")
+		if err := os.WriteFile(path, observed, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		outcome.ObservedPath = path
+	}
+	return outcome
+}
+
+func TestCADRuntimeRunEvidence_ZeroEligibleCandidates(t *testing.T) {
+	cases := map[string]struct {
+		succeeded bool
+		jobs      []scheduler.JobExecution
+	}{
+		"no CADRuntimeOutcome": {true, []scheduler.JobExecution{{CADRuntimeOutcome: nil}}},
+		"verification not pass": {true, []scheduler.JobExecution{{CADRuntimeOutcome: &executor.CADRuntimeOutcome{
+			JobID: "job-1", ProductKey: "widget", StepID: "2",
+			Verification: artifact.VerificationOutcomeFailed,
+		}}}},
+		"job error": {true, []scheduler.JobExecution{{
+			Err:               errors.New("boom"),
+			CADRuntimeOutcome: cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("r"), []byte("v"), []byte("o")),
+		}}},
+		"overall execution failure": {false, []scheduler.JobExecution{{
+			CADRuntimeOutcome: cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("r"), []byte("v"), []byte("o")),
+		}}},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := cadRuntimeRunEvidence(scheduler.ExecutionResult{Jobs: tc.jobs}, tc.succeeded)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != nil {
+				t.Fatalf("expected nil evidence, got %#v", got)
+			}
+		})
+	}
+}
+
+func TestCADRuntimeRunEvidence_ExactlyOneEligibleCandidate_CapturesExactBytes(t *testing.T) {
+	// Deliberately non-canonical formatting (whitespace/indentation/key
+	// order) so a re-serializing implementation would fail this comparison.
+	result := []byte("{\n  \"status\":   \"succeeded\",\n \"schemaVersion\": \"1.0\"\n}\n")
+	verification := []byte("{\"expected\":{\n\"parameters\":[]  }}\n")
+	observed := []byte("{  \"workingCopy\":{\"path\":\"x\"} }")
+	outcome := cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", result, verification, observed)
+	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}
+
+	got, err := cadRuntimeRunEvidence(execution, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil evidence for exactly one eligible candidate")
+	}
+	if !bytes.Equal(got.Result, result) {
+		t.Fatalf("Result bytes differ\nwant: %q\ngot:  %q", result, got.Result)
+	}
+	if !bytes.Equal(got.Verification, verification) {
+		t.Fatalf("Verification bytes differ\nwant: %q\ngot:  %q", verification, got.Verification)
+	}
+	if !bytes.Equal(got.Observed, observed) {
+		t.Fatalf("Observed bytes differ\nwant: %q\ngot:  %q", observed, got.Observed)
+	}
+}
+
+func TestCADRuntimeRunEvidence_AbsentOptionalEvidenceOmitted(t *testing.T) {
+	outcome := cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("result-only"), nil, nil)
+	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}
+
+	got, err := cadRuntimeRunEvidence(execution, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || !bytes.Equal(got.Result, []byte("result-only")) {
+		t.Fatalf("expected result evidence, got %#v", got)
+	}
+	if len(got.Verification) != 0 || len(got.Observed) != 0 {
+		t.Fatalf("expected absent optional evidence to stay empty, got verification=%q observed=%q", got.Verification, got.Observed)
+	}
+}
+
+func TestCADRuntimeRunEvidence_MultipleEligibleCandidatesOmitProjection(t *testing.T) {
+	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{
+		{CADRuntimeOutcome: cadRuntimeEvidenceOutcome(t, "job-1", "widget-a", "2", []byte("a"), []byte("a"), []byte("a"))},
+		{CADRuntimeOutcome: cadRuntimeEvidenceOutcome(t, "job-1", "widget-b", "2", []byte("b"), []byte("b"), []byte("b"))},
+	}}
+	got, err := cadRuntimeRunEvidence(execution, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Fatalf("expected nil projection for multiple eligible candidates (no arbitrary selection), got %#v", got)
+	}
+}
+
+func TestCADRuntimeRunEvidence_PropagatesPathSafetyErrors(t *testing.T) {
+	outcome := cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("r"), nil, nil)
+	// Point ResultPath outside the declared working copy: the guarded reader
+	// must reject this rather than silently reading across the boundary.
+	outside := filepath.Join(t.TempDir(), "prm.result.json")
+	if err := os.WriteFile(outside, []byte("outside"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	outcome.ResultPath = outside
+	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}
+
+	got, err := cadRuntimeRunEvidence(execution, true)
+	if err == nil || got != nil {
+		t.Fatalf("got=%#v err=%v, want a path-safety error and no evidence", got, err)
 	}
 }
 
