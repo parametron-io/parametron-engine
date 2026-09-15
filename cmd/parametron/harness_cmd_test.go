@@ -12,7 +12,9 @@ import (
 
 	"parametron/internal/authoring/dsl"
 	"parametron/internal/authoring/planner"
+	"parametron/internal/engine/metadata"
 	"parametron/internal/engine/projectinput"
+	"parametron/internal/engine/report"
 	"parametron/internal/shared/projectlock"
 	"parametron/internal/shared/projectmap"
 )
@@ -1919,7 +1921,7 @@ product Widget {
 		t.Fatalf("unexpected stdout: %q", stdout)
 	}
 
-	for _, name := range []string{"snapshot.json", "plan.json", "inputs.json", "report.json", "metadata.json", "manifest.json"} {
+	for _, name := range []string{"snapshot.json", "plan.json", "inputs.json", report.FileName, metadata.FileName, "manifest.json"} {
 		if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
 			t.Fatalf("expected %s to exist: %v", name, err)
 		}

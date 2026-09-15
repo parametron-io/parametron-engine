@@ -299,21 +299,25 @@ func TestWrite_CreatesReportJSON(t *testing.T) {
 		t.Fatalf("Write returned error: %v", err)
 	}
 
-	data, err := os.ReadFile(filepath.Join(runRoot, "report.json"))
+	data, err := os.ReadFile(filepath.Join(runRoot, FileName))
 	if err != nil {
-		t.Fatalf("expected report.json to exist: %v", err)
+		t.Fatalf("expected %s to exist: %v", FileName, err)
 	}
 	if !strings.Contains(string(data), `"schemaVersion": "1.0"`) {
-		t.Fatalf("expected schemaVersion in report.json, got:\n%s", string(data))
+		t.Fatalf("expected schemaVersion in %s, got:\n%s", FileName, string(data))
 	}
 	if !strings.Contains(string(data), `"status": "success"`) {
-		t.Fatalf("expected success status in report.json, got:\n%s", string(data))
+		t.Fatalf("expected success status in %s, got:\n%s", FileName, string(data))
 	}
 	if !strings.Contains(string(data), `"planHash": "plan-hash"`) {
-		t.Fatalf("expected planHash in report.json, got:\n%s", string(data))
+		t.Fatalf("expected planHash in %s, got:\n%s", FileName, string(data))
 	}
 	if !strings.Contains(string(data), `"jobs": [`) {
-		t.Fatalf("expected jobs in report.json, got:\n%s", string(data))
+		t.Fatalf("expected jobs in %s, got:\n%s", FileName, string(data))
+	}
+
+	if _, err := os.Stat(filepath.Join(runRoot, "report.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy report.json to not be written, stat err: %v", err)
 	}
 }
 
@@ -343,8 +347,8 @@ func TestWrite_OnDiskBytesDeterministic(t *testing.T) {
 	}
 
 	// Read bytes
-	path1 := filepath.Join(dir1, "report.json")
-	path2 := filepath.Join(dir2, "report.json")
+	path1 := filepath.Join(dir1, FileName)
+	path2 := filepath.Join(dir2, FileName)
 
 	bytes1, err := os.ReadFile(path1)
 	if err != nil {

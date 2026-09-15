@@ -167,8 +167,8 @@ func TestCLI_AlignedRuntimeFailureProducesDeterministicReportAndRecords(t *testi
 			t.Fatalf("did not expect any aligned runtime artifact to be accepted after failure: %+v", a)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(run.result.RunRoot, "report.json")); err != nil {
-		t.Fatalf("expected report.json to exist deterministically after failure: %v", err)
+	if _, err := os.Stat(filepath.Join(run.result.RunRoot, report.FileName)); err != nil {
+		t.Fatalf("expected %s to exist deterministically after failure: %v", report.FileName, err)
 	}
 }
 

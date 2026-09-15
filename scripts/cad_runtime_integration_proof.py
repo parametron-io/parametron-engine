@@ -99,8 +99,8 @@ def cache_isolated_cli(ctx, name, mode, *, runtime, expect_success=True):
     require((result.returncode == 0) == expect_success,
             f"{name}: unexpected exit {result.returncode}\n{result.stdout}\n{result.stderr}")
     effective_out = cwd / "output"
-    reports = sorted(effective_out.rglob("report.json"))
-    require(reports, f"{name}: report.json missing")
+    reports = sorted(effective_out.rglob("prm.report.json"))
+    require(reports, f"{name}: prm.report.json missing")
     return {
         "root": root, "out": effective_out, "log": log, "result": result,
         "reportPath": reports[-1], "report": json_file(reports[-1]),
@@ -112,7 +112,7 @@ def stable_cli_facts(item):
                  if "parametron-record-package" not in path.parts]
     require(len(manifests) == 1, f"expected one run artifact manifest, found {len(manifests)}")
     manifest = manifests[0]
-    metadata_matches = [path for path in item["out"].rglob("metadata.json")
+    metadata_matches = [path for path in item["out"].rglob("prm.metadata.json")
                         if "parametron-record-package" not in path.parts]
     require(len(metadata_matches) == 1, f"expected one run metadata file, found {len(metadata_matches)}")
     metadata = metadata_matches[0]
@@ -374,7 +374,7 @@ def concurrent_isolation_proof(ctx, runtime):
                 report = None
                 if product in completed:
                     # Reports have no HTTP route; inspect the persisted per-job report.
-                    report = json_file(find_one(server["artifacts"] / "jobs" / job_id, "report.json"))
+                    report = json_file(find_one(server["artifacts"] / "jobs" / job_id, "prm.report.json"))
                     require(len(report["jobs"]) == 1, "report includes another job")
                     require(report["jobs"][0]["jobId"] == job_id and
                             report["jobs"][0]["productKey"] == product, "report identity mismatch")
@@ -432,7 +432,7 @@ def fake_proof(ctx, runtime):
         accepted, status, seen = submit_and_wait(server, aligned_submission(ctx))
         require(status["state"] == "succeeded", f"API success state={status['state']}")
         require(len(invocations(server["log"])) == 1, "fake API invocation count is not one")
-        require(list(server["artifacts"].rglob("report.json")), "API report missing at terminal observation")
+        require(list(server["artifacts"].rglob("prm.report.json")), "API report missing at terminal observation")
         scenarios.append({"name": "fake_api_success", "status": "passed",
                           "runtimeInvocations": 1, "jobIDs": [accepted["jobId"]],
                           "terminalState": status["state"]})
@@ -478,7 +478,7 @@ def fake_proof(ctx, runtime):
                         f"retry proof state={status['state']} calls={calls}")
             else:
                 require(status["state"] == "failed", f"{mode}: state={status['state']}")
-                persisted = find_one(server["artifacts"], "report.json")
+                persisted = find_one(server["artifacts"], "prm.report.json")
                 require(json_file(persisted).get("artifacts") == [],
                         f"{mode}: report exposes accepted artifacts")
             scenarios.append({"name": mode, "status": "passed",

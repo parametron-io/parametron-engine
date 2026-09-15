@@ -31,13 +31,17 @@ func TestWrite_CreatesMetadataJSON(t *testing.T) {
 		t.Fatalf("failed to write metadata: %v", err)
 	}
 
-	path := filepath.Join(runRoot, "metadata.json")
+	path := filepath.Join(runRoot, FileName)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("expected metadata.json to be created: %v", err)
+		t.Fatalf("expected %s to be created: %v", FileName, err)
 	}
 	if len(data) == 0 {
-		t.Fatal("expected metadata.json to be non-empty")
+		t.Fatalf("expected %s to be non-empty", FileName)
+	}
+
+	if _, err := os.Stat(filepath.Join(runRoot, "metadata.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy metadata.json to not be written, stat err: %v", err)
 	}
 }
 

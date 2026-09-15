@@ -254,11 +254,11 @@ func readManifest(t *testing.T, dir string) artifact.Manifest {
 	return manifest
 }
 
-// readMetadata reads metadata.json
+// readMetadata reads metadata.FileName
 func readMetadata(t *testing.T, dir string) metadata.Metadata {
 	t.Helper()
 
-	data, err := os.ReadFile(filepath.Join(dir, "metadata.json"))
+	data, err := os.ReadFile(filepath.Join(dir, metadata.FileName))
 	if err != nil {
 		t.Fatalf("failed to read metadata: %v", err)
 	}
@@ -397,9 +397,9 @@ func TestCache_ReusesArtifacts_WhenMetadataSettingChanges(t *testing.T) {
 	manifest1 := readManifest(t, out1)
 	checksums1 := getChecksumMap(t, manifest1)
 
-	// Check that metadata.json is absent
-	if _, err := os.Stat(filepath.Join(out1, "metadata.json")); !os.IsNotExist(err) {
-		t.Error("metadata.json should not exist in run1")
+	// Check that metadata.FileName is absent
+	if _, err := os.Stat(filepath.Join(out1, metadata.FileName)); !os.IsNotExist(err) {
+		t.Errorf("%s should not exist in run1", metadata.FileName)
 	}
 
 	// Second run: metadata_enabled=true
@@ -426,7 +426,7 @@ func TestCache_ReusesArtifacts_WhenMetadataSettingChanges(t *testing.T) {
 		t.Errorf("CSV checksum changed between runs")
 	}
 
-	// Does metadata.json exist now?
+	// Does metadata.FileName exist now?
 	meta2 := readMetadata(t, out2)
 	if meta2.Profile.ResolvedSettings["metadata_enabled"] != true {
 		t.Error("metadata_enabled should be true in run2")

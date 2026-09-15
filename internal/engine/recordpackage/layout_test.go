@@ -117,8 +117,8 @@ func TestRawEvidenceEntriesAreSeparateFromNormalizedRecords(t *testing.T) {
 		path string
 		kind recordpackage.EntryKind
 	}{
-		{"raw/report.json", recordpackage.EntryKindFile},
-		{"raw/metadata.json", recordpackage.EntryKindFile},
+		{"raw/prm.report.json", recordpackage.EntryKindFile},
+		{"raw/prm.metadata.json", recordpackage.EntryKindFile},
 		{"raw/artifact-store/manifest.json", recordpackage.EntryKindFile},
 		{"raw/handoff", recordpackage.EntryKindDirectory},
 		{"raw/observed/parametron.observed.json", recordpackage.EntryKindFile},

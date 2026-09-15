@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"parametron/internal/authoring/planner"
+	"parametron/internal/engine/report"
 )
 
 // Task 14 permanent regression coverage for the CLI's absolute-run-root
@@ -181,9 +182,9 @@ func TestCLI_EquivalentRelativeAndAbsoluteOutputRootsPreserveLogicalIdentity(t *
 		if err != nil {
 			t.Fatal(err)
 		}
-		reportBytes, err := os.ReadFile(filepath.Join(runRoot, "report.json"))
+		reportBytes, err := os.ReadFile(filepath.Join(runRoot, report.FileName))
 		if err != nil {
-			t.Fatalf("read report.json (absolute=%v): %v", useAbsoluteOut, err)
+			t.Fatalf("read %s (absolute=%v): %v", report.FileName, useAbsoluteOut, err)
 		}
 		var decoded struct {
 			PlanHash string `json:"planHash"`

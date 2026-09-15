@@ -698,9 +698,9 @@ func TestWritePackageRawEvidenceManifestOrderingWithHandoffFiles(t *testing.T) {
 		{ContractPath: "raw/runtime/parametron.reference-traversal.json", Content: []byte("traversal")},
 		{ContractPath: "raw/runtime/result.json", Content: []byte("runtime")},
 		{ContractPath: "raw/handoff/zeta/package.json", Content: []byte("zeta")},
-		{ContractPath: "raw/report.json", Content: []byte("report")},
+		{ContractPath: "raw/prm.report.json", Content: []byte("report")},
 		{ContractPath: "raw/handoff/alpha/package.json", Content: []byte("alpha")},
-		{ContractPath: "raw/metadata.json", Content: []byte("metadata")},
+		{ContractPath: "raw/prm.metadata.json", Content: []byte("metadata")},
 		{ContractPath: "raw/observed/parametron.observed.json", Content: []byte("observed")},
 		{ContractPath: "raw/verification/parametron.verification.json", Content: []byte("verification")},
 		{ContractPath: "raw/artifact-store/manifest.json", Content: []byte("artifact-store")},
@@ -713,8 +713,8 @@ func TestWritePackageRawEvidenceManifestOrderingWithHandoffFiles(t *testing.T) {
 	manifest := readManifest(t, root)
 	// Order must follow RawEvidenceEntries(): traversal immediately after runtime result.
 	want := []string{
-		"raw/report.json",
-		"raw/metadata.json",
+		"raw/prm.report.json",
+		"raw/prm.metadata.json",
 		"raw/artifact-store/manifest.json",
 		"raw/handoff/alpha/package.json",
 		"raw/handoff/zeta/package.json",

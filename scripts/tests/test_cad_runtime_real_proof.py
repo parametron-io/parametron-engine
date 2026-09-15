@@ -59,11 +59,11 @@ def single_real_run():
 
 
 def find_run_report(out):
-    """The run's own report.json, excluding the raw evidence copy the record
-    package embeds under parametron-record-package/raw/ -- the same
+    """The run's own prm.report.json, excluding the raw evidence copy the
+    record package embeds under parametron-record-package/raw/ -- the same
     exclusion pattern stable_cli_facts uses for manifest.json/metadata.json."""
-    matches = [p for p in out.rglob("report.json") if "parametron-record-package" not in p.parts]
-    assert len(matches) == 1, f"expected one run report.json beneath {out}, found {len(matches)}"
+    matches = [p for p in out.rglob("prm.report.json") if "parametron-record-package" not in p.parts]
+    assert len(matches) == 1, f"expected one run prm.report.json beneath {out}, found {len(matches)}"
     return matches[0]
 
 
@@ -134,7 +134,7 @@ class RealFreeCADIntegrationTests(unittest.TestCase):
                 any(forbidden in str(a.get("filename", "")) for a in report_doc.get("artifacts", [])),
                 f"raw real runtime evidence {forbidden!r} was promoted to a registered artifact",
             )
-        self.assertTrue(list(out.rglob("metadata.json")))
+        self.assertTrue(list(out.rglob("prm.metadata.json")))
         self.assertTrue(list(out.rglob("parametron.record-package.json")))
         self.assertTrue(list(out.rglob("parametron.verification.json")))
 
