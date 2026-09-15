@@ -217,7 +217,10 @@ In this repository:
 * `raw evidence` means preserved runtime or operational evidence that has not
   become an Engine-normalized record
 * `record` means an Engine-owned normalized representation
-* `reference traversal` means runtime-produced raw CAD reference evidence
+* `reference traversal` means the FreeCAD-owned runtime process or capability
+  that discovers CAD references and emits traversal evidence
+* `raw traversal evidence` means serialized raw evidence produced by reference
+  traversal, currently `parametron.reference-traversal.json`
 * `reference record` means Engine-owned normalized reference information
   derived from accepted evidence
 
