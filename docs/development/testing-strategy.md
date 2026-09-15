@@ -77,7 +77,7 @@ record packaging.
   versioning, provenance structures, and identity derivation across execution,
   artifact, observation, reference, failure, and verification record families.
 - **Record Mapping (`internal/engine/recordmap`)**: Tests mapping from operational
-  files (`report.json`, `metadata.json`, `result.json`, `parametron.observed.json`,
+  files (`prm.report.json`, `prm.metadata.json`, `result.json`, `parametron.observed.json`,
   traversals) to normalized record structures.
 - **Record Package Writer & Emission (`internal/engine/recordpackage`, `internal/engine/recordemit`)**:
   Verifies deterministic package generation, manifest indexing, and raw evidence
