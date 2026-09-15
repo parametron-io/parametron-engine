@@ -16,7 +16,7 @@ FreeCAD-native execution lives in the external `parametron-freecad` repository.
 | `internal/testsupport/` | Shared Go test fixtures and helpers. |
 | `testdata/` | DSL and project fixtures, including FreeCAD project inputs. |
 | `scripts/` | External-runtime integration proof tooling and its Python tests. |
-| `docs/` | Authoring, architecture, adapters, CLI, Engine, reference, development, and historical documentation. |
+| `docs/` | Repository-local architecture, development, and historical documentation. |
 
 Go dependencies are declared in `go.mod` and `go.sum`. The Nix flake and `.envrc`
 provide optional development-environment provisioning.
@@ -61,9 +61,11 @@ packages. Raw runtime evidence and Engine-normalized records remain distinct.
 
 ## Further reading
 
-- [System overview](system-overview.md): Engine and external-runtime ownership.
-- [Execution model](execution-model.md): scheduler, executor, jobs, and handoff.
-- [Adapter architecture](../adapters/adapter-architecture.md): contract and
-  working-copy boundaries.
-- [Record contracts](../reference/record-contracts.md): record families and
-  package semantics.
+Current public Engine architecture, authoring, CLI, runtime, reference, and
+adapter documentation is maintained in `parametron-docs`. See the canonical
+[Engine documentation landing page](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/README.md)
+for system overview, execution model, adapter architecture, and record
+contracts.
+
+Repository-local development, testing, and maintenance documentation remains
+under [`docs/development/`](../development/) in this repository.

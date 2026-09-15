@@ -83,8 +83,9 @@ To add support for a new CAD tool:
 
 ## Related Documents
 
-- [DSL Grammar](../authoring/dsl-grammar.md) — Operator, type, and expression grammar.
-- [DSL Semantics](../authoring/dsl-semantics.md) — Evaluation model and type rules.
-- [IR and Planning](../authoring/ir-and-planning.md) — IR architecture and plan generation.
-- [Adapter Architecture](../adapters/adapter-architecture.md) — Adapter contracts and step dispatch.
+Current public DSL grammar, semantics, IR/planning, and adapter architecture
+documentation is maintained in `parametron-docs`. See the canonical
+[Engine authoring documentation](https://github.com/parametron-io/parametron-docs/tree/main/docs/engine/authoring)
+and [Engine adapter documentation](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/adapters/README.md).
+
 - [Testing Strategy](testing-strategy.md) — Test layers and verification commands.
