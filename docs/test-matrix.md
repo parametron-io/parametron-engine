@@ -30,7 +30,7 @@ its core architectural layers.
 | **Operational Record Mapping** | Mapping operational files (`report.json`, `metadata.json`, `result.json`, observed state, traversals) to normalized records | `go test ./internal/engine/recordmap/...` | Pure, deterministic mapping functions |
 | **Record Package Emission** | Local record package writer, package manifest indexing, raw evidence file preservation under `raw/` | `go test ./internal/engine/recordpackage/... ./internal/engine/recordemit/...` | Stable package key `engine-run:<planHash>` |
 | **HTTP API & Endpoints** | `POST /job`, `GET /job/{id}`, `GET /job/{id}/artifacts`, `GET /artifacts`, `GET /artifacts/{id}`, `GET /healthz` | `go test ./internal/engine/api/...` | Validates transport limits, idempotency, and status |
-| **CLI Commands** | Harness commands: `validate`, `simulate`, `sweep`, `snapshot`, `diff`, output directory strategies | `go test ./cmd/parametron/...` | Validates CLI routing and exit codes |
+| **CLI Commands** | Harness commands: `validate`, `simulate`, `sweep`, `snapshot`, `diff`, `sync`, output directory strategies | `go test ./cmd/parametron/...` | Validates CLI routing and exit codes |
 
 ## Integration and End-to-End Proof
 
