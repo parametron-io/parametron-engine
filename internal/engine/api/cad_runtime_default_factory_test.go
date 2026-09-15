@@ -431,12 +431,12 @@ func TestRuntime_TerminalStatusIsPublishedAfterReport(t *testing.T) {
 			if status.State != tt.wantState {
 				t.Fatalf("state=%q want=%q", status.State, tt.wantState)
 			}
-			// The instant terminal status is observable, report.json must
+			// The instant terminal status is observable, the report file must
 			// already exist and be complete (report is written before the
 			// terminal status transition is committed).
 			data, runReport := mustReadRuntimeReport(t, h.runRoot, pkg)
 			if len(data) == 0 || runReport.SchemaVersion == "" {
-				t.Fatalf("expected a complete report.json immediately at terminal status, got %q", data)
+				t.Fatalf("expected a complete report immediately at terminal status, got %q", data)
 			}
 			if runReport.Jobs[0].ProductKey != tt.product {
 				t.Fatalf("report product mismatch: %+v", runReport.Jobs)

@@ -59,8 +59,8 @@ func TestMapReportSuccessMapsExecutionRecordOnly(t *testing.T) {
 	if job.Steps[0].StepRef != "0:WriteCSV" || job.Steps[1].StepRef != "1:RunCADRuntime" {
 		t.Fatalf("step refs = %#v, want deterministic <index>:<type>", job.Steps)
 	}
-	if !hasProvenanceEvidence(got.ExecutionRecord.Provenance, "report", "raw/report.json") {
-		t.Fatalf("Provenance.Evidence = %#v, want raw/report.json evidence", got.ExecutionRecord.Provenance.Evidence)
+	if !hasProvenanceEvidence(got.ExecutionRecord.Provenance, "report", "raw/prm.report.json") {
+		t.Fatalf("Provenance.Evidence = %#v, want raw/prm.report.json evidence", got.ExecutionRecord.Provenance.Evidence)
 	}
 
 	failure, err := recordmap.MapReportToFailureRecord(input)
@@ -302,8 +302,8 @@ func TestMapReportErrorMapsValidFailureRecord(t *testing.T) {
 	if failure.Failure.Code != string(verification.FailureClassParameterMismatch) {
 		t.Fatalf("Failure.Code = %q, want verification classification", failure.Failure.Code)
 	}
-	if !hasFailureEvidence(failure.Failure.Evidence, "report", "raw/report.json") {
-		t.Fatalf("Failure.Evidence = %#v, want raw/report.json evidence", failure.Failure.Evidence)
+	if !hasFailureEvidence(failure.Failure.Evidence, "report", "raw/prm.report.json") {
+		t.Fatalf("Failure.Evidence = %#v, want raw/prm.report.json evidence", failure.Failure.Evidence)
 	}
 }
 
@@ -508,7 +508,7 @@ func TestMapReportPreservesCallerProvenanceAndRelatedRecords(t *testing.T) {
 	if !hasProvenanceEvidence(got.Provenance, "log", "logs/run.log") {
 		t.Fatalf("Provenance.Evidence = %#v, want caller evidence preserved", got.Provenance.Evidence)
 	}
-	if !hasProvenanceEvidence(got.Provenance, "report", "raw/report.json") {
+	if !hasProvenanceEvidence(got.Provenance, "report", "raw/prm.report.json") {
 		t.Fatalf("Provenance.Evidence = %#v, want raw report evidence added", got.Provenance.Evidence)
 	}
 	if !reflect.DeepEqual(got.RelatedRecords, recordcontract.NormalizeExecutionRecord(recordcontract.ExecutionRecord{RelatedRecords: input.RelatedRecords}).RelatedRecords) {

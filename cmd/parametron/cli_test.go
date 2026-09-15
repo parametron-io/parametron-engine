@@ -290,24 +290,24 @@ func runRootProjectExecution(t *testing.T, entryPath string, outDir string, extr
 	}
 
 	runRoot := planner.BuildRunRoot(outDir, planned.PlanHash)
-	metadataBytes, err := os.ReadFile(filepath.Join(runRoot, "metadata.json"))
+	metadataBytes, err := os.ReadFile(filepath.Join(runRoot, metadata.FileName))
 	if err != nil {
-		t.Fatalf("failed to read metadata.json: %v", err)
+		t.Fatalf("failed to read %s: %v", metadata.FileName, err)
 	}
 
 	var runMetadata metadata.Metadata
 	if err := json.Unmarshal(metadataBytes, &runMetadata); err != nil {
-		t.Fatalf("failed to unmarshal metadata.json: %v", err)
+		t.Fatalf("failed to unmarshal %s: %v", metadata.FileName, err)
 	}
 
-	reportBytes, err := os.ReadFile(filepath.Join(runRoot, "report.json"))
+	reportBytes, err := os.ReadFile(filepath.Join(runRoot, report.FileName))
 	if err != nil {
-		t.Fatalf("failed to read report.json: %v", err)
+		t.Fatalf("failed to read %s: %v", report.FileName, err)
 	}
 
 	var runReport report.Report
 	if err := json.Unmarshal(reportBytes, &runReport); err != nil {
-		t.Fatalf("failed to unmarshal report.json: %v", err)
+		t.Fatalf("failed to unmarshal %s: %v", report.FileName, err)
 	}
 
 	layerKeys, err := computeRunLayerKeys(planned.Plan, planned.AST, "", planned.TableInputs, planned.ProjectInputs, &cache.SignatureV2Strategy{})
@@ -389,11 +389,11 @@ product Widget {
 	runRoot := filepath.Join(outDir, entries[0].Name())
 	productDir := filepath.Join(runRoot, "products", "Widget")
 
-	if _, err := os.Stat(filepath.Join(runRoot, "metadata.json")); err != nil {
-		t.Fatalf("expected metadata.json in run root: %v", err)
+	if _, err := os.Stat(filepath.Join(runRoot, metadata.FileName)); err != nil {
+		t.Fatalf("expected %s in run root: %v", metadata.FileName, err)
 	}
-	if _, err := os.Stat(filepath.Join(runRoot, "report.json")); err != nil {
-		t.Fatalf("expected report.json in run root: %v", err)
+	if _, err := os.Stat(filepath.Join(runRoot, report.FileName)); err != nil {
+		t.Fatalf("expected %s in run root: %v", report.FileName, err)
 	}
 	if _, err := os.Stat(filepath.Join(productDir, "Widget.csv")); err != nil {
 		t.Fatalf("expected Widget.csv artifact: %v", err)
@@ -405,15 +405,15 @@ product Widget {
 		t.Fatalf("expected no STEP output without freecad adapter, got err=%v", err)
 	}
 
-	reportBytes, err := os.ReadFile(filepath.Join(runRoot, "report.json"))
+	reportBytes, err := os.ReadFile(filepath.Join(runRoot, report.FileName))
 	if err != nil {
-		t.Fatalf("failed to read report.json: %v", err)
+		t.Fatalf("failed to read %s: %v", report.FileName, err)
 	}
 	if !strings.Contains(string(reportBytes), `"schemaVersion": "1.0"`) {
-		t.Fatalf("expected schemaVersion in report.json, got:\n%s", string(reportBytes))
+		t.Fatalf("expected schemaVersion in %s, got:\n%s", report.FileName, string(reportBytes))
 	}
 	if !strings.Contains(string(reportBytes), `"status": "success"`) {
-		t.Fatalf("expected success status in report.json, got:\n%s", string(reportBytes))
+		t.Fatalf("expected success status in %s, got:\n%s", report.FileName, string(reportBytes))
 	}
 }
 
@@ -459,14 +459,14 @@ product Widget {
 		t.Fatalf("expected exactly one run directory in %q, got %d entries", outDir, len(entries))
 	}
 
-	data, err := os.ReadFile(filepath.Join(outDir, entries[0].Name(), "metadata.json"))
+	data, err := os.ReadFile(filepath.Join(outDir, entries[0].Name(), metadata.FileName))
 	if err != nil {
-		t.Fatalf("failed to read metadata.json: %v", err)
+		t.Fatalf("failed to read %s: %v", metadata.FileName, err)
 	}
 
 	var got metadata.Metadata
 	if err := json.Unmarshal(data, &got); err != nil {
-		t.Fatalf("failed to unmarshal metadata.json: %v", err)
+		t.Fatalf("failed to unmarshal %s: %v", metadata.FileName, err)
 	}
 	if len(got.Tables) != 1 {
 		t.Fatalf("expected 1 table entry, got %d", len(got.Tables))
@@ -588,7 +588,7 @@ product P {
 		t.Fatal("expected CLI execution to fail due to runner error")
 	}
 
-	// Verify report.json exists
+	// Verify report.FileName exists
 	entries, err := os.ReadDir(outDir)
 	if err != nil {
 		t.Fatalf("failed to read output dir: %v", err)
@@ -597,11 +597,11 @@ product P {
 		t.Fatalf("expected 1 run directory, got %d", len(entries))
 	}
 	runRoot := filepath.Join(outDir, entries[0].Name())
-	reportPath := filepath.Join(runRoot, "report.json")
+	reportPath := filepath.Join(runRoot, report.FileName)
 
 	data, err := os.ReadFile(reportPath)
 	if err != nil {
-		t.Fatalf("failed to read report.json: %v", err)
+		t.Fatalf("failed to read %s: %v", report.FileName, err)
 	}
 
 	var report struct {
@@ -611,7 +611,7 @@ product P {
 		} `json:"error"`
 	}
 	if err := json.Unmarshal(data, &report); err != nil {
-		t.Fatalf("failed to unmarshal report.json: %v", err)
+		t.Fatalf("failed to unmarshal report: %v", err)
 	}
 
 	if report.Status != "failed" {
@@ -738,7 +738,7 @@ func TestCLI_RootProjectFlag_PreservesProjectCaptureAndModelCacheBehavior(t *tes
 
 	second := runRootProjectExecution(t, projectDir, outDir)
 	if bytes.Equal(first.metadataBytes, second.metadataBytes) {
-		t.Fatalf("expected metadata.json to change after model update\nbefore:\n%s\nafter:\n%s", string(first.metadataBytes), string(second.metadataBytes))
+		t.Fatalf("expected metadata to change after model update\nbefore:\n%s\nafter:\n%s", string(first.metadataBytes), string(second.metadataBytes))
 	}
 	if first.result.LayerKeys[cache.CacheGeometry] == second.result.LayerKeys[cache.CacheGeometry] {
 		t.Fatal("expected cache keys to change after project model capture changes")
@@ -1288,7 +1288,7 @@ product Widget {
 		t.Fatal("expected cache miss after table change")
 	}
 	if bytes.Equal(first.metadataBytes, modified.metadataBytes) {
-		t.Fatalf("expected metadata.json to change after table fingerprint change\nbefore:\n%s\nafter:\n%s", string(first.metadataBytes), string(modified.metadataBytes))
+		t.Fatalf("expected metadata to change after table fingerprint change\nbefore:\n%s\nafter:\n%s", string(first.metadataBytes), string(modified.metadataBytes))
 	}
 	if modified.result.LayerKeys[cache.CacheGeometry] == first.result.LayerKeys[cache.CacheGeometry] {
 		t.Fatal("expected layer keys to change after table fingerprint change")
@@ -1526,22 +1526,22 @@ func runCLIExecutionForProjectWithReferenceTraversal(t *testing.T, projectPath, 
 		t.Fatalf("executePlanRun failed: %v", err)
 	}
 
-	metadataBytes, err := os.ReadFile(filepath.Join(result.RunRoot, "metadata.json"))
+	metadataBytes, err := os.ReadFile(filepath.Join(result.RunRoot, metadata.FileName))
 	if err != nil {
-		t.Fatalf("failed to read metadata.json: %v", err)
+		t.Fatalf("failed to read %s: %v", metadata.FileName, err)
 	}
 	var runMetadata metadata.Metadata
 	if err := json.Unmarshal(metadataBytes, &runMetadata); err != nil {
-		t.Fatalf("failed to unmarshal metadata.json: %v", err)
+		t.Fatalf("failed to unmarshal %s: %v", metadata.FileName, err)
 	}
 
-	reportBytes, err := os.ReadFile(filepath.Join(result.RunRoot, "report.json"))
+	reportBytes, err := os.ReadFile(filepath.Join(result.RunRoot, report.FileName))
 	if err != nil {
-		t.Fatalf("failed to read report.json: %v", err)
+		t.Fatalf("failed to read %s: %v", report.FileName, err)
 	}
 	var runReport report.Report
 	if err := json.Unmarshal(reportBytes, &runReport); err != nil {
-		t.Fatalf("failed to unmarshal report.json: %v", err)
+		t.Fatalf("failed to unmarshal %s: %v", report.FileName, err)
 	}
 
 	return cliProjectExecution{
@@ -1804,8 +1804,8 @@ func TestCLIProjectRun_InvalidReferenceTraversalFailsPackageEmissionAndCache(t *
 		t.Fatal("package emission failure must prevent cache completion")
 	}
 	// The underlying execution itself succeeded; only package emission failed.
-	if _, err := os.Stat(filepath.Join(result.RunRoot, "report.json")); err != nil {
-		t.Fatalf("expected report.json to exist despite the package emission failure: %v", err)
+	if _, err := os.Stat(filepath.Join(result.RunRoot, report.FileName)); err != nil {
+		t.Fatalf("expected %s to exist despite the package emission failure: %v", report.FileName, err)
 	}
 }
 
@@ -1947,7 +1947,7 @@ func TestCLIProjectRun_FailedNormalRunEmitsFailureRecordPackage(t *testing.T) {
 		t.Fatal("failed execution should not complete cache markers")
 	}
 
-	reportPath := filepath.Join(run.result.RunRoot, "report.json")
+	reportPath := filepath.Join(run.result.RunRoot, report.FileName)
 	assertRegularFile(t, reportPath)
 	packageRoot := recordPackageRoot(run.result.RunRoot)
 	for _, contractPath := range []string{
@@ -2203,9 +2203,9 @@ func runCLIExecutionWithTables(t *testing.T, dslPath string, outDir string, tabl
 		t.Fatalf("executePlanRun failed: %v", err)
 	}
 
-	metadataBytes, err := os.ReadFile(filepath.Join(result.RunRoot, "metadata.json"))
+	metadataBytes, err := os.ReadFile(filepath.Join(result.RunRoot, metadata.FileName))
 	if err != nil {
-		t.Fatalf("failed to read metadata.json: %v", err)
+		t.Fatalf("failed to read %s: %v", metadata.FileName, err)
 	}
 
 	return cliExecutionWithTables{
@@ -2235,24 +2235,24 @@ func runCLIExecutionForProject(t *testing.T, projectPath string, outDir string) 
 		t.Fatalf("executePlanRun failed: %v", err)
 	}
 
-	metadataBytes, err := os.ReadFile(filepath.Join(result.RunRoot, "metadata.json"))
+	metadataBytes, err := os.ReadFile(filepath.Join(result.RunRoot, metadata.FileName))
 	if err != nil {
-		t.Fatalf("failed to read metadata.json: %v", err)
+		t.Fatalf("failed to read %s: %v", metadata.FileName, err)
 	}
 
 	var runMetadata metadata.Metadata
 	if err := json.Unmarshal(metadataBytes, &runMetadata); err != nil {
-		t.Fatalf("failed to unmarshal metadata.json: %v", err)
+		t.Fatalf("failed to unmarshal %s: %v", metadata.FileName, err)
 	}
 
-	reportBytes, err := os.ReadFile(filepath.Join(result.RunRoot, "report.json"))
+	reportBytes, err := os.ReadFile(filepath.Join(result.RunRoot, report.FileName))
 	if err != nil {
-		t.Fatalf("failed to read report.json: %v", err)
+		t.Fatalf("failed to read %s: %v", report.FileName, err)
 	}
 
 	var runReport report.Report
 	if err := json.Unmarshal(reportBytes, &runReport); err != nil {
-		t.Fatalf("failed to unmarshal report.json: %v", err)
+		t.Fatalf("failed to unmarshal %s: %v", report.FileName, err)
 	}
 
 	return cliProjectExecution{
@@ -2812,8 +2812,8 @@ func TestCLI_ProjectBasedExecution_RehearsalPass(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		filepath.Join(dirRun.result.RunRoot, "report.json"),
-		filepath.Join(dirRun.result.RunRoot, "metadata.json"),
+		filepath.Join(dirRun.result.RunRoot, report.FileName),
+		filepath.Join(dirRun.result.RunRoot, metadata.FileName),
 		filepath.Join(dirRun.result.RunRoot, "manifest.json"),
 		filepath.Join(dirRun.result.RunRoot, "products", "Widget", planner.ExportManifestFilename),
 		filepath.Join(dirRun.result.RunRoot, "products", "Widget", "Widget.csv"),
@@ -2827,7 +2827,7 @@ func TestCLI_ProjectBasedExecution_RehearsalPass(t *testing.T) {
 		t.Fatalf("expected one aligned rehearsal STEP artifact, matches=%v err=%v", stepMatches, err)
 	}
 	if !strings.Contains(string(dirRun.reportBytes), `"status": "success"`) {
-		t.Fatalf("expected success status in report.json, got:\n%s", string(dirRun.reportBytes))
+		t.Fatalf("expected success status in %s, got:\n%s", report.FileName, string(dirRun.reportBytes))
 	}
 	if dirRun.metadata.ProjectInputs == nil {
 		t.Fatal("expected project-derived captured inputs in metadata")
@@ -2844,29 +2844,29 @@ func TestCLI_ProjectBasedExecution_RehearsalPass(t *testing.T) {
 	assertProjectTableIDs(t, dirRun.metadata.Tables, "fasteners", "labels")
 	assertLayerMarkersExist(t, dirRun.result.LayerKeys)
 
-	metadataInfoBefore, err := os.Stat(filepath.Join(dirRun.result.RunRoot, "metadata.json"))
+	metadataInfoBefore, err := os.Stat(filepath.Join(dirRun.result.RunRoot, metadata.FileName))
 	if err != nil {
-		t.Fatalf("failed to stat metadata.json before cache reuse check: %v", err)
+		t.Fatalf("failed to stat %s before cache reuse check: %v", metadata.FileName, err)
 	}
-	reportInfoBefore, err := os.Stat(filepath.Join(dirRun.result.RunRoot, "report.json"))
+	reportInfoBefore, err := os.Stat(filepath.Join(dirRun.result.RunRoot, report.FileName))
 	if err != nil {
-		t.Fatalf("failed to stat report.json before cache reuse check: %v", err)
+		t.Fatalf("failed to stat %s before cache reuse check: %v", report.FileName, err)
 	}
 
 	cacheRepeat := runRootProjectExecution(t, projectDir, filepath.Dir(dirRun.result.RunRoot))
-	metadataInfoAfter, err := os.Stat(filepath.Join(cacheRepeat.result.RunRoot, "metadata.json"))
+	metadataInfoAfter, err := os.Stat(filepath.Join(cacheRepeat.result.RunRoot, metadata.FileName))
 	if err != nil {
-		t.Fatalf("failed to stat metadata.json after cache reuse check: %v", err)
+		t.Fatalf("failed to stat %s after cache reuse check: %v", metadata.FileName, err)
 	}
-	reportInfoAfter, err := os.Stat(filepath.Join(cacheRepeat.result.RunRoot, "report.json"))
+	reportInfoAfter, err := os.Stat(filepath.Join(cacheRepeat.result.RunRoot, report.FileName))
 	if err != nil {
-		t.Fatalf("failed to stat report.json after cache reuse check: %v", err)
+		t.Fatalf("failed to stat %s after cache reuse check: %v", report.FileName, err)
 	}
 	if !metadataInfoAfter.ModTime().Equal(metadataInfoBefore.ModTime()) {
-		t.Fatalf("expected cache reuse to leave metadata.json untouched: before=%s after=%s", metadataInfoBefore.ModTime(), metadataInfoAfter.ModTime())
+		t.Fatalf("expected cache reuse to leave %s untouched: before=%s after=%s", metadata.FileName, metadataInfoBefore.ModTime(), metadataInfoAfter.ModTime())
 	}
 	if !reportInfoAfter.ModTime().Equal(reportInfoBefore.ModTime()) {
-		t.Fatalf("expected cache reuse to leave report.json untouched: before=%s after=%s", reportInfoBefore.ModTime(), reportInfoAfter.ModTime())
+		t.Fatalf("expected cache reuse to leave %s untouched: before=%s after=%s", report.FileName, reportInfoBefore.ModTime(), reportInfoAfter.ModTime())
 	}
 	if !bytes.Equal(dirRun.metadataBytes, cacheRepeat.metadataBytes) {
 		t.Fatalf("expected identical metadata bytes across cached project runs\nfirst:\n%s\nsecond:\n%s", string(dirRun.metadataBytes), string(cacheRepeat.metadataBytes))
@@ -2908,7 +2908,7 @@ func TestCLI_ProjectBasedExecution_RehearsalPass(t *testing.T) {
 		t.Fatal("expected project-mode geometry cache key to change after mapped model update")
 	}
 	if bytes.Equal(invalidationBase.metadataBytes, modelChanged.metadataBytes) {
-		t.Fatalf("expected metadata.json to change after mapped model update\nbefore:\n%s\nafter:\n%s", string(invalidationBase.metadataBytes), string(modelChanged.metadataBytes))
+		t.Fatalf("expected metadata to change after mapped model update\nbefore:\n%s\nafter:\n%s", string(invalidationBase.metadataBytes), string(modelChanged.metadataBytes))
 	}
 
 	tablePath := filepath.Join(projectDir, "tables", "labels.json")
@@ -2931,7 +2931,7 @@ func TestCLI_ProjectBasedExecution_RehearsalPass(t *testing.T) {
 		t.Fatal("expected project-mode geometry cache key to change after mapped table update")
 	}
 	if bytes.Equal(modelChanged.metadataBytes, tableChanged.metadataBytes) {
-		t.Fatalf("expected metadata.json to change after mapped table update\nbefore:\n%s\nafter:\n%s", string(modelChanged.metadataBytes), string(tableChanged.metadataBytes))
+		t.Fatalf("expected metadata to change after mapped table update\nbefore:\n%s\nafter:\n%s", string(modelChanged.metadataBytes), string(tableChanged.metadataBytes))
 	}
 }
 
@@ -2958,20 +2958,20 @@ func TestCLI_ProjectBasedExecution_RehearsalFailurePath(t *testing.T) {
 	}
 	runRoot := planner.BuildRunRoot(outDir, planned.PlanHash)
 
-	reportBytes, err := os.ReadFile(filepath.Join(runRoot, "report.json"))
+	reportBytes, err := os.ReadFile(filepath.Join(runRoot, report.FileName))
 	if err != nil {
-		t.Fatalf("expected deterministic report.json for controlled project-mode failure: %v", err)
+		t.Fatalf("expected deterministic %s for controlled project-mode failure: %v", report.FileName, err)
 	}
 
 	var runReport report.Report
 	if err := json.Unmarshal(reportBytes, &runReport); err != nil {
-		t.Fatalf("failed to unmarshal report.json: %v", err)
+		t.Fatalf("failed to unmarshal %s: %v", report.FileName, err)
 	}
 	if runReport.Status != report.StatusFailed {
 		t.Fatalf("expected failed report status, got %q", runReport.Status)
 	}
 	if runReport.Error == nil || strings.TrimSpace(runReport.Error.Message) == "" {
-		t.Fatalf("expected non-empty error summary in report.json, got %#v", runReport.Error)
+		t.Fatalf("expected non-empty error summary in report, got %#v", runReport.Error)
 	}
 }
 

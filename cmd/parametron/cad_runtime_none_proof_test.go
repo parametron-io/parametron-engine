@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"parametron/internal/authoring/planner"
+	"parametron/internal/engine/report"
 )
 
 // writeNativeOnlyProjectExecutionFixture mirrors writeProjectExecutionFixture
@@ -120,9 +121,9 @@ func runControlledNativeOnly(t *testing.T, script, projectDir string) nativeOnly
 	if err != nil {
 		t.Fatal(err)
 	}
-	reportBytes, err := os.ReadFile(filepath.Join(runRoot, "report.json"))
+	reportBytes, err := os.ReadFile(filepath.Join(runRoot, report.FileName))
 	if err != nil {
-		t.Fatalf("read report.json: %v", err)
+		t.Fatalf("read %s: %v", report.FileName, err)
 	}
 	var decoded nativeOnlyReport
 	if err := json.Unmarshal(reportBytes, &decoded); err != nil {

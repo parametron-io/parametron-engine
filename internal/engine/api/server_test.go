@@ -1607,7 +1607,7 @@ func TestJobRuntime_WritesSuccessReportForCompletedJob(t *testing.T) {
 
 	reportBytes, runReport := mustReadRuntimeReport(t, artifactStore.BaseDir(), pkg)
 	if len(reportBytes) == 0 || reportBytes[len(reportBytes)-1] != '\n' {
-		t.Fatalf("report.json must be newline-terminated, got %q", string(reportBytes))
+		t.Fatalf("%s must be newline-terminated, got %q", report.FileName, string(reportBytes))
 	}
 	if runReport.SchemaVersion != report.SchemaVersion {
 		t.Fatalf("report schemaVersion = %q, want %q", runReport.SchemaVersion, report.SchemaVersion)
@@ -4122,10 +4122,10 @@ func mustGetJobArtifacts(t *testing.T, handler http.Handler, jobID string) jobAr
 func mustReadRuntimeReport(t *testing.T, runRoot string, pkg *handoff.Package) ([]byte, report.Report) {
 	t.Helper()
 
-	path := filepath.Join(runtimeProductDir(runRoot, pkg), "report.json")
+	path := filepath.Join(runtimeProductDir(runRoot, pkg), report.FileName)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("expected report.json to exist at %s: %v", path, err)
+		t.Fatalf("expected %s to exist at %s: %v", report.FileName, path, err)
 	}
 
 	var runReport report.Report

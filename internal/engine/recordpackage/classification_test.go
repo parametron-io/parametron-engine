@@ -16,8 +16,8 @@ func TestCanonicalRawEvidencePathHelpers(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"report", recordpackage.RawReportContractPath(), "raw/report.json"},
-		{"metadata", recordpackage.RawMetadataContractPath(), "raw/metadata.json"},
+		{"report", recordpackage.RawReportContractPath(), "raw/prm.report.json"},
+		{"metadata", recordpackage.RawMetadataContractPath(), "raw/prm.metadata.json"},
 		{"artifact store manifest", recordpackage.RawArtifactStoreManifestContractPath(), "raw/artifact-store/manifest.json"},
 		{"observed", recordpackage.RawObservedContractPath(), "raw/observed/parametron.observed.json"},
 		{"verification", recordpackage.RawVerificationContractPath(), "raw/verification/parametron.verification.json"},
@@ -147,8 +147,8 @@ func TestNormalizedRecordContractPathClassification(t *testing.T) {
 	for _, path := range []string{
 		"raw/runtime/result.json",
 		"raw/runtime/parametron.reference-traversal.json",
-		"raw/report.json",
-		"raw/metadata.json",
+		"raw/prm.report.json",
+		"raw/prm.metadata.json",
 		"raw/observed/parametron.observed.json",
 		"raw/verification/parametron.verification.json",
 		"raw/artifact-store/manifest.json",
@@ -244,8 +244,8 @@ func TestRawEvidenceFileContractPathClassification(t *testing.T) {
 	t.Parallel()
 
 	for _, path := range []string{
-		"raw/report.json",
-		"raw/metadata.json",
+		"raw/prm.report.json",
+		"raw/prm.metadata.json",
 		"raw/artifact-store/manifest.json",
 		"raw/observed/parametron.observed.json",
 		"raw/verification/parametron.verification.json",
@@ -298,8 +298,8 @@ func TestRawRuntimeEvidenceContractPathClassification(t *testing.T) {
 		"records/parametron.failure-record.json",
 		"records/parametron.reference-record.json",
 		"artifacts/files/example.step",
-		"raw/report.json",
-		"raw/metadata.json",
+		"raw/prm.report.json",
+		"raw/prm.metadata.json",
 		"raw/observed/parametron.observed.json",
 		"raw/verification/parametron.verification.json",
 		"raw/artifact-store/manifest.json",

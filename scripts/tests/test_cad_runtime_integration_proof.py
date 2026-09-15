@@ -331,13 +331,13 @@ class FakeAPISuccessUsesDefaultExecutorFactoryTests(unittest.TestCase):
         invocations = harness.invocations(run["workspace"] / "fake-api-success" / "invocations.jsonl")
         self.assertEqual(len(invocations), 1)
         artifacts_root = run["workspace"] / "fake-api-success" / "artifacts"
-        self.assertTrue(list(artifacts_root.rglob("report.json")))
+        self.assertTrue(list(artifacts_root.rglob("prm.report.json")))
         self.assertTrue(list(artifacts_root.rglob("*.step")))
         self.assertTrue(list(artifacts_root.rglob("result.json")))
         # Raw evidence remains on disk under the unregistered attempt working
         # copy (Task 10 owns writing it) but must never be a *registered*
         # artifact surfaced through the API's report.
-        persisted = harness.json_file(harness.find_one(artifacts_root, "report.json"))
+        persisted = harness.json_file(harness.find_one(artifacts_root, "prm.report.json"))
         registered_filenames = [a.get("filename", "") for a in persisted.get("artifacts", [])]
         for forbidden in ("parametron.observed.json", "native_manifest.json", "parametron.verification.json"):
             self.assertFalse(
@@ -456,7 +456,7 @@ class SameRootMissingArtifactCannotReuseTests(unittest.TestCase):
         self.assertEqual(item["status"], "passed")
         self.assertEqual(item["terminalState"], "failed")
         artifacts_root = run["workspace"] / "fake-malformed_result" / "artifacts"
-        persisted = harness.find_one(artifacts_root, "report.json")
+        persisted = harness.find_one(artifacts_root, "prm.report.json")
         self.assertEqual(harness.json_file(persisted).get("artifacts"), [])
 
 
@@ -476,7 +476,7 @@ class RetryThenSuccessExactSequenceTests(unittest.TestCase):
         self.assertEqual(len(set(attempt_ids)), 3, "expected three distinct ordered attempt identities")
 
         artifacts_root = run["workspace"] / "fake-retry_then_success" / "artifacts"
-        persisted = harness.json_file(harness.find_one(artifacts_root, "report.json"))
+        persisted = harness.json_file(harness.find_one(artifacts_root, "prm.report.json"))
         self.assertEqual(persisted["status"], "success")
         step = harness.find_one(artifacts_root, "*.step")
         # The accepted STEP artifact must live under the third (final,
@@ -525,7 +525,7 @@ class MissingArtifactIsTerminalAndAtomicTests(unittest.TestCase):
         self.assertEqual(item["runtimeInvocations"], 1)
         self.assertEqual(item["terminalState"], "failed")
         artifacts_root = run["workspace"] / "fake-missing_artifact" / "artifacts"
-        persisted = harness.json_file(harness.find_one(artifacts_root, "report.json"))
+        persisted = harness.json_file(harness.find_one(artifacts_root, "prm.report.json"))
         self.assertEqual(persisted["artifacts"], [])
 
 
@@ -536,7 +536,7 @@ class ObservedMismatchReachesEngineVerificationTests(unittest.TestCase):
         self.assertEqual(item["runtimeInvocations"], 1, "verification failure must not retry")
         self.assertEqual(item["terminalState"], "failed")
         artifacts_root = run["workspace"] / "fake-observed_mismatch" / "artifacts"
-        persisted = harness.json_file(harness.find_one(artifacts_root, "report.json"))
+        persisted = harness.json_file(harness.find_one(artifacts_root, "prm.report.json"))
         self.assertEqual(persisted["artifacts"], [])
         error = persisted.get("error", {})
         self.assertIn(error.get("category"), ("verification", "runtime"))
@@ -576,7 +576,7 @@ class APIShutdownCancelsBlockedExternalRuntimeTests(unittest.TestCase):
 
         artifacts_root = run["workspace"] / "fake-cancellation" / "artifacts"
         self.assertFalse(list(artifacts_root.rglob("*.step")))
-        persisted = harness.json_file(harness.find_one(artifacts_root, "report.json"))
+        persisted = harness.json_file(harness.find_one(artifacts_root, "prm.report.json"))
         self.assertEqual(persisted["status"], "canceled")
         self.assertEqual(persisted["artifacts"], [])
         step = next(s for s in persisted["jobs"][0]["steps"] if s["type"] == "RunCADRuntime")

@@ -13,7 +13,7 @@ import (
 	"parametron/internal/engine/recordmap"
 )
 
-const metadataEvidenceRef = "raw/metadata.json"
+const metadataEvidenceRef = "raw/prm.metadata.json"
 
 func TestMapMetadataPublicAPISmokeNormalizesValidProvenance(t *testing.T) {
 	tempDir := t.TempDir()
