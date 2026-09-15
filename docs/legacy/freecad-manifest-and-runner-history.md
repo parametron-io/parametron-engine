@@ -27,6 +27,8 @@ details, stage ordering, and setup recipes are not current implementation guidan
 
 The current source of truth is `internal/engine/adapter/freecad`, composed through
 `internal/engine/cadruntime` and the Engine-owned `internal/engine/runtimecap`
-external-runtime contract. See [adapter architecture](../adapters/adapter-architecture.md),
-[execution runtime](../engine/execution-runtime.md), and the
-[target-action contract](../reference/target-action-contract.md) for current boundaries.
+external-runtime contract. See the canonical
+[adapter architecture](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/adapters/README.md),
+[execution runtime](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/runtime/execution-runtime.md), and
+[target-action contract](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/target-action-contract.md)
+documentation in `parametron-docs` for current boundaries.

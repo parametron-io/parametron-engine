@@ -70,12 +70,14 @@ External runtimes own application-specific behavior. For FreeCAD, document
 loading, mutation, recompute, saving, export, and native observation belong to
 `parametron-freecad`, not to Engine.
 
-See:
-
-* [System overview](docs/architecture/system-overview.md)
-* [Execution model](docs/architecture/execution-model.md)
-* [Adapter architecture](docs/adapters/adapter-architecture.md)
-* [CAD authoring contract](docs/authoring/cad-contract.md)
+Current public architecture, authoring, and adapter documentation is
+maintained in `parametron-docs`. See the canonical
+[Engine documentation landing page](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/README.md),
+including the
+[system overview](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/architecture/system-overview.md),
+[execution model](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/architecture/execution-model.md),
+[adapter architecture](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/adapters/README.md),
+and [CAD authoring contract](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/authoring/cad-contract.md).
 
 ## Command-line interface
 
@@ -90,8 +92,8 @@ go run ./cmd/parametron --help
 The CLI includes command families for validation, simulation, execution, sweep,
 snapshot, diff, and related engineering workflows.
 
-Command-specific documentation is available under
-[`docs/cli/`](docs/cli/).
+Command-specific documentation is maintained centrally; see the canonical
+[Engine CLI documentation](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/cli/command-families.md).
 
 ## External CAD runtimes
 
@@ -137,10 +139,10 @@ Typical raw evidence includes runtime results, metadata, verification material,
 observations, manifests, and runtime handoff data. Raw evidence is preserved as
 evidence and is not treated as equivalent to normalized Engine records.
 
-See:
-
-* [Record contracts](docs/reference/record-contracts.md)
-* [Execution runtime](docs/engine/execution-runtime.md)
+See the canonical
+[record contracts](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/record-contracts.md)
+and [execution runtime](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/runtime/execution-runtime.md)
+documentation in `parametron-docs`.
 
 ## Target actions
 
@@ -155,8 +157,8 @@ Engine resolves and validates this intent and projects it into the external
 runtime contract. The external CAD runtime remains responsible for applying
 native document mutations.
 
-See
-[Target-action contract](docs/reference/target-action-contract.md).
+See the canonical
+[Target-action contract](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/target-action-contract.md).
 
 ## Repository structure
 
@@ -172,7 +174,7 @@ internal/
   engine/              execution, adapters, runtime contracts, records,
                        verification, scheduling, and related Engine services
 
-docs/                  Architecture, authoring, CLI, runtime, and development docs
+docs/                  Repository-local architecture, development, and historical docs
 testdata/              Canonical test fixtures and example inputs
 ```
 
@@ -217,19 +219,15 @@ See:
 
 ## Documentation
 
-Repository documentation is organized under [`docs/`](docs/).
+Current public Engine architecture, authoring, CLI, runtime, reference, and
+adapter documentation is maintained in `parametron-docs`. Start at the
+canonical [Engine documentation landing page](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/README.md).
 
-Useful starting points:
-
-* [System overview](docs/architecture/system-overview.md)
-* [DSL overview](docs/authoring/dsl-overview.md)
-* [IR and planning](docs/authoring/ir-and-planning.md)
-* [Adapter architecture](docs/adapters/adapter-architecture.md)
-* [Execution runtime](docs/engine/execution-runtime.md)
-* [API overview](docs/engine/api-overview.md)
-* [Record contracts](docs/reference/record-contracts.md)
-* [Target-action contract](docs/reference/target-action-contract.md)
-* [Documentation map](docs/development/docs-map.md)
+Repository-local documentation — package layout, contributor workflow, local
+testing, fixture governance, and historical implementation records — is
+organized under [`docs/`](docs/) in this repository. Start at the
+[documentation map](docs/development/docs-map.md) to locate the right
+document.
 
 ## Contributing
 
@@ -237,7 +235,9 @@ See the organization-wide contribution guidelines for contribution workflow,
 coding expectations, and community standards.
 
 Repository-specific development documentation is available under
-[`docs/development/`](docs/development/).
+[`docs/development/`](docs/development/), starting with
+[Local development](docs/development/local-development.md) and
+[Testing strategy](docs/development/testing-strategy.md).
 
 ## License
 This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE). and is part of the Parametron ecosystem.

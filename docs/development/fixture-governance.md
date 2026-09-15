@@ -74,6 +74,32 @@ DSL files present on disk but not tracked or exercised by any test.
 - Break scenarios must fail at the declared boundary (project mapping validation, resource resolution, CLI validate).
 - Project fixtures are not registered in `_expectations.json`; they are not part of the DSL break matrix.
 
+#### Project Fixture Corpus Layout
+
+```text
+testdata/projects/freecad/
+  smoke/
+    minimal-valid-project/      # minimal valid project; one model mapping; both entrypoint forms exercised
+    valid-project-with-table/   # project with optional table mapping
+  break/
+    escaping-model-path/        # model path traverses outside project root
+    missing-dsl-file/           # dsl field points to non-existent file
+    missing-model-file/         # model path points to non-existent file
+    unknown-model-id/           # DSL source_model references ID not in project map
+    missing-table-file/         # tables field maps to a non-existent file
+    escaping-table-path/        # table path traverses outside project root
+    malformed-table-json/       # mapped table file is present but contains invalid JSON
+    unknown-table-id/           # DSL table_cell references a logical ID not in project tables
+    absolute-dsl-path/          # dsl field is an absolute path
+    escaping-dsl-path/          # dsl field traverses outside project root
+    dot-dsl-path/               # dsl field normalizes to the current directory (.)
+    case-mismatched-model-id/   # DSL source_model ID differs in case from the project map key
+```
+
+**Project entrypoint equivalence**: `minimal-valid-project` is tested with both `--project <dir>` and `--project <dir>/parametron.project.json`. Both forms are accepted and produce identical behavior.
+
+**Symlink-backed model resources**: Smoke fixture model resources (`input/box.FCStd`) are symlinks to the shared `testdata/projects/freecad/input/box.FCStd` file. Path safety rules apply to the declared path string, not the symlink target. Real project validation succeeds through the symlink.
+
 ### Stress Fixture
 
 - `testdata/dsl/stress.dsl` is executed as part of `TestStabilizationAudit_SmokeAndStressParseValidatePlan`.

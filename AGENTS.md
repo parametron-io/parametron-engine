@@ -76,9 +76,12 @@ Important ownership rules:
   execution.
 * Engine owns verification and normalized interpretation of returned evidence.
 
-See [system overview](docs/architecture/system-overview.md) and
-[adapter architecture](docs/adapters/adapter-architecture.md) for the detailed,
-current description of this boundary.
+See the canonical
+[system overview](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/architecture/system-overview.md)
+and
+[adapter architecture](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/adapters/README.md)
+documentation in `parametron-docs` for the detailed, current description of
+this boundary.
 
 Do not introduce FreeCAD Python implementation, document mutation, recompute,
 save, export, FreeCAD executable discovery, or native observation logic into
@@ -242,8 +245,10 @@ Existing mapper support does not automatically imply that the same record family
 is emitted by every normal-run path. Inspect actual emission wiring before
 claiming support.
 
-See [record contracts](docs/reference/record-contracts.md) for record family
-definitions and package layout.
+See the canonical
+[record contracts](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/record-contracts.md)
+documentation in `parametron-docs` for record family definitions and package
+layout.
 
 ## Compatibility and legacy surfaces
 
