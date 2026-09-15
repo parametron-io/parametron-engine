@@ -28,14 +28,14 @@ const (
 )
 
 const (
-	FreeCADRuntimeExportManifestFilename = "export_manifest_v1.json"
+	FreeCADRuntimeExportManifestFilename = "prm.export-manifest.json"
 
 	// FreeCADRuntimeExportManifestFilename is the canonical FreeCAD runtime-facing filename.
 	// ExportManifestFilename is the active Engine runtime-facing manifest filename.
 	ExportManifestFilename                      = FreeCADRuntimeExportManifestFilename
 	ExportManifestSchemaVersion                 = "1.0"
 	FreeCADRuntimeMutationManifestSchemaVersion = "2.0"
-	FreeCADRuntimeResultFilename                = "result.json"
+	FreeCADRuntimeResultFilename                = "prm.result.json"
 	FreeCADRuntimeOutputDirectory               = "outputs"
 	freeCADExportObjectName                     = "Body"
 	defaultOutputFormat                         = artifact.ExportOutputTypeSTEP

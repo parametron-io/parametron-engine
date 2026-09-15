@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	FreeCADRuntimeObservedFilename           = "parametron.observed.json"
-	FreeCADRuntimeReferenceTraversalFilename = "parametron.reference-traversal.json"
+	FreeCADRuntimeObservedFilename           = "prm.observed.json"
+	FreeCADRuntimeReferenceTraversalFilename = "prm.reference-traversal.json"
 
 	FreeCADRuntimeRunStageRequestMaterialization   = "request_materialization"
 	FreeCADRuntimeRunStageExecutionRequest         = "execution_request"

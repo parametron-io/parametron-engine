@@ -7,15 +7,17 @@ import (
 
 	"parametron/internal/engine/observed"
 	"parametron/internal/engine/recordcontract"
+	"parametron/internal/engine/recordpackage"
 )
 
 const (
 	observedEvidenceKind             = "observed"
-	observedEvidenceRef              = "raw/observed/parametron.observed.json"
 	observedReferenceRecordKeySuffix = ":reference"
 	observedComponentKindKey         = "kind"
 	observedStringValueKind          = "string"
 )
+
+var observedEvidenceRef = recordpackage.RawObservedContractPath()
 
 // ObservedMappingLinkage carries caller-supplied deterministic linkage material.
 // The mapper must not infer missing job/product/step identity from PDM or runtime paths.

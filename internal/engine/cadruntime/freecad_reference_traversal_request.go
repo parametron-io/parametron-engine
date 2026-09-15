@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	FreeCADReferenceTraversalRequestFilename      = "parametron.reference-traversal-request.json"
+	FreeCADReferenceTraversalRequestFilename      = "prm.reference-traversal-request.json"
 	FreeCADReferenceTraversalRequestSchemaVersion = "2.0"
 )
 
