@@ -84,7 +84,7 @@ func TestAdapterContract_DoesNotReferenceVerificationAuthority(t *testing.T) {
 	}
 
 	forbidden := []string{
-		"parametron.observed.json",
+		"prm.observed.json",
 		"verification_contract_invalid",
 		"observed_artifact_invalid",
 		"metadata_mismatch",

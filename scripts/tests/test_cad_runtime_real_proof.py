@@ -129,14 +129,14 @@ class RealFreeCADIntegrationTests(unittest.TestCase):
         artifact_types = [a.get("type") for a in report_doc.get("artifacts", [])]
         self.assertIn("step", artifact_types)
         self.assertIn("json", artifact_types)
-        for forbidden in ("parametron.observed", "parametron.verification", "source/"):
+        for forbidden in ("prm.observed", "prm.verification", "source/"):
             self.assertFalse(
                 any(forbidden in str(a.get("filename", "")) for a in report_doc.get("artifacts", [])),
                 f"raw real runtime evidence {forbidden!r} was promoted to a registered artifact",
             )
         self.assertTrue(list(out.rglob("prm.metadata.json")))
         self.assertTrue(list(out.rglob("parametron.record-package.json")))
-        self.assertTrue(list(out.rglob("parametron.verification.json")))
+        self.assertTrue(list(out.rglob("prm.verification.json")))
 
     def test_repeated_real_execution_preserves_engine_identity(self):
         run = require_real_passed(self)

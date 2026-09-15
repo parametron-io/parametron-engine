@@ -101,7 +101,7 @@ observed = {
     "workingCopy": {"path": working, "sha256": digest},
     "observation": {"parameters": parameters, "metadata": metadata, "references": references, "components": components},
 }
-with open(os.path.join(output_dir, "parametron.observed.json"), "w", encoding="utf-8") as handle:
+with open(os.path.join(output_dir, "prm.observed.json"), "w", encoding="utf-8") as handle:
     json.dump(observed, handle, sort_keys=True, separators=(",", ":"))
 
 result = {"schemaVersion": "1.0", "status": "succeeded", "artifacts": artifacts}
@@ -601,7 +601,7 @@ func (a *retryAdapter) OrchestrateCADRuntime(ctx context.Context, req adapter.CA
 	if err := os.WriteFile(resultPath, []byte(`{"schemaVersion":"1.0","status":"succeeded","artifacts":[]}`), 0o644); err != nil {
 		return err
 	}
-	_ = os.WriteFile(filepath.Join(working, "parametron.observed.json"), []byte("{}"), 0o644)
+	_ = os.WriteFile(filepath.Join(working, "prm.observed.json"), []byte("{}"), 0o644)
 	a.mu.Lock()
 	a.run, a.ok = run, true
 	a.mu.Unlock()

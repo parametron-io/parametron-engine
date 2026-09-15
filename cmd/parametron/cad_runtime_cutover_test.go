@@ -73,9 +73,9 @@ func TestCLI_AlignedRuntimeRegistersExpectedArtifacts(t *testing.T) {
 	if manifest == nil || manifest.Type != "json" {
 		t.Fatalf("expected root export manifest artifact registered, got %+v", run.report.Artifacts)
 	}
-	result := byFilenameSuffix("result.json")
+	result := byFilenameSuffix(planner.FreeCADRuntimeResultFilename)
 	if result == nil || result.Type != "json" {
-		t.Fatalf("expected aligned result.json artifact registered, got %+v", run.report.Artifacts)
+		t.Fatalf("expected aligned %s artifact registered, got %+v", planner.FreeCADRuntimeResultFilename, run.report.Artifacts)
 	}
 	step := byFilenameSuffix("Widget.step")
 	if step == nil || step.Type != "step" {
@@ -93,7 +93,7 @@ func TestCLI_AlignedRuntimeExcludesRawEvidence(t *testing.T) {
 	run := runRootProjectExecution(t, projectDir, outDir)
 
 	forbidden := []string{
-		"parametron.observed.json",
+		"prm.observed.json",
 		"native_manifest.json",
 		"observation_request.json",
 	}
@@ -107,7 +107,7 @@ func TestCLI_AlignedRuntimeExcludesRawEvidence(t *testing.T) {
 
 	// The raw evidence must still exist on disk (Task 10 owns writing it) -
 	// it is excluded from *registration*, not from the working copy.
-	observedMatches, err := filepath.Glob(filepath.Join(run.result.RunRoot, "products", "Widget", "_working", "*", "outputs", "parametron.observed.json"))
+	observedMatches, err := filepath.Glob(filepath.Join(run.result.RunRoot, "products", "Widget", "_working", "*", "outputs", "prm.observed.json"))
 	if err != nil || len(observedMatches) != 1 {
 		t.Fatalf("expected the raw observed evidence file to exist on disk (unregistered), matches=%v err=%v", observedMatches, err)
 	}

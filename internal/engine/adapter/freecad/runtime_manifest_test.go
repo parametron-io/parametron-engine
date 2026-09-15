@@ -689,7 +689,7 @@ func assertLaterRuntimeFilesAbsent(t *testing.T, attempt FreeCADRuntimeAttempt) 
 		attempt.Layout.ResultPath,
 		filepath.Join(attempt.Layout.WorkingCopyDir, "observation_request.json"),
 		filepath.Join(attempt.Layout.WorkingCopyDir, "observation-request.json"),
-		filepath.Join(attempt.Layout.WorkingCopyDir, "parametron.observed.json"),
+		filepath.Join(attempt.Layout.WorkingCopyDir, "prm.observed.json"),
 		filepath.Join(attempt.Layout.OutputDir, "Widget.step"),
 		filepath.Join(attempt.Layout.OutputDir, "drawing.pdf"),
 	} {

@@ -117,12 +117,12 @@ def stable_cli_facts(item):
     require(len(metadata_matches) == 1, f"expected one run metadata file, found {len(metadata_matches)}")
     metadata = metadata_matches[0]
     record_manifest = find_one(item["out"], "parametron.record-package.json")
-    runtime_manifests = [path for path in item["out"].rglob("export_manifest_v1.json")
+    runtime_manifests = [path for path in item["out"].rglob("prm.export-manifest.json")
                          if "_working" in path.parts]
     require(len(runtime_manifests) == 1, f"expected one attempt manifest, found {len(runtime_manifests)}")
     runtime_manifest = runtime_manifests[0]
-    request = find_one(item["out"], "parametron.verification.json")
-    result = find_one(item["out"], "result.json")
+    request = find_one(item["out"], "prm.verification.json")
+    result = find_one(item["out"], "prm.result.json")
     steps = sorted(item["out"].rglob("*.step"))
     require(steps, "accepted STEP artifact missing")
     report = item["report"]
@@ -532,8 +532,8 @@ def real_proof(ctx):
         "recordPackageHash", "stepCount",
     )
     require(all(a[key] == b[key] for key in stable_keys), "real repeated Engine identity differs")
-    observed_a = find_one(runs[0][0]["out"], "parametron.observed.json")
-    observed_b = find_one(runs[1][0]["out"], "parametron.observed.json")
+    observed_a = find_one(runs[0][0]["out"], "prm.observed.json")
+    observed_b = find_one(runs[1][0]["out"], "prm.observed.json")
     require(normalized_observed_semantics(observed_a) == normalized_observed_semantics(observed_b),
             "real repeated observed semantics differ")
     require(normalized_report_outcome(runs[0][0]["report"]) ==
@@ -551,7 +551,7 @@ def real_proof(ctx):
     require(artifact_types.count("step") == 2 and artifact_types.count("json") == 2,
             f"real accepted artifact inventory is incomplete: {artifact_types}")
     require(not any(name in str(item.get("filename", "")) for item in runs[0][0]["report"].get("artifacts", [])
-                    for name in ("parametron.observed", "parametron.verification", "source/")),
+                    for name in ("prm.observed", "prm.verification", "source/")),
             "raw real runtime evidence was promoted")
     return {
         "launcher": "parametron-freecad",

@@ -302,7 +302,7 @@ func TestReferenceRecordSeparatesRawRuntimeOutput(t *testing.T) {
 	if err := json.Unmarshal(payload, &root); err != nil {
 		t.Fatalf("json.Unmarshal(root) returned error: %v", err)
 	}
-	for _, field := range []string{"parametron.observed.json", "result.json", "raw", "runtimeOutput", "freecadResult", "observed"} {
+	for _, field := range []string{"prm.observed.json", "prm.result.json", "raw", "runtimeOutput", "freecadResult", "observed"} {
 		if _, ok := root[field]; ok {
 			t.Fatalf("raw runtime output root field %q should not be exposed in reference contract JSON: %s", field, payload)
 		}

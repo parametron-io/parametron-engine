@@ -695,14 +695,14 @@ func TestWritePackageRawEvidenceManifestOrderingWithHandoffFiles(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "package")
 	input := validPackageInput(t, root)
 	input.RawEvidenceFiles = []recordpackage.RawEvidenceFile{
-		{ContractPath: "raw/runtime/parametron.reference-traversal.json", Content: []byte("traversal")},
-		{ContractPath: "raw/runtime/result.json", Content: []byte("runtime")},
+		{ContractPath: "raw/runtime/prm.reference-traversal.json", Content: []byte("traversal")},
+		{ContractPath: "raw/runtime/prm.result.json", Content: []byte("runtime")},
 		{ContractPath: "raw/handoff/zeta/package.json", Content: []byte("zeta")},
 		{ContractPath: "raw/prm.report.json", Content: []byte("report")},
 		{ContractPath: "raw/handoff/alpha/package.json", Content: []byte("alpha")},
 		{ContractPath: "raw/prm.metadata.json", Content: []byte("metadata")},
-		{ContractPath: "raw/observed/parametron.observed.json", Content: []byte("observed")},
-		{ContractPath: "raw/verification/parametron.verification.json", Content: []byte("verification")},
+		{ContractPath: "raw/observed/prm.observed.json", Content: []byte("observed")},
+		{ContractPath: "raw/verification/prm.verification.json", Content: []byte("verification")},
 		{ContractPath: "raw/artifact-store/manifest.json", Content: []byte("artifact-store")},
 	}
 
@@ -718,10 +718,10 @@ func TestWritePackageRawEvidenceManifestOrderingWithHandoffFiles(t *testing.T) {
 		"raw/artifact-store/manifest.json",
 		"raw/handoff/alpha/package.json",
 		"raw/handoff/zeta/package.json",
-		"raw/observed/parametron.observed.json",
-		"raw/verification/parametron.verification.json",
-		"raw/runtime/result.json",
-		"raw/runtime/parametron.reference-traversal.json",
+		"raw/observed/prm.observed.json",
+		"raw/verification/prm.verification.json",
+		"raw/runtime/prm.result.json",
+		"raw/runtime/prm.reference-traversal.json",
 	}
 	if !reflect.DeepEqual(rawManifestPaths(manifest), want) {
 		t.Fatalf("manifest raw evidence paths = %#v, want %#v", rawManifestPaths(manifest), want)

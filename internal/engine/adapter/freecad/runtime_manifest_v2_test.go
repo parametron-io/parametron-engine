@@ -236,7 +236,7 @@ func TestTask11Runtime_ProductAndAttemptLocalParityIsDeterministic(t *testing.T)
 // ---------------------------------------------------------------------------
 
 func TestTask11Runtime_ManifestFilenameUnchangedBySchemaVersion(t *testing.T) {
-	if planner.FreeCADRuntimeExportManifestFilename != "export_manifest_v1.json" {
+	if planner.FreeCADRuntimeExportManifestFilename != "prm.export-manifest.json" {
 		t.Fatalf("canonical filename changed: %q", planner.FreeCADRuntimeExportManifestFilename)
 	}
 	if planner.ExportManifestFilename != planner.FreeCADRuntimeExportManifestFilename {

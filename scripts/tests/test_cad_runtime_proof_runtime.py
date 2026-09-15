@@ -204,7 +204,7 @@ class SuccessWritesCanonicalRuntimeOutputsTests(unittest.TestCase):
                 ["widget_step"],
             )
 
-            observed_path = fixture.output_dir / "parametron.observed.json"
+            observed_path = fixture.output_dir / "prm.observed.json"
             observed = read_json(observed_path)
             self.assertEqual(observed["schemaVersion"], "1.0")
             for key in ("path", "sha256"):
@@ -249,8 +249,8 @@ class SuccessIsDeterministicForEquivalentLogicalInputsTests(unittest.TestCase):
             bytes_b = (fixture_b.working / "outputs" / "widget.step").read_bytes()
             self.assertEqual(bytes_a, bytes_b)
 
-            observed_a = read_json(fixture_a.output_dir / "parametron.observed.json")
-            observed_b = read_json(fixture_b.output_dir / "parametron.observed.json")
+            observed_a = read_json(fixture_a.output_dir / "prm.observed.json")
+            observed_b = read_json(fixture_b.output_dir / "prm.observed.json")
             observed_a["workingCopy"]["path"] = "<attempt>"
             observed_b["workingCopy"]["path"] = "<attempt>"
             for obs in (observed_a, observed_b):
@@ -319,7 +319,7 @@ class MalformedResultModeWritesInvalidResultOnlyTests(unittest.TestCase):
             with self.assertRaises(json.JSONDecodeError):
                 read_json(fixture.result_path)
 
-            self.assertFalse((fixture.output_dir / "parametron.observed.json").exists())
+            self.assertFalse((fixture.output_dir / "prm.observed.json").exists())
             self.assertFalse((fixture.working / "outputs" / "widget.step").exists())
 
 
@@ -349,7 +349,7 @@ class ObservedMismatchIsSchemaValidTests(unittest.TestCase):
             result = invoke(fixture, mode="observed_mismatch", state_dir=Path(tmp) / "state")
             self.assertEqual(result.returncode, 0, result.stderr)
 
-            observed = read_json(fixture.output_dir / "parametron.observed.json")
+            observed = read_json(fixture.output_dir / "prm.observed.json")
             self.assertEqual(observed["schemaVersion"], "1.0")
             for key in ("path", "sha256"):
                 self.assertIn(key, observed["workingCopy"])
@@ -398,7 +398,7 @@ class BlockModeExitsWhenParentTerminatesProcessTests(unittest.TestCase):
 
                 self.assertIsNotNone(proc.poll())
                 self.assertFalse(fixture.result_path.exists())
-                self.assertFalse((fixture.output_dir / "parametron.observed.json").exists())
+                self.assertFalse((fixture.output_dir / "prm.observed.json").exists())
             finally:
                 if proc.poll() is None:
                     proc.kill()

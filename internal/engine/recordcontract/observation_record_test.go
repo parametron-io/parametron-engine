@@ -360,7 +360,7 @@ func TestObservationRecordJSONContractRootFields(t *testing.T) {
 			t.Fatalf("root JSON field %q missing from %s", field, payload)
 		}
 	}
-	for _, field := range []string{"parametron.observed.json", "observed", "rawObserved", "bridgeOutput"} {
+	for _, field := range []string{"prm.observed.json", "observed", "rawObserved", "bridgeOutput"} {
 		if _, ok := root[field]; ok {
 			t.Fatalf("raw runtime output root field %q should not be exposed in observation contract JSON: %s", field, payload)
 		}

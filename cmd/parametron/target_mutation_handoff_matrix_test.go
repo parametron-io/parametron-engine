@@ -463,7 +463,7 @@ func task13AttemptRequestFromCLIPayload(t *testing.T, payload planner.WriteExpor
 
 	manifest := task13WithProductionProjectionMode(payload)
 	manifest.ProductKey = "box"
-	manifest.ManifestFilename = "export_manifest_v1.json"
+	manifest.ManifestFilename = planner.ExportManifestFilename
 
 	root := t.TempDir()
 	return adapter.CADRuntimeOrchestrationRequest{

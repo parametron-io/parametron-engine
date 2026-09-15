@@ -2749,13 +2749,13 @@ observed = {
 }
 if mode == "observed_mismatch":
     observed["workingCopy"]["sha256"] = "0" * 64
-with open(os.path.join(output_dir, "parametron.observed.json"), "w", encoding="utf-8") as handle:
+with open(os.path.join(output_dir, "prm.observed.json"), "w", encoding="utf-8") as handle:
     json.dump(observed, handle, sort_keys=True, separators=(",", ":"))
     handle.write("\n")
 
 traversal_json = os.environ.get("PARAMETRON_TASK13_RUNTIME_TRAVERSAL_JSON", "")
 if traversal_json:
-    with open(os.path.join(output_dir, "parametron.reference-traversal.json"), "w", encoding="utf-8") as handle:
+    with open(os.path.join(output_dir, "prm.reference-traversal.json"), "w", encoding="utf-8") as handle:
         handle.write(traversal_json)
 
 result = {"schemaVersion": "1.0", "status": "succeeded", "artifacts": artifacts}

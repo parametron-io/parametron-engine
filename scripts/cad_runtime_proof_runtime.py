@@ -221,7 +221,7 @@ def main():
             target.write_bytes((logical + "\n").encode())
         artifacts.append({"id": output["id"], "format": output["format"], "path": relative})
 
-    write_json(output_dir / "parametron.observed.json",
+    write_json(output_dir / "prm.observed.json",
                observed_payload(working, manifest, request, mode == "observed_mismatch"))
     write_json(result_path, {"schemaVersion": "1.0", "status": "succeeded", "artifacts": artifacts})
     return 0

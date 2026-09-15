@@ -2665,7 +2665,7 @@ func TestJobRuntime_MixedClassCompletionBatchRejectedAtomicallyBeforeVisibility(
 	if failed.Error == nil {
 		t.Fatal("mixed-class acceptance failure should surface a job error")
 	}
-	if got, want := failed.Error.Message, `register completion artifact "export_manifest_v1.json": artifact registration rejected for class "verified_artifact": explicit engine verification pass is required`; got != want {
+	if got, want := failed.Error.Message, `register completion artifact "prm.export-manifest.json": artifact registration rejected for class "verified_artifact": explicit engine verification pass is required`; got != want {
 		t.Fatalf("error message = %q, want %q", got, want)
 	}
 

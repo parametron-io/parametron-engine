@@ -418,8 +418,8 @@ product Box {
 
 func TestPlanner_RejectsAlignedResultFilenameCollisions(t *testing.T) {
 	// The aligned runtime output contract structurally namespaces CAD-native
-	// outputs under outputs/ while the manifest (export_manifest_v1.json) and
-	// runtime result (result.json) live at the working-copy root, and the
+	// outputs under outputs/ while the manifest (prm.export-manifest.json) and
+	// runtime result (prm.result.json) live at the working-copy root, and the
 	// per-product CSV always carries a .csv extension distinct from those
 	// fixed names. The only filename collision reachable within the planner's
 	// own declared-output contract is between two declared outputs of the

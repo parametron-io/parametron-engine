@@ -310,9 +310,9 @@ class FakeCLISuccessUsesNormalAlignedPathTests(unittest.TestCase):
         self.assertEqual(len(invocations), 1)
         out = run["workspace"] / "fake-cli-success" / "cwd" / "output"
         self.assertTrue(list(out.rglob("*.step")))
-        self.assertTrue(list(out.rglob("result.json")))
+        self.assertTrue(list(out.rglob("prm.result.json")))
         self.assertTrue(list(out.rglob("parametron.record-package.json")))
-        for forbidden in ("parametron.observed.json", "native_manifest.json", "parametron.verification.json"):
+        for forbidden in ("prm.observed.json", "native_manifest.json", "prm.verification.json"):
             manifest_matches = [p for p in out.rglob("manifest.json") if "parametron-record-package" not in p.parts]
             self.assertTrue(manifest_matches)
             with open(manifest_matches[0], encoding="utf-8") as handle:
@@ -333,13 +333,13 @@ class FakeAPISuccessUsesDefaultExecutorFactoryTests(unittest.TestCase):
         artifacts_root = run["workspace"] / "fake-api-success" / "artifacts"
         self.assertTrue(list(artifacts_root.rglob("prm.report.json")))
         self.assertTrue(list(artifacts_root.rglob("*.step")))
-        self.assertTrue(list(artifacts_root.rglob("result.json")))
+        self.assertTrue(list(artifacts_root.rglob("prm.result.json")))
         # Raw evidence remains on disk under the unregistered attempt working
         # copy (Task 10 owns writing it) but must never be a *registered*
         # artifact surfaced through the API's report.
         persisted = harness.json_file(harness.find_one(artifacts_root, "prm.report.json"))
         registered_filenames = [a.get("filename", "") for a in persisted.get("artifacts", [])]
-        for forbidden in ("parametron.observed.json", "native_manifest.json", "parametron.verification.json"):
+        for forbidden in ("prm.observed.json", "native_manifest.json", "prm.verification.json"):
             self.assertFalse(
                 any(name.endswith(forbidden) for name in registered_filenames),
                 f"{forbidden} must not be registered as an artifact",

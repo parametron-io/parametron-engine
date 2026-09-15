@@ -924,8 +924,8 @@ product Item {
 }
 
 // TestCreatePlanFromIR_WriteExportManifestFilenameUsesCurrentAlias proves that the IR
-// planner delegates ManifestFilename to planner.ExportManifestFilename, which now
-// resolves to the canonical underscore-form "export_manifest_v1.json".
+// planner delegates ManifestFilename to planner.ExportManifestFilename, which resolves
+// to the canonical shared contract filename "prm.export-manifest.json".
 func TestCreatePlanFromIR_WriteExportManifestFilenameUsesCurrentAlias(t *testing.T) {
 	dslContent := `
 product Widget {
@@ -950,8 +950,8 @@ product Widget {
 	if manifestPayload.ManifestFilename != planner.ExportManifestFilename {
 		t.Errorf("ManifestFilename = %q, want planner.ExportManifestFilename %q", manifestPayload.ManifestFilename, planner.ExportManifestFilename)
 	}
-	if manifestPayload.ManifestFilename != "export_manifest_v1.json" {
-		t.Errorf("ManifestFilename = %q, want canonical underscore-form %q", manifestPayload.ManifestFilename, "export_manifest_v1.json")
+	if manifestPayload.ManifestFilename != "prm.export-manifest.json" {
+		t.Errorf("ManifestFilename = %q, want canonical shared contract filename %q", manifestPayload.ManifestFilename, "prm.export-manifest.json")
 	}
 }
 

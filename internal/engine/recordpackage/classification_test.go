@@ -19,10 +19,10 @@ func TestCanonicalRawEvidencePathHelpers(t *testing.T) {
 		{"report", recordpackage.RawReportContractPath(), "raw/prm.report.json"},
 		{"metadata", recordpackage.RawMetadataContractPath(), "raw/prm.metadata.json"},
 		{"artifact store manifest", recordpackage.RawArtifactStoreManifestContractPath(), "raw/artifact-store/manifest.json"},
-		{"observed", recordpackage.RawObservedContractPath(), "raw/observed/parametron.observed.json"},
-		{"verification", recordpackage.RawVerificationContractPath(), "raw/verification/parametron.verification.json"},
-		{"runtime result", recordpackage.RawRuntimeResultContractPath(), "raw/runtime/result.json"},
-		{"reference traversal", recordpackage.RawRuntimeReferenceTraversalContractPath(), "raw/runtime/parametron.reference-traversal.json"},
+		{"observed", recordpackage.RawObservedContractPath(), "raw/observed/prm.observed.json"},
+		{"verification", recordpackage.RawVerificationContractPath(), "raw/verification/prm.verification.json"},
+		{"runtime result", recordpackage.RawRuntimeResultContractPath(), "raw/runtime/prm.result.json"},
+		{"reference traversal", recordpackage.RawRuntimeReferenceTraversalContractPath(), "raw/runtime/prm.reference-traversal.json"},
 		{"handoff directory", recordpackage.RawHandoffDirectoryContractPath(), "raw/handoff"},
 	}
 
@@ -39,9 +39,9 @@ func TestRawRuntimeReferenceTraversalContractPath(t *testing.T) {
 	t.Parallel()
 
 	got := recordpackage.RawRuntimeReferenceTraversalContractPath()
-	if got != "raw/runtime/parametron.reference-traversal.json" {
+	if got != "raw/runtime/prm.reference-traversal.json" {
 		t.Fatalf("RawRuntimeReferenceTraversalContractPath() = %q, want %q",
-			got, "raw/runtime/parametron.reference-traversal.json")
+			got, "raw/runtime/prm.reference-traversal.json")
 	}
 	if err := recordpackage.ValidateContractPath(got); err != nil {
 		t.Fatalf("RawRuntimeReferenceTraversalContractPath() = %q; ValidateContractPath returned error: %v", got, err)
@@ -145,12 +145,12 @@ func TestNormalizedRecordContractPathClassification(t *testing.T) {
 	}
 
 	for _, path := range []string{
-		"raw/runtime/result.json",
-		"raw/runtime/parametron.reference-traversal.json",
+		"raw/runtime/prm.result.json",
+		"raw/runtime/prm.reference-traversal.json",
 		"raw/prm.report.json",
 		"raw/prm.metadata.json",
-		"raw/observed/parametron.observed.json",
-		"raw/verification/parametron.verification.json",
+		"raw/observed/prm.observed.json",
+		"raw/verification/prm.verification.json",
 		"raw/artifact-store/manifest.json",
 		"raw/handoff",
 		"raw/handoff/package.json",
@@ -247,10 +247,10 @@ func TestRawEvidenceFileContractPathClassification(t *testing.T) {
 		"raw/prm.report.json",
 		"raw/prm.metadata.json",
 		"raw/artifact-store/manifest.json",
-		"raw/observed/parametron.observed.json",
-		"raw/verification/parametron.verification.json",
-		"raw/runtime/result.json",
-		"raw/runtime/parametron.reference-traversal.json",
+		"raw/observed/prm.observed.json",
+		"raw/verification/prm.verification.json",
+		"raw/runtime/prm.result.json",
+		"raw/runtime/prm.reference-traversal.json",
 		"raw/handoff/package.json",
 		"raw/handoff/product-a/manifest.json",
 	} {
@@ -285,8 +285,8 @@ func TestRawRuntimeEvidenceContractPathClassification(t *testing.T) {
 
 	// IsRawRuntimeEvidenceContractPath is an explicit allowlist: only these two paths are accepted.
 	for _, path := range []string{
-		"raw/runtime/result.json",
-		"raw/runtime/parametron.reference-traversal.json",
+		"raw/runtime/prm.result.json",
+		"raw/runtime/prm.reference-traversal.json",
 	} {
 		if !recordpackage.IsRawRuntimeEvidenceContractPath(path) {
 			t.Fatalf("IsRawRuntimeEvidenceContractPath(%q) = false, want true", path)
@@ -300,16 +300,16 @@ func TestRawRuntimeEvidenceContractPathClassification(t *testing.T) {
 		"artifacts/files/example.step",
 		"raw/prm.report.json",
 		"raw/prm.metadata.json",
-		"raw/observed/parametron.observed.json",
-		"raw/verification/parametron.verification.json",
+		"raw/observed/prm.observed.json",
+		"raw/verification/prm.verification.json",
 		"raw/artifact-store/manifest.json",
 		"raw/handoff",
 		"raw/handoff/example.json",
-		"raw/runtime",                                                // directory itself
-		"raw/runtime/other.json",                                     // arbitrary descendant
-		"raw/runtime/reference-traversal.json",                       // missing parametron. prefix
-		"raw/runtime/parametron.reference-traversal.json/extra",      // descendant of traversal path
-		"raw/runtime/../runtime/parametron.reference-traversal.json", // traversal via ..
+		"raw/runtime",                                         // directory itself
+		"raw/runtime/other.json",                              // arbitrary descendant
+		"raw/runtime/reference-traversal.json",                // missing prm. prefix
+		"raw/runtime/prm.reference-traversal.json/extra",      // descendant of traversal path
+		"raw/runtime/../runtime/prm.reference-traversal.json", // traversal via ..
 	} {
 		if recordpackage.IsRawRuntimeEvidenceContractPath(path) {
 			t.Fatalf("IsRawRuntimeEvidenceContractPath(%q) = true, want false", path)
@@ -344,12 +344,12 @@ func TestClassificationHelpersRejectUnsafePaths(t *testing.T) {
 func unsafeClassificationPaths() []string {
 	return []string{
 		"",
-		"/raw/runtime/result.json",
-		"../raw/runtime/result.json",
+		"/raw/runtime/prm.result.json",
+		"../raw/runtime/prm.result.json",
 		"raw/../runtime/result.json",
 		`raw\runtime\result.json`,
 		"raw//runtime/result.json",
-		"raw/runtime/result.json/..",
+		"raw/runtime/prm.result.json/..",
 	}
 }
 
@@ -364,7 +364,7 @@ func handoffNonRuntimeProvenancePaths() []string {
 		`raw\handoff\package.json`,
 		"records/parametron.execution-record.json",
 		"artifacts/files/output.step",
-		"raw/runtime/result.json",
+		"raw/runtime/prm.result.json",
 		"raw/runtime/other.json",
 		"raw/unknown.json",
 	}

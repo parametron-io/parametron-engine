@@ -255,8 +255,8 @@ func TestWriteExportManifest_FreeCAD_EmitsFreeCADNativeShape(t *testing.T) {
 	}
 
 	manifestPath := filepath.Join(outputDir, planner.ExportManifestFilename)
-	if !strings.HasSuffix(manifestPath, "export_manifest_v1.json") {
-		t.Fatalf("expected manifest filename export_manifest_v1.json, got %q", filepath.Base(manifestPath))
+	if !strings.HasSuffix(manifestPath, "prm.export-manifest.json") {
+		t.Fatalf("expected manifest filename prm.export-manifest.json, got %q", filepath.Base(manifestPath))
 	}
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {

@@ -10,7 +10,7 @@ import (
 	"parametron/internal/engine/verification"
 )
 
-const verificationEvidenceRef = "raw/verification/parametron.verification.json"
+const verificationEvidenceRef = "raw/verification/prm.verification.json"
 
 func TestMapVerificationPassResultMapsValidVerificationRecord(t *testing.T) {
 	input := validVerificationMappingInput(passVerificationResult())
