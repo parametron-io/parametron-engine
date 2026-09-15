@@ -439,7 +439,7 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 	if reportErr != nil {
 		slog.Warn("Failed to build execution report", "error", reportErr)
 	} else if err := report.Write(runRoot, runReport); err != nil {
-		slog.Warn("Failed to write report.json", "error", err)
+		slog.Warn("Failed to write "+report.FileName, "error", err)
 	}
 
 	var runMetadata *metadata.Metadata
@@ -472,7 +472,7 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 		})
 		runMetadata = &builtMetadata
 		if err := metadata.Write(runRoot, builtMetadata); err != nil {
-			slog.Warn("Failed to write metadata.json", "error", err)
+			slog.Warn("Failed to write "+metadata.FileName, "error", err)
 		}
 	}
 

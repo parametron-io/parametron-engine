@@ -28,8 +28,8 @@ const (
 	// RawEvidenceDirectoryName is the canonical raw evidence / operational outputs directory.
 	RawEvidenceDirectoryName = "raw"
 
-	rawReportFileName                    = "report.json"
-	rawMetadataFileName                  = "metadata.json"
+	rawReportFileName                    = "prm.report.json"
+	rawMetadataFileName                  = "prm.metadata.json"
 	rawArtifactStoreDirectoryName        = "artifact-store"
 	rawArtifactStoreManifestName         = "manifest.json"
 	rawHandoffDirectoryName              = "handoff"

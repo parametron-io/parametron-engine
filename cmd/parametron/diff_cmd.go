@@ -8,6 +8,9 @@ import (
 	"slices"
 
 	"github.com/spf13/cobra"
+
+	"parametron/internal/engine/metadata"
+	"parametron/internal/engine/report"
 )
 
 type diffSummary struct {
@@ -134,7 +137,7 @@ func diffSnapshotDirs(aDir, bDir string) (diffSummary, error) {
 		differences = append(differences, "generatedFiles differ")
 	}
 
-	for _, fileName := range []string{"report.json", "metadata.json", "manifest.json"} {
+	for _, fileName := range []string{report.FileName, metadata.FileName, "manifest.json"} {
 		aExists := fileExists(filepath.Join(aDir, fileName))
 		bExists := fileExists(filepath.Join(bDir, fileName))
 		if aExists != bExists {
@@ -142,12 +145,12 @@ func diffSnapshotDirs(aDir, bDir string) (diffSummary, error) {
 		}
 	}
 
-	if fileExists(filepath.Join(aDir, "report.json")) && fileExists(filepath.Join(bDir, "report.json")) {
-		aStatus, err := readReportStatus(filepath.Join(aDir, "report.json"))
+	if fileExists(filepath.Join(aDir, report.FileName)) && fileExists(filepath.Join(bDir, report.FileName)) {
+		aStatus, err := readReportStatus(filepath.Join(aDir, report.FileName))
 		if err != nil {
 			return diffSummary{}, err
 		}
-		bStatus, err := readReportStatus(filepath.Join(bDir, "report.json"))
+		bStatus, err := readReportStatus(filepath.Join(bDir, report.FileName))
 		if err != nil {
 			return diffSummary{}, err
 		}

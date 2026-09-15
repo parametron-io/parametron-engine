@@ -15,7 +15,9 @@ import (
 
 const (
 	defaultSchemaVersion = "1.0"
-	metadataFileName     = "metadata.json"
+
+	// FileName is the active metadata output contract filename.
+	FileName = "prm.metadata.json"
 )
 
 type Metadata struct {
@@ -199,7 +201,7 @@ func Write(runRoot string, metadata Metadata) error {
 	}
 	data = append(data, '\n')
 
-	path := filepath.Join(runRoot, metadataFileName)
+	path := filepath.Join(runRoot, FileName)
 	tmpFile, err := os.CreateTemp(runRoot, ".metadata-tmp-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary metadata file: %w", err)

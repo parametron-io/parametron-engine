@@ -13,7 +13,7 @@ import (
 
 const (
 	reportEvidenceKind     = "report"
-	reportEvidenceRef      = "raw/report.json"
+	reportEvidenceRef      = "raw/" + report.FileName
 	failureRecordKeySuffix = ":failure"
 )
 

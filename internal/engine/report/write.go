@@ -7,7 +7,8 @@ import (
 	"path/filepath"
 )
 
-const fileName = "report.json"
+// FileName is the active report output contract filename.
+const FileName = "prm.report.json"
 
 func Write(runRoot string, report Report) error {
 	if err := os.MkdirAll(runRoot, 0755); err != nil {
@@ -20,7 +21,7 @@ func Write(runRoot string, report Report) error {
 	}
 	data = append(data, '\n')
 
-	path := filepath.Join(runRoot, fileName)
+	path := filepath.Join(runRoot, FileName)
 	tmpFile, err := os.CreateTemp(runRoot, ".report-tmp-*")
 	if err != nil {
 		return fmt.Errorf("create temporary report file: %w", err)

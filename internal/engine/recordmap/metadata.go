@@ -13,7 +13,7 @@ import (
 const (
 	metadataSchemaVersion = "1.0"
 	metadataEvidenceKind  = "metadata"
-	metadataEvidenceRef   = "raw/metadata.json"
+	metadataEvidenceRef   = "raw/" + metadata.FileName
 )
 
 // MetadataMappingInput carries operational metadata material and caller-supplied provenance.

@@ -170,8 +170,8 @@ func recordKeyForPlanHash(planHash string) string {
 
 func collectRawEvidence(runRoot string, input RunEmitInput) ([]recordpackage.RawEvidenceFile, error) {
 	sources := []rawEvidenceSource{
-		{contractPath: recordpackage.RawReportContractPath(), runPath: filepath.Join(runRoot, "report.json")},
-		{contractPath: recordpackage.RawMetadataContractPath(), runPath: filepath.Join(runRoot, "metadata.json")},
+		{contractPath: recordpackage.RawReportContractPath(), runPath: filepath.Join(runRoot, report.FileName)},
+		{contractPath: recordpackage.RawMetadataContractPath(), runPath: filepath.Join(runRoot, metadata.FileName)},
 		{contractPath: recordpackage.RawArtifactStoreManifestContractPath(), runPath: filepath.Join(runRoot, "manifest.json")},
 		{contractPath: recordpackage.RawObservedContractPath(), runPath: filepath.Join(runRoot, "parametron.observed.json")},
 		{contractPath: recordpackage.RawVerificationContractPath(), runPath: filepath.Join(runRoot, "parametron.verification.json")},
