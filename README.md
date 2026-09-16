@@ -240,6 +240,6 @@ Repository-specific development documentation is available under
 [Testing strategy](docs/development/testing-strategy.md).
 
 ## License
-This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE). and is part of the Parametron ecosystem.
+This project is licensed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](LICENSE) and is part of the Parametron ecosystem.
 
 If you use this software over a network, you must make the source code available under the same license.
