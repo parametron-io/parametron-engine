@@ -205,7 +205,7 @@ func equalStringSlices(a, b []string) bool {
 // ---------------------------------------------------------------------------
 
 // TestTask13Adapter_CombinedParameterAndPropertyCompatibility exercises a
-// single schema-2.0 payload that carries, simultaneously: a top-level
+// single canonical schema-1.0 payload that carries, simultaneously: a top-level
 // parameterAssignments scalar write, internal Parameters metadata, internal
 // Properties metadata, and a suppression/visibility/deletion mutation --
 // across both Part and Assembly sections -- and proves the runtime
@@ -215,7 +215,7 @@ func equalStringSlices(a, b []string) bool {
 func TestTask13Adapter_CombinedParameterAndPropertyCompatibility(t *testing.T) {
 	const leakedPropertyValue = "combined-compat-do-not-leak"
 
-	payload := v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+	payload := canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 		p.ParameterAssignments = []planner.ExportManifestParameterAssignment{
 			{Name: "width", Target: "Box.Width", Value: 50, Type: "number", Unit: "mm"},
 		}
@@ -235,10 +235,10 @@ func TestTask13Adapter_CombinedParameterAndPropertyCompatibility(t *testing.T) {
 		}
 	})
 
-	manifest, data := mustProjectV2(t, payload)
+	manifest, data := mustProjectCanonical(t, payload)
 
-	if manifest.SchemaVersion != "2.0" {
-		t.Fatalf("expected schemaVersion 2.0, got %q", manifest.SchemaVersion)
+	if manifest.SchemaVersion != "1.0" {
+		t.Fatalf("expected schemaVersion 1.0, got %q", manifest.SchemaVersion)
 	}
 	if len(manifest.ParameterAssignments) != 1 {
 		t.Fatalf("expected exactly one top-level parameter assignment: %#v", manifest.ParameterAssignments)

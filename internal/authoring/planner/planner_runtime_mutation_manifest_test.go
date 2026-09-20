@@ -10,18 +10,19 @@ import (
 	"parametron/internal/engine/semanticmap"
 )
 
-// Phase 5 Task 11 planner permanent contract: the aligned FreeCAD
-// runtime-manifest projection selects schema "2.0" when the planner-projected
-// Part / Assembly mutation collections carry one or more runtime target
-// mutations (suppression / visibility / deletion), and retains schema "1.0" for
-// mutation-less and keep-only manifests. Internal Parameters / Properties
-// mutation metadata never influences the schema selector and top-level
-// parameterAssignments remains the only executable native scalar-write surface.
+// Issue #16 planner permanent contract: every aligned FreeCAD runtime manifest
+// the planner emits carries the single canonical schema "1.0". The optional
+// Part / Assembly mutation collections (suppression / visibility / deletion)
+// are structural: they are present exactly when target actions produce runtime
+// mutations and absent otherwise, and their presence never influences the
+// schema version. Internal Parameters / Properties mutation metadata never
+// becomes a runtime mutation family and top-level parameterAssignments remains
+// the only executable native scalar-write surface.
 //
 // These tests exercise the real production seam (createPlan ->
-// buildExportManifestIntent -> exportManifestSchemaVersionForProjection) through
-// parseValidateAndPlanCaptureBacked, plus the committed helper functions
-// directly for the family-composition and schema-selection edge cases.
+// buildExportManifestIntent) through parseValidateAndPlanCaptureBacked, plus
+// the committed helper functions directly for the family-composition edge
+// cases.
 
 // runtimeMutationManifestModel is a capture-backed FreeCAD semantic model with a
 // resolvable native parameter plus part-scope and assembly-scope features and
@@ -75,51 +76,74 @@ func runtimeManifestPayload(t *testing.T, body string) WriteExportManifestPayloa
 
 func TestTask11_SchemaConstants(t *testing.T) {
 	if ExportManifestSchemaVersion != "1.0" {
-		t.Fatalf("schema-1 compatibility constant: got %q want %q", ExportManifestSchemaVersion, "1.0")
+		t.Fatalf("canonical schema constant: got %q want %q", ExportManifestSchemaVersion, "1.0")
 	}
-	if FreeCADRuntimeMutationManifestSchemaVersion != "2.0" {
-		t.Fatalf("schema-2 mutation constant: got %q want %q", FreeCADRuntimeMutationManifestSchemaVersion, "2.0")
-	}
-	if ExportManifestSchemaVersion == FreeCADRuntimeMutationManifestSchemaVersion {
-		t.Fatal("schema-1 and schema-2 constants must be distinct")
+	if ExportManifestFilename != "prm.export-manifest.json" || FreeCADRuntimeExportManifestFilename != "prm.export-manifest.json" {
+		t.Fatalf("canonical manifest filename drifted: %q / %q", ExportManifestFilename, FreeCADRuntimeExportManifestFilename)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// PART B — planner schema selection (real capture-backed path)
+// PART B — planner canonical schema (real capture-backed path)
 // ---------------------------------------------------------------------------
 
-func TestTask11_PlannerSchemaSelectionMatrix(t *testing.T) {
+func TestTask11_PlannerCanonicalSchemaMatrix(t *testing.T) {
 	cases := []struct {
-		name string
-		body string
-		want string
+		name         string
+		body         string
+		wantMutation bool
+		wantPart     *ExportManifestMutationCollection
+		wantAsm      *ExportManifestMutationCollection
 	}{
-		{"mutation-less", "", "1.0"},
-		{"keep-only", "    target Pad: action = keep", "1.0"},
-		{"parameterAssignments-only", "", "1.0"}, // width alone -> internal Parameters metadata only
-		{"suppress", "    target Pad: action = suppress", "2.0"},
-		{"unsuppress", "    target Pad: action = unsuppress", "2.0"},
-		{"hide", "    target Pad: action = hide", "2.0"},
-		{"unhide", "    target Pad: action = unhide", "2.0"},
-		{"delete", "    target Chamfer: action = delete", "2.0"},
-		{"mixed-part-and-assembly", "    target Pad: action = suppress\n    target Rail: action = hide\n    target Chamfer: action = delete", "2.0"},
+		{name: "mutation-less", body: ""},
+		{name: "keep-only", body: "    target Pad: action = keep"},
+		// width alone -> internal Parameters metadata only
+		{name: "parameterAssignments-only", body: ""},
+		{
+			name: "suppress", body: "    target Pad: action = suppress", wantMutation: true,
+			wantPart: &ExportManifestMutationCollection{Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}},
+		},
+		{
+			name: "unsuppress", body: "    target Pad: action = unsuppress", wantMutation: true,
+			wantPart: &ExportManifestMutationCollection{Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: false}}},
+		},
+		{
+			name: "hide", body: "    target Pad: action = hide", wantMutation: true,
+			wantPart: &ExportManifestMutationCollection{Visibility: []ExportManifestVisibilityMutation{{Object: "Pad", Visible: false}}},
+		},
+		{
+			name: "unhide", body: "    target Pad: action = unhide", wantMutation: true,
+			wantPart: &ExportManifestMutationCollection{Visibility: []ExportManifestVisibilityMutation{{Object: "Pad", Visible: true}}},
+		},
+		{
+			name: "delete", body: "    target Chamfer: action = delete", wantMutation: true,
+			wantAsm: &ExportManifestMutationCollection{Deletion: []ExportManifestDeletionMutation{{Object: "Chamfer"}}},
+		},
+		{
+			name: "mixed-part-and-assembly", body: "    target Pad: action = suppress\n    target Rail: action = hide\n    target Chamfer: action = delete", wantMutation: true,
+			wantPart: &ExportManifestMutationCollection{Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}},
+			wantAsm: &ExportManifestMutationCollection{
+				Visibility: []ExportManifestVisibilityMutation{{Object: "Rail", Visible: false}},
+				Deletion:   []ExportManifestDeletionMutation{{Object: "Chamfer"}},
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			payload := runtimeManifestPayload(t, tc.body)
-			if payload.SchemaVersion != tc.want {
-				t.Fatalf("schemaVersion: got %q want %q", payload.SchemaVersion, tc.want)
+			if payload.SchemaVersion != "1.0" {
+				t.Fatalf("schemaVersion: got %q want 1.0", payload.SchemaVersion)
 			}
-			if tc.want == "1.0" {
-				if hasRuntimeTargetMutations(payload.AssemblyMutations) || hasRuntimeTargetMutations(payload.PartMutations) {
-					t.Fatalf("schema 1.0 payload carries runtime target mutations: assembly=%#v part=%#v", payload.AssemblyMutations, payload.PartMutations)
-				}
-			} else {
-				if !hasRuntimeTargetMutations(payload.AssemblyMutations) && !hasRuntimeTargetMutations(payload.PartMutations) {
-					t.Fatalf("schema 2.0 payload carries no runtime target mutations: assembly=%#v part=%#v", payload.AssemblyMutations, payload.PartMutations)
-				}
+			if payload.ManifestFilename != "prm.export-manifest.json" {
+				t.Fatalf("manifestFilename: got %q", payload.ManifestFilename)
 			}
+			has := hasRuntimeTargetMutations(payload.AssemblyMutations) || hasRuntimeTargetMutations(payload.PartMutations)
+			if has != tc.wantMutation {
+				t.Fatalf("runtime mutation presence: got %v want %v: assembly=%#v part=%#v", has, tc.wantMutation, payload.AssemblyMutations, payload.PartMutations)
+			}
+			// Schema 1.0 must still carry the mutation intent verbatim.
+			assertRuntimeFamilies(t, "part", payload.PartMutations, tc.wantPart)
+			assertRuntimeFamilies(t, "assembly", payload.AssemblyMutations, tc.wantAsm)
 		})
 	}
 }
@@ -144,41 +168,23 @@ func TestTask11_KeepOnlyRetainsSchema1AndParameterAssignments(t *testing.T) {
 	}
 }
 
-// The schema selector ignores internal Parameters / Properties metadata:
-// a collection with non-empty Parameters + Properties but no runtime families
-// stays 1.0; adding a single Visibility entry flips it to 2.0.
-func TestTask11_SchemaSelectorIgnoresParametersAndProperties(t *testing.T) {
-	mode := projectionModeForAdapter("freecad")
-
+// Internal Parameters / Properties metadata never becomes a runtime mutation
+// family; a single runtime family entry does.
+func TestTask11_InternalMetadataIsNotRuntimeMutation(t *testing.T) {
 	metaOnly := &ExportManifestMutationCollection{
 		Parameters: []ExportManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width"}},
 		Properties: []ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "primary"}},
 	}
-	if got := exportManifestSchemaVersionForProjection(mode, metaOnly, nil); got != "1.0" {
-		t.Fatalf("Parameters+Properties-only must select 1.0, got %q", got)
+	if hasRuntimeTargetMutations(metaOnly) {
+		t.Fatal("Parameters+Properties-only collection must not count as runtime target mutations")
 	}
-	if got := exportManifestSchemaVersionForProjection(mode, nil, metaOnly); got != "1.0" {
-		t.Fatalf("Parameters+Properties-only (part) must select 1.0, got %q", got)
-	}
-
 	withVisibility := &ExportManifestMutationCollection{
 		Parameters: metaOnly.Parameters,
 		Properties: metaOnly.Properties,
 		Visibility: []ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
 	}
-	if got := exportManifestSchemaVersionForProjection(mode, withVisibility, nil); got != "2.0" {
-		t.Fatalf("one Visibility entry must select 2.0, got %q", got)
-	}
-}
-
-// A non-aligned projection mode never selects schema 2.0 even with runtime
-// families present.
-func TestTask11_SchemaSelectorRequiresAlignedNativeMode(t *testing.T) {
-	withSuppression := &ExportManifestMutationCollection{
-		Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
-	}
-	if got := exportManifestSchemaVersionForProjection(ExportManifestProjectionMode("legacy"), withSuppression, nil); got != "1.0" {
-		t.Fatalf("non-aligned mode must retain 1.0, got %q", got)
+	if !hasRuntimeTargetMutations(withVisibility) {
+		t.Fatal("one Visibility entry must count as a runtime target mutation")
 	}
 }
 
@@ -188,14 +194,11 @@ func TestTask11_SchemaSelectorRequiresAlignedNativeMode(t *testing.T) {
 
 // The planner runs two manifest constructions when file_pattern hashing is
 // active: the draft plan that seeds the naming hash, then the final plan. Both
-// call sites use the identical exportManifestSchemaVersionForProjection policy
-// over the identical buildExportManifestIntent output, so an equivalent
-// mutation-bearing product built with file_pattern hashing active still selects
-// schema 2.0 with correctly composed families, and a mutation-less one stays
-// 1.0. (A draft/final schema divergence would corrupt the seed hash yet leave
-// the final plan self-consistent; sharing one policy expression is what makes
-// them agree, and this is the observable behavioural proof.)
-func TestTask11_FilePatternHashingKeepsSchemaSelectionConsistent(t *testing.T) {
+// emit canonical schema 1.0 over the identical buildExportManifestIntent
+// output, so an equivalent mutation-bearing product built with file_pattern
+// hashing active carries 1.0 with correctly composed families, and a
+// mutation-less one carries 1.0 with none.
+func TestTask11_FilePatternHashingKeepsCanonicalSchemaConsistent(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		body     string
@@ -206,7 +209,7 @@ func TestTask11_FilePatternHashingKeepsSchemaSelectionConsistent(t *testing.T) {
 		{
 			name:     "mutation-bearing",
 			body:     "    target Pad: action = suppress\n    target Rail: action = delete",
-			want:     "2.0",
+			want:     "1.0",
 			wantPart: &ExportManifestMutationCollection{Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}},
 			wantAsm:  &ExportManifestMutationCollection{Deletion: []ExportManifestDeletionMutation{{Object: "Rail"}}},
 		},
@@ -391,31 +394,31 @@ func TestTask11_FiveActionRuntimeProjection(t *testing.T) {
 			name:       "suppress",
 			body:       "    target Pad: action = suppress",
 			wantPart:   &ExportManifestMutationCollection{Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}},
-			wantSchema: "2.0",
+			wantSchema: "1.0",
 		},
 		{
 			name:       "unsuppress",
 			body:       "    target Pad: action = unsuppress",
 			wantPart:   &ExportManifestMutationCollection{Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: false}}},
-			wantSchema: "2.0",
+			wantSchema: "1.0",
 		},
 		{
 			name:       "hide",
 			body:       "    target Pad: action = hide",
 			wantPart:   &ExportManifestMutationCollection{Visibility: []ExportManifestVisibilityMutation{{Object: "Pad", Visible: false}}},
-			wantSchema: "2.0",
+			wantSchema: "1.0",
 		},
 		{
 			name:       "unhide",
 			body:       "    target Pad: action = unhide",
 			wantPart:   &ExportManifestMutationCollection{Visibility: []ExportManifestVisibilityMutation{{Object: "Pad", Visible: true}}},
-			wantSchema: "2.0",
+			wantSchema: "1.0",
 		},
 		{
 			name:       "delete",
 			body:       "    target Rail: action = delete",
 			wantAsm:    &ExportManifestMutationCollection{Deletion: []ExportManifestDeletionMutation{{Object: "Rail"}}},
-			wantSchema: "2.0",
+			wantSchema: "1.0",
 		},
 		{
 			name:       "keep",
@@ -482,12 +485,12 @@ func TestTask11_NativeObjectSurvivesVerbatim(t *testing.T) {
 // PART R — determinism
 // ---------------------------------------------------------------------------
 
-func TestTask11_SchemaSelectionAndProjectionIsDeterministic(t *testing.T) {
+func TestTask11_CanonicalSchemaAndProjectionIsDeterministic(t *testing.T) {
 	body := "    target Pad: action = suppress\n    target Slot: action = hide\n    target Rail: action = delete\n    target Latch: action = unhide"
 	first := runtimeManifestPayload(t, body)
 	for i := 0; i < 10; i++ {
 		got := runtimeManifestPayload(t, body)
-		if got.SchemaVersion != first.SchemaVersion {
+		if got.SchemaVersion != "1.0" || got.SchemaVersion != first.SchemaVersion {
 			t.Fatalf("iteration %d: schema drift %q vs %q", i, got.SchemaVersion, first.SchemaVersion)
 		}
 		if !reflect.DeepEqual(got.AssemblyMutations, first.AssemblyMutations) || !reflect.DeepEqual(got.PartMutations, first.PartMutations) {

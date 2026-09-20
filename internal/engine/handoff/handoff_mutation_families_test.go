@@ -36,7 +36,7 @@ func TestTask11Handoff_ClonedPayloadCarriesBothBucketsWithEveryFamily(t *testing
 		ProductKey:             "widget",
 		ManifestFilename:       planner.ExportManifestFilename,
 		ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
-		SchemaVersion:          planner.FreeCADRuntimeMutationManifestSchemaVersion,
+		SchemaVersion:          planner.ExportManifestSchemaVersion,
 		Adapter:                "freecad",
 		SourceDocument:         "source/model.FCStd",
 		AssemblyMutations:      fullMutationCollection(),
@@ -49,7 +49,7 @@ func TestTask11Handoff_ClonedPayloadCarriesBothBucketsWithEveryFamily(t *testing
 	if !reflect.DeepEqual(clone.PartMutations, payload.PartMutations) {
 		t.Fatalf("part bucket mismatch: %#v", clone.PartMutations)
 	}
-	if clone.SchemaVersion != planner.FreeCADRuntimeMutationManifestSchemaVersion {
+	if clone.SchemaVersion != planner.ExportManifestSchemaVersion {
 		t.Fatalf("schema version not carried: %q", clone.SchemaVersion)
 	}
 }
@@ -100,7 +100,7 @@ func TestTask11Handoff_MutationFamiliesRoundTripThroughPackagePlan(t *testing.T)
 				ProductKey:             "widget",
 				ManifestFilename:       planner.ExportManifestFilename,
 				ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
-				SchemaVersion:          planner.FreeCADRuntimeMutationManifestSchemaVersion,
+				SchemaVersion:          planner.ExportManifestSchemaVersion,
 				PlanHash:               "plan-widget",
 				Adapter:                "freecad",
 				Product:                planner.ExportManifestProduct{ID: "widget"},

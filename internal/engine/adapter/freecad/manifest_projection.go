@@ -95,12 +95,8 @@ func ProjectFreeCADRuntimeExportManifest(payload planner.WriteExportManifestPayl
 		return nil, err
 	}
 
-	var assemblyMutations *FreeCADRuntimeMutationCollection
-	var partMutations *FreeCADRuntimeMutationCollection
-	if schemaVersion == planner.FreeCADRuntimeMutationManifestSchemaVersion {
-		assemblyMutations = projectFreeCADRuntimeMutationCollection(payload.AssemblyMutations)
-		partMutations = projectFreeCADRuntimeMutationCollection(payload.PartMutations)
-	}
+	assemblyMutations := projectFreeCADRuntimeMutationCollection(payload.AssemblyMutations)
+	partMutations := projectFreeCADRuntimeMutationCollection(payload.PartMutations)
 
 	return &FreeCADRuntimeExportManifest{
 		SchemaVersion:        schemaVersion,
@@ -114,16 +110,8 @@ func ProjectFreeCADRuntimeExportManifest(payload planner.WriteExportManifestPayl
 
 func ValidateFreeCADRuntimeExportManifestSchema(payload planner.WriteExportManifestPayload) error {
 	schemaVersion := payload.SchemaVersion
-	alignedNative := payload.ManifestProjectionMode == planner.ExportManifestProjectionModeFreeCADRuntimeNative
 	switch schemaVersion {
 	case planner.ExportManifestSchemaVersion:
-		if alignedNative && (hasPlannerRuntimeTargetMutations(payload.AssemblyMutations) || hasPlannerRuntimeTargetMutations(payload.PartMutations)) {
-			return projectionError("schemaVersion", "1.0 does not support runtime target mutations")
-		}
-	case planner.FreeCADRuntimeMutationManifestSchemaVersion:
-		if !alignedNative {
-			return projectionErrorf("schemaVersion", "must equal %q outside aligned FreeCAD runtime-native projection", planner.ExportManifestSchemaVersion)
-		}
 	case "":
 		return projectionError("schemaVersion", "is required")
 	default:

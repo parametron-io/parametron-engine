@@ -32,7 +32,7 @@ import (
 
 func TestTargetMutationDeterminism_AdapterDoesNotIndependentlySort(t *testing.T) {
 	reverseOrder := planner.WriteExportManifestPayload{
-		SchemaVersion:          planner.FreeCADRuntimeMutationManifestSchemaVersion,
+		SchemaVersion:          planner.ExportManifestSchemaVersion,
 		ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
 		SourceDocument:         "source/widget.FCStd",
 		Outputs:                []planner.ExportManifestOutput{},
@@ -57,7 +57,7 @@ func TestTargetMutationDeterminism_AdapterDoesNotIndependentlySort(t *testing.T)
 
 func TestTargetMutationDeterminism_PlannerCanonicalOrderPreservedByAdapter(t *testing.T) {
 	canonical := planner.WriteExportManifestPayload{
-		SchemaVersion:          planner.FreeCADRuntimeMutationManifestSchemaVersion,
+		SchemaVersion:          planner.ExportManifestSchemaVersion,
 		ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
 		SourceDocument:         "source/widget.FCStd",
 		Outputs:                []planner.ExportManifestOutput{},
@@ -76,7 +76,7 @@ func TestTargetMutationDeterminism_PlannerCanonicalOrderPreservedByAdapter(t *te
 }
 
 func TestTargetMutationDeterminism_ProductAndAttemptLocalBytesEqualForCanonicalOrder(t *testing.T) {
-	req := alignedV2ManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+	req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
 		m.PartMutations = &planner.ExportManifestMutationCollection{
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Alpha", Suppressed: true}, {Object: "Zulu", Suppressed: true}},
 		}
@@ -107,7 +107,7 @@ func TestTargetMutationDeterminism_ProductAndAttemptLocalBytesEqualForCanonicalO
 }
 
 func TestTargetMutationDeterminism_ProductLevelBytesRepeated10x(t *testing.T) {
-	req := alignedV2ManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+	req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
 		m.PartMutations = &planner.ExportManifestMutationCollection{
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Alpha", Suppressed: true}, {Object: "Zulu", Suppressed: true}},
 			Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Pad", Visible: false}},
@@ -137,7 +137,7 @@ func TestTargetMutationDeterminism_ProductLevelBytesRepeated10x(t *testing.T) {
 }
 
 func TestTargetMutationDeterminism_AttemptLocalBytesRepeated10x(t *testing.T) {
-	req := alignedV2ManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+	req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
 		m.AssemblyMutations = &planner.ExportManifestMutationCollection{
 			Deletion: []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}, {Object: "Rail"}},
 		}
