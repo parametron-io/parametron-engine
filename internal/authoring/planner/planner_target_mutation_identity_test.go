@@ -178,7 +178,7 @@ func TestTargetMutationIdentity_KeepDoesNotCreateArtificialIdentity(t *testing.T
 		t.Fatalf("keep produced an Assembly runtime target-mutation family: %#v", payload.AssemblyMutations)
 	}
 	if payload.SchemaVersion != "1.0" {
-		t.Fatalf("keep activated schema 2.0: %q", payload.SchemaVersion)
+		t.Fatalf("keep changed canonical schema: %q", payload.SchemaVersion)
 	}
 	raw := mutationIdentityPlanJSON(t, mutationIdentityPlan(t, "    target Pad: action = keep"))
 	for _, forbidden := range []string{`"suppression"`, `"visibility"`, `"deletion"`} {
@@ -580,6 +580,36 @@ func TestTargetMutationIdentity_PlanHashRepeatedEquivalentPlans10x(t *testing.T)
 		gotB := mutationIdentityPlanHash(t, mutationIdentityPlan(t, orderB))
 		if gotA != first || gotB != first {
 			t.Fatalf("iteration %d: plan hash drifted: A=%q B=%q want %q", i, gotA, gotB, first)
+		}
+	}
+}
+
+// Post-migration (issue #16): identity material for mutation-bearing plans is
+// derived from the canonical schema 1.0 payload; no action selects another
+// schema, and the hashed plan JSON never carries schema 2.0.
+func TestTargetMutationIdentity_MutationBearingPlansCarryCanonicalSchema(t *testing.T) {
+	for _, body := range []string{
+		"    target Pad: action = suppress",
+		"    target Pad: action = unsuppress",
+		"    target Pad: action = hide",
+		"    target Pad: action = unhide",
+		"    target Rail: action = delete",
+		"    target Pad: action = suppress\n    target Rail: action = hide\n    target Chamfer: action = delete",
+	} {
+		plan := mutationIdentityPlan(t, body)
+		payload := manifestPayloadFromPlan(t, plan)
+		if payload.SchemaVersion != "1.0" {
+			t.Fatalf("%q: schemaVersion %q want 1.0", body, payload.SchemaVersion)
+		}
+		if !hasRuntimeTargetMutations(payload.PartMutations) && !hasRuntimeTargetMutations(payload.AssemblyMutations) {
+			t.Fatalf("%q: schema 1.0 payload lost mutation intent", body)
+		}
+		raw := string(mutationIdentityPlanJSON(t, plan))
+		if strings.Contains(raw, `"2.0"`) {
+			t.Fatalf("%q: serialized plan carries schema 2.0: %s", body, raw)
+		}
+		if !strings.Contains(raw, `"1.0"`) {
+			t.Fatalf("%q: serialized plan lacks schema 1.0: %s", body, raw)
 		}
 	}
 }

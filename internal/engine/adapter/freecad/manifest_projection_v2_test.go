@@ -2,6 +2,7 @@ package freecad
 
 import (
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -9,17 +10,19 @@ import (
 	"parametron/internal/authoring/planner"
 )
 
-// Phase 5 Task 11 adapter permanent contract: the aligned FreeCAD runtime
-// export manifest projects planner Part / Assembly mutation collections into
-// runtime `assemblyMutations` / `partMutations` sections that contain ONLY the
-// suppression / visibility / deletion families, with exact canonical entry
-// shapes. Schema 1.0 stays closed to the four pre-Task-11 top-level keys, and
-// nested Parameters / Properties metadata is filtered out while top-level
-// parameterAssignments remains the sole executable native scalar-write surface.
+// Issue #16 adapter permanent contract: the FreeCAD runtime export manifest has
+// one canonical schema, "1.0". Planner Part / Assembly mutation collections
+// project structurally into optional runtime `assemblyMutations` /
+// `partMutations` sections that contain ONLY the suppression / visibility /
+// deletion families, with exact canonical entry shapes. The sections are
+// omitted when no runtime mutations exist. Nested Parameters / Properties
+// metadata is filtered out while top-level parameterAssignments remains the
+// sole executable native scalar-write surface. Every other schemaVersion,
+// including the retired "2.0", is rejected.
 
-func v2MutationPayload(mut func(*planner.WriteExportManifestPayload)) planner.WriteExportManifestPayload {
+func canonicalMutationPayload(mut func(*planner.WriteExportManifestPayload)) planner.WriteExportManifestPayload {
 	p := planner.WriteExportManifestPayload{
-		SchemaVersion:          planner.FreeCADRuntimeMutationManifestSchemaVersion,
+		SchemaVersion:          planner.ExportManifestSchemaVersion,
 		ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
 		SourceDocument:         "source/model.FCStd",
 		Outputs:                []planner.ExportManifestOutput{},
@@ -30,7 +33,7 @@ func v2MutationPayload(mut func(*planner.WriteExportManifestPayload)) planner.Wr
 	return p
 }
 
-func mustProjectV2(t *testing.T, payload planner.WriteExportManifestPayload) (*FreeCADRuntimeExportManifest, []byte) {
+func mustProjectCanonical(t *testing.T, payload planner.WriteExportManifestPayload) (*FreeCADRuntimeExportManifest, []byte) {
 	t.Helper()
 	manifest, err := ProjectFreeCADRuntimeExportManifest(payload)
 	if err != nil {
@@ -130,83 +133,127 @@ func TestTask11Adapter_RuntimeManifestTypeShape(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// PART G — schema 1.0 serialization compatibility
+// PART G — canonical schema 1.0 serialization
 // ---------------------------------------------------------------------------
 
-func TestTask11Adapter_Schema1TopLevelShapeRemainsClosed(t *testing.T) {
+func TestTask11Adapter_MutationFreeTopLevelShape(t *testing.T) {
 	payload := planner.WriteExportManifestPayload{
 		SchemaVersion:  planner.ExportManifestSchemaVersion,
 		SourceDocument: "source/model.FCStd",
 		Outputs:        []planner.ExportManifestOutput{},
 	}
-	manifest, data := mustProjectV2(t, payload)
+	manifest, data := mustProjectCanonical(t, payload)
 
+	if manifest.SchemaVersion != "1.0" {
+		t.Fatalf("schemaVersion: %q", manifest.SchemaVersion)
+	}
 	keys := topLevelKeys(t, data)
 	want := []string{"schemaVersion", "sourceDocument", "parameterAssignments", "outputs"}
 	if len(keys) != len(want) {
-		t.Fatalf("schema-1 top-level keys: got %v want %v", keys, want)
+		t.Fatalf("mutation-free top-level keys: got %v want %v", keys, want)
 	}
 	for _, k := range want {
 		if !hasKey(keys, k) {
-			t.Fatalf("schema-1 missing key %q (got %v)", k, keys)
+			t.Fatalf("mutation-free manifest missing key %q (got %v)", k, keys)
 		}
 	}
 	if hasKey(keys, "assemblyMutations") || hasKey(keys, "partMutations") {
-		t.Fatalf("schema-1 leaked a mutation section: %v", keys)
+		t.Fatalf("mutation-free manifest leaked a mutation section: %v", keys)
 	}
 	if manifest.AssemblyMutations != nil || manifest.PartMutations != nil {
-		t.Fatalf("schema-1 manifest struct carries mutation sections: %#v", manifest)
+		t.Fatalf("mutation-free manifest struct carries mutation sections: %#v", manifest)
 	}
 	if !strings.Contains(string(data), `"parameterAssignments": []`) {
-		t.Fatalf("schema-1 parameterAssignments not an empty array: %s", data)
+		t.Fatalf("parameterAssignments not an empty array: %s", data)
 	}
 	if !strings.Contains(string(data), `"outputs": []`) {
-		t.Fatalf("schema-1 outputs not an empty array: %s", data)
+		t.Fatalf("outputs not an empty array: %s", data)
 	}
 }
 
-// A schema-1 payload that (defensively) carries planner runtime families is
-// rejected by the projector when the projection is aligned-native; it is never
-// silently upgraded to 2.0.
-func TestTask11Adapter_Schema1WithRuntimeFamiliesRejected(t *testing.T) {
-	families := map[string]func(*planner.ExportManifestMutationCollection){
-		"suppression": func(c *planner.ExportManifestMutationCollection) {
-			c.Suppression = []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}
+// Schema 1.0 accepts and serializes every runtime mutation family; the mutation
+// sections are optional fields of the canonical schema, not a separate schema.
+// This replaces the retired expectation that 1.0 rejects runtime families.
+func TestTask11Adapter_Schema1AcceptsRuntimeFamilies(t *testing.T) {
+	families := map[string]struct {
+		apply  func(*planner.ExportManifestMutationCollection)
+		family string
+		want   string
+	}{
+		"suppression": {
+			apply: func(c *planner.ExportManifestMutationCollection) {
+				c.Suppression = []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}
+			},
+			family: "suppression", want: `{"object":"Pad","suppressed":true}`,
 		},
-		"visibility": func(c *planner.ExportManifestMutationCollection) {
-			c.Visibility = []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}}
+		"visibility": {
+			apply: func(c *planner.ExportManifestMutationCollection) {
+				c.Visibility = []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}}
+			},
+			family: "visibility", want: `{"object":"Body","visible":false}`,
 		},
-		"deletion": func(c *planner.ExportManifestMutationCollection) {
-			c.Deletion = []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}}
+		"deletion": {
+			apply: func(c *planner.ExportManifestMutationCollection) {
+				c.Deletion = []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}}
+			},
+			family: "deletion", want: `{"object":"Chamfer"}`,
 		},
 	}
-	for name, apply := range families {
-		t.Run(name, func(t *testing.T) {
-			col := &planner.ExportManifestMutationCollection{}
-			apply(col)
-			payload := planner.WriteExportManifestPayload{
-				SchemaVersion:          planner.ExportManifestSchemaVersion,
-				ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
-				SourceDocument:         "source/model.FCStd",
-				PartMutations:          col,
-				Outputs:                []planner.ExportManifestOutput{},
-			}
-			manifest, err := ProjectFreeCADRuntimeExportManifest(payload)
-			if err == nil {
-				t.Fatalf("expected rejection, got manifest %#v", manifest)
-			}
-			if !strings.Contains(err.Error(), "1.0 does not support runtime target mutations") {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
+	for name, tc := range families {
+		for _, mode := range []planner.ExportManifestProjectionMode{planner.ExportManifestProjectionModeFreeCADRuntimeNative, ""} {
+			t.Run(name+"/mode="+string(mode), func(t *testing.T) {
+				col := &planner.ExportManifestMutationCollection{}
+				tc.apply(col)
+				payload := planner.WriteExportManifestPayload{
+					SchemaVersion:          planner.ExportManifestSchemaVersion,
+					ManifestProjectionMode: mode,
+					SourceDocument:         "source/model.FCStd",
+					PartMutations:          col,
+					Outputs:                []planner.ExportManifestOutput{},
+				}
+				manifest, data := mustProjectCanonical(t, payload)
+				if manifest.SchemaVersion != "1.0" {
+					t.Fatalf("schemaVersion: %q", manifest.SchemaVersion)
+				}
+				if manifest.PartMutations == nil || manifest.AssemblyMutations != nil {
+					t.Fatalf("mutation intent dropped or misrouted: %#v", manifest)
+				}
+				var top map[string]json.RawMessage
+				if err := json.Unmarshal(data, &top); err != nil {
+					t.Fatalf("invalid JSON: %v", err)
+				}
+				if string(top["schemaVersion"]) != `"1.0"` {
+					t.Fatalf("schemaVersion: %s", top["schemaVersion"])
+				}
+				var section map[string]json.RawMessage
+				if err := json.Unmarshal(top["partMutations"], &section); err != nil {
+					t.Fatalf("invalid section: %v", err)
+				}
+				if len(section) != 1 {
+					t.Fatalf("expected only the %q family, got %s", tc.family, top["partMutations"])
+				}
+				var entries []json.RawMessage
+				if err := json.Unmarshal(section[tc.family], &entries); err != nil || len(entries) != 1 {
+					t.Fatalf("family %q entries: %v (%s)", tc.family, err, section[tc.family])
+				}
+				var compact strings.Builder
+				var v any
+				_ = json.Unmarshal(entries[0], &v)
+				b, _ := json.Marshal(v)
+				compact.Write(b)
+				if compact.String() != tc.want {
+					t.Fatalf("entry: got %s want %s", compact.String(), tc.want)
+				}
+			})
+		}
 	}
 }
 
 // ---------------------------------------------------------------------------
-// PART H / I — schema 2.0 serialization + omitempty
+// PART H / I — schema 1.0 mutation serialization + omitempty
 // ---------------------------------------------------------------------------
 
-func TestTask11Adapter_Schema2CanonicalEntryShapes(t *testing.T) {
+func TestTask11Adapter_CanonicalMutationEntryShapes(t *testing.T) {
 	cases := []struct {
 		name    string
 		apply   func(*planner.WriteExportManifestPayload)
@@ -281,14 +328,14 @@ func TestTask11Adapter_Schema2CanonicalEntryShapes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, data := mustProjectV2(t, v2MutationPayload(tc.apply))
+			_, data := mustProjectCanonical(t, canonicalMutationPayload(tc.apply))
 
 			var top map[string]json.RawMessage
 			if err := json.Unmarshal(data, &top); err != nil {
 				t.Fatalf("invalid JSON: %v", err)
 			}
-			if top["schemaVersion"] == nil || string(top["schemaVersion"]) != `"2.0"` {
-				t.Fatalf("schemaVersion not 2.0: %s", top["schemaVersion"])
+			if top["schemaVersion"] == nil || string(top["schemaVersion"]) != `"1.0"` {
+				t.Fatalf("schemaVersion not 1.0: %s", top["schemaVersion"])
 			}
 			raw, ok := top[tc.section]
 			if !ok {
@@ -318,8 +365,8 @@ func TestTask11Adapter_Schema2CanonicalEntryShapes(t *testing.T) {
 	}
 }
 
-func TestTask11Adapter_Schema2MixedPartAndAssembly(t *testing.T) {
-	payload := v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+func TestTask11Adapter_MixedPartAndAssemblyUnderSchema1(t *testing.T) {
+	payload := canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 		p.PartMutations = &planner.ExportManifestMutationCollection{
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 			Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
@@ -331,8 +378,8 @@ func TestTask11Adapter_Schema2MixedPartAndAssembly(t *testing.T) {
 			Deletion:    []planner.ExportManifestDeletionMutation{{Object: "OldAsm"}},
 		}
 	})
-	manifest, data := mustProjectV2(t, payload)
-	if manifest.SchemaVersion != "2.0" {
+	manifest, data := mustProjectCanonical(t, payload)
+	if manifest.SchemaVersion != "1.0" {
 		t.Fatalf("schemaVersion: %q", manifest.SchemaVersion)
 	}
 	wantCol := &FreeCADRuntimeMutationCollection{
@@ -364,7 +411,7 @@ func TestTask11Adapter_Schema2MixedPartAndAssembly(t *testing.T) {
 
 func TestTask11Adapter_OmitemptyContract(t *testing.T) {
 	t.Run("part-only omits assemblyMutations", func(t *testing.T) {
-		_, data := mustProjectV2(t, v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+		_, data := mustProjectCanonical(t, canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 			p.PartMutations = &planner.ExportManifestMutationCollection{Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}}
 		}))
 		if hasKey(topLevelKeys(t, data), "assemblyMutations") {
@@ -372,7 +419,7 @@ func TestTask11Adapter_OmitemptyContract(t *testing.T) {
 		}
 	})
 	t.Run("assembly-only omits partMutations", func(t *testing.T) {
-		_, data := mustProjectV2(t, v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+		_, data := mustProjectCanonical(t, canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 			p.AssemblyMutations = &planner.ExportManifestMutationCollection{Deletion: []planner.ExportManifestDeletionMutation{{Object: "SubAsm"}}}
 		}))
 		if hasKey(topLevelKeys(t, data), "partMutations") {
@@ -380,7 +427,7 @@ func TestTask11Adapter_OmitemptyContract(t *testing.T) {
 		}
 	})
 	t.Run("present section omits empty families", func(t *testing.T) {
-		_, data := mustProjectV2(t, v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+		_, data := mustProjectCanonical(t, canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 			p.PartMutations = &planner.ExportManifestMutationCollection{Visibility: []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: true}}}
 		}))
 		var top map[string]json.RawMessage
@@ -397,7 +444,7 @@ func TestTask11Adapter_OmitemptyContract(t *testing.T) {
 		}
 	})
 	t.Run("all-empty collections omit both sections", func(t *testing.T) {
-		_, data := mustProjectV2(t, v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+		_, data := mustProjectCanonical(t, canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 			p.PartMutations = &planner.ExportManifestMutationCollection{}
 			p.AssemblyMutations = &planner.ExportManifestMutationCollection{}
 		}))
@@ -422,14 +469,14 @@ func TestTask11Adapter_NestedParametersAndPropertiesAreFiltered(t *testing.T) {
 				Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
 				Deletion:    []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}},
 			}
-			payload := v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+			payload := canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 				if section == "part" {
 					p.PartMutations = col
 				} else {
 					p.AssemblyMutations = col
 				}
 			})
-			manifest, data := mustProjectV2(t, payload)
+			manifest, data := mustProjectCanonical(t, payload)
 
 			runtime := manifest.PartMutations
 			key := "partMutations"
@@ -474,7 +521,7 @@ func TestTask11Adapter_NestedParametersAndPropertiesAreFiltered(t *testing.T) {
 // still resolves through the planner mutation Parameters, and the resolved
 // Object.Property appears only in top-level parameterAssignments.
 func TestTask11Adapter_ParameterTargetFallbackSurvivesFiltering(t *testing.T) {
-	payload := v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+	payload := canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 		p.ParameterAssignments = []planner.ExportManifestParameterAssignment{
 			{Name: "width", Value: 50, Type: "number", Unit: "mm"},
 		}
@@ -483,7 +530,7 @@ func TestTask11Adapter_ParameterTargetFallbackSurvivesFiltering(t *testing.T) {
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 		}
 	})
-	manifest, data := mustProjectV2(t, payload)
+	manifest, data := mustProjectCanonical(t, payload)
 	if len(manifest.ParameterAssignments) != 1 || manifest.ParameterAssignments[0].Target != "Box.Width" {
 		t.Fatalf("parameter target fallback lost: %#v", manifest.ParameterAssignments)
 	}
@@ -512,7 +559,7 @@ func TestTask11Adapter_SchemaValidationMatrix(t *testing.T) {
 		p.PartMutations = &planner.ExportManifestMutationCollection{Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}}
 	}
 	visibility := func(p *planner.WriteExportManifestPayload) {
-		p.PartMutations = &planner.ExportManifestMutationCollection{Visibility: []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}}}
+		p.AssemblyMutations = &planner.ExportManifestMutationCollection{Visibility: []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}}}
 	}
 	deletion := func(p *planner.WriteExportManifestPayload) {
 		p.PartMutations = &planner.ExportManifestMutationCollection{Deletion: []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}}}
@@ -543,63 +590,85 @@ func TestTask11Adapter_SchemaValidationMatrix(t *testing.T) {
 		wantErr string
 	}{
 		{"1.0 no mutation", base("1.0", nil), ""},
-		{"1.0 suppression rejected", base("1.0", suppression), "1.0 does not support runtime target mutations"},
-		{"1.0 visibility rejected", base("1.0", visibility), "1.0 does not support runtime target mutations"},
-		{"1.0 deletion rejected", base("1.0", deletion), "1.0 does not support runtime target mutations"},
+		{"1.0 suppression accepted", base("1.0", suppression), ""},
+		{"1.0 visibility accepted", base("1.0", visibility), ""},
+		{"1.0 deletion accepted", base("1.0", deletion), ""},
 		{"1.0 internal parameters only accepted", base("1.0", paramsOnly), ""},
 		{"1.0 internal properties only accepted", base("1.0", propsOnly), ""},
-		{"2.0 mutation accepted", base("2.0", suppression), ""},
-		{"2.0 no mutation accepted", base("2.0", nil), ""},
-		{"unsupported version", base("3.0", nil), `"3.0" is not supported`},
+		{"2.0 no mutation rejected", base("2.0", nil), `"2.0" is not supported`},
+		{"2.0 suppression rejected", base("2.0", suppression), `"2.0" is not supported`},
+		{"2.0 visibility rejected", base("2.0", visibility), `"2.0" is not supported`},
+		{"2.0 deletion rejected", base("2.0", deletion), `"2.0" is not supported`},
+		{"unsupported version 3.0", base("3.0", nil), `"3.0" is not supported`},
+		{"unsupported version 3.0 with mutation", base("3.0", suppression), `"3.0" is not supported`},
+		{"unsupported version 0.9", base("0.9", nil), `"0.9" is not supported`},
 		{"empty version", base("", nil), "is required"},
+		{"empty version with mutation", base("", suppression), "is required"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := ValidateFreeCADRuntimeExportManifestSchema(tc.payload)
+			projected, projectErr := ProjectFreeCADRuntimeExportManifest(tc.payload)
 			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatalf("expected acceptance, got %v", err)
+				if err != nil || projectErr != nil {
+					t.Fatalf("expected acceptance, got validate=%v project=%v", err, projectErr)
+				}
+				if projected.SchemaVersion != "1.0" {
+					t.Fatalf("projected schemaVersion: %q", projected.SchemaVersion)
 				}
 				return
 			}
-			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("error %v does not contain %q", err, tc.wantErr)
+			for _, got := range []error{err, projectErr} {
+				if got == nil || !strings.Contains(got.Error(), tc.wantErr) {
+					t.Fatalf("error %v does not contain %q", got, tc.wantErr)
+				}
+				var pe *FreeCADRuntimeManifestProjectionError
+				if !errors.As(got, &pe) || pe.Field != "schemaVersion" {
+					t.Fatalf("expected typed schemaVersion projection error, got %#v", got)
+				}
+			}
+			if projected != nil {
+				t.Fatalf("rejected payload produced a manifest: %#v", projected)
 			}
 		})
 	}
 }
 
-func TestTask11Adapter_ProjectorDoesNotSilentlyUpgradeSchema(t *testing.T) {
-	payload := planner.WriteExportManifestPayload{
-		SchemaVersion:          planner.ExportManifestSchemaVersion,
-		ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
-		SourceDocument:         "source/model.FCStd",
-		PartMutations: &planner.ExportManifestMutationCollection{
-			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
-		},
-		Outputs: []planner.ExportManifestOutput{},
-	}
-	manifest, err := ProjectFreeCADRuntimeExportManifest(payload)
-	if err == nil {
-		t.Fatalf("expected error; got %#v (schema %q)", manifest, manifest.SchemaVersion)
+// A rejected schema is never silently converted to 1.0, with or without
+// mutations, and the projector never rewrites an accepted schema either.
+func TestTask11Adapter_ProjectorDoesNotSilentlyConvertSchema(t *testing.T) {
+	for _, schema := range []string{"2.0", "3.0", ""} {
+		payload := planner.WriteExportManifestPayload{
+			SchemaVersion:          schema,
+			ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
+			SourceDocument:         "source/model.FCStd",
+			PartMutations: &planner.ExportManifestMutationCollection{
+				Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
+			},
+			Outputs: []planner.ExportManifestOutput{},
+		}
+		manifest, err := ProjectFreeCADRuntimeExportManifest(payload)
+		if err == nil || manifest != nil {
+			t.Fatalf("schema %q: expected rejection, got %#v / %v", schema, manifest, err)
+		}
 	}
 }
 
-// A direct schema-2.0 caller with no runtime mutations is accepted and produces
-// no mutation sections (committed optional-section contract). The planner still
-// picks 1.0 for that case; that policy is proven separately in the planner
-// package.
-func TestTask11Adapter_DirectSchema2WithoutMutationsIsClean(t *testing.T) {
-	manifest, data := mustProjectV2(t, v2MutationPayload(nil))
-	if manifest.SchemaVersion != "2.0" {
-		t.Fatalf("schemaVersion: %q", manifest.SchemaVersion)
-	}
-	if manifest.AssemblyMutations != nil || manifest.PartMutations != nil {
-		t.Fatalf("unexpected mutation sections: %#v", manifest)
-	}
-	keys := topLevelKeys(t, data)
-	if hasKey(keys, "assemblyMutations") || hasKey(keys, "partMutations") {
-		t.Fatalf("empty schema-2 leaked a section: %v", keys)
+// The projector never selects a schema from mutation content: the same
+// mutation-bearing payload with a non-canonical schema is rejected, and with the
+// canonical schema is projected as 1.0.
+func TestTask11Adapter_SchemaIsNotSelectedByMutationPresence(t *testing.T) {
+	mutated := canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
+		p.PartMutations = &planner.ExportManifestMutationCollection{
+			Deletion: []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}},
+		}
+	})
+	plain := canonicalMutationPayload(nil)
+	for name, payload := range map[string]planner.WriteExportManifestPayload{"mutation-bearing": mutated, "mutation-free": plain} {
+		manifest, _ := mustProjectCanonical(t, payload)
+		if manifest.SchemaVersion != "1.0" {
+			t.Fatalf("%s: schemaVersion %q", name, manifest.SchemaVersion)
+		}
 	}
 }
 
@@ -609,7 +678,7 @@ func TestTask11Adapter_DirectSchema2WithoutMutationsIsClean(t *testing.T) {
 
 func TestTask11Adapter_ObjectSurvivesVerbatim(t *testing.T) {
 	const oddName = "PartDesign::Odd_Name-7"
-	_, data := mustProjectV2(t, v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+	_, data := mustProjectCanonical(t, canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 		p.PartMutations = &planner.ExportManifestMutationCollection{
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: oddName, Suppressed: true}},
 		}
@@ -623,8 +692,8 @@ func TestTask11Adapter_ObjectSurvivesVerbatim(t *testing.T) {
 // PART R — determinism
 // ---------------------------------------------------------------------------
 
-func TestTask11Adapter_Schema2BytesAreDeterministic(t *testing.T) {
-	payload := v2MutationPayload(func(p *planner.WriteExportManifestPayload) {
+func TestTask11Adapter_MutationBearingBytesAreDeterministic(t *testing.T) {
+	payload := canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 		p.PartMutations = &planner.ExportManifestMutationCollection{
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}, {Object: "Rib", Suppressed: false}},
 			Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
@@ -634,18 +703,21 @@ func TestTask11Adapter_Schema2BytesAreDeterministic(t *testing.T) {
 			Visibility: []planner.ExportManifestVisibilityMutation{{Object: "SubAsm", Visible: true}},
 		}
 	})
-	_, first := mustProjectV2(t, payload)
+	_, first := mustProjectCanonical(t, payload)
+	if !strings.Contains(string(first), `"schemaVersion": "1.0"`) {
+		t.Fatalf("bytes do not carry canonical schema: %s", first)
+	}
 	for i := 0; i < 10; i++ {
-		_, got := mustProjectV2(t, payload)
+		_, got := mustProjectCanonical(t, payload)
 		if string(got) != string(first) {
-			t.Fatalf("iteration %d: schema-2 bytes drifted:\n%s\nvs\n%s", i, got, first)
+			t.Fatalf("iteration %d: bytes drifted:\n%s\nvs\n%s", i, got, first)
 		}
 	}
 }
 
 func TestTask11Adapter_RejectionDiagnosticsAreDeterministic(t *testing.T) {
-	schema1WithSuppression := planner.WriteExportManifestPayload{
-		SchemaVersion:          planner.ExportManifestSchemaVersion,
+	schema2WithSuppression := planner.WriteExportManifestPayload{
+		SchemaVersion:          "2.0",
 		ManifestProjectionMode: planner.ExportManifestProjectionModeFreeCADRuntimeNative,
 		SourceDocument:         "source/model.FCStd",
 		PartMutations: &planner.ExportManifestMutationCollection{
@@ -663,7 +735,7 @@ func TestTask11Adapter_RejectionDiagnosticsAreDeterministic(t *testing.T) {
 		name    string
 		payload planner.WriteExportManifestPayload
 	}{
-		{"schema-1 mutation rejection", schema1WithSuppression},
+		{"schema-2 rejection", schema2WithSuppression},
 		{"unsupported schema rejection", unsupported},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

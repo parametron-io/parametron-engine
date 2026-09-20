@@ -3,6 +3,8 @@ package freecad
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,17 +12,19 @@ import (
 	"parametron/internal/engine/adapter"
 )
 
-// Phase 5 Task 11 attempt-local + parity permanent contract: attempt-local
-// manifest materialization (ComposeFreeCADRuntimeManifest) shares the single
-// projector / serializer used by the product-level path, keeps schema contract
-// failures on the typed `manifest_validation` stage, and never changes the
-// canonical runtime manifest filename when the schema version moves to 2.0.
+// Issue #16 attempt-local + parity permanent contract: attempt-local manifest
+// materialization (ComposeFreeCADRuntimeManifest) shares the single projector /
+// serializer used by the product-level path, composes both mutation-free and
+// mutation-bearing manifests under the one canonical schema "1.0", keeps
+// schema contract failures (including the retired "2.0") on the typed
+// `manifest_validation` stage before any filesystem materialization, and always
+// materializes the canonical runtime manifest filename prm.export-manifest.json.
 
-func alignedV2ManifestRequest(t *testing.T, mut func(*planner.WriteExportManifestPayload)) adapter.CADRuntimeOrchestrationRequest {
+func alignedMutationManifestRequest(t *testing.T, mut func(*planner.WriteExportManifestPayload)) adapter.CADRuntimeOrchestrationRequest {
 	t.Helper()
 	req := validFreeCADRuntimeManifestRequest(t)
 	req.Manifest.ManifestProjectionMode = planner.ExportManifestProjectionModeFreeCADRuntimeNative
-	req.Manifest.SchemaVersion = planner.FreeCADRuntimeMutationManifestSchemaVersion
+	req.Manifest.SchemaVersion = planner.ExportManifestSchemaVersion
 	req.Manifest.PartMutations = &planner.ExportManifestMutationCollection{
 		Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 	}
@@ -34,8 +38,8 @@ func alignedV2ManifestRequest(t *testing.T, mut func(*planner.WriteExportManifes
 // PART L — attempt-local validation
 // ---------------------------------------------------------------------------
 
-func TestTask11Runtime_AttemptLocalSchema2MutationPath(t *testing.T) {
-	req := alignedV2ManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+func TestTask11Runtime_AttemptLocalSchema1MutationPath(t *testing.T) {
+	req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
 		m.AssemblyMutations = &planner.ExportManifestMutationCollection{
 			Deletion: []planner.ExportManifestDeletionMutation{{Object: "SubAsm"}},
 		}
@@ -44,7 +48,7 @@ func TestTask11Runtime_AttemptLocalSchema2MutationPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got.Manifest.SchemaVersion != "2.0" {
+	if got.Manifest.SchemaVersion != "1.0" {
 		t.Fatalf("schemaVersion: %q", got.Manifest.SchemaVersion)
 	}
 	if got.Manifest.PartMutations == nil || len(got.Manifest.PartMutations.Suppression) != 1 {
@@ -75,21 +79,43 @@ func TestTask11Runtime_AttemptLocalSchema1ValidPath(t *testing.T) {
 }
 
 func TestTask11Runtime_AttemptLocalSchemaFailuresUseManifestValidationStage(t *testing.T) {
-	t.Run("schema 1.0 with runtime mutation", func(t *testing.T) {
-		req := alignedV2ManifestRequest(t, nil)
-		req.Manifest.SchemaVersion = planner.ExportManifestSchemaVersion
+	t.Run("retired schema 2.0 with runtime mutation", func(t *testing.T) {
+		req := alignedMutationManifestRequest(t, nil)
+		req.Manifest.SchemaVersion = "2.0"
 		_, err := ComposeFreeCADRuntimeManifest(req)
 		me := requireRuntimeManifestError(t, err, FreeCADRuntimeManifestStageManifestValidation)
 		if me.Field != "Manifest.SchemaVersion" {
 			t.Fatalf("field: %q", me.Field)
 		}
-		if !strings.Contains(err.Error(), "1.0 does not support runtime target mutations") {
+		if !strings.Contains(err.Error(), `"2.0" is not supported`) {
+			t.Fatalf("unexpected diagnostic: %v", err)
+		}
+		assertPathAbsent(t, req.ProductDir)
+	})
+	t.Run("retired schema 2.0 without runtime mutation", func(t *testing.T) {
+		req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+			m.PartMutations = nil
+			m.SchemaVersion = "2.0"
+		})
+		_, err := ComposeFreeCADRuntimeManifest(req)
+		requireRuntimeManifestError(t, err, FreeCADRuntimeManifestStageManifestValidation)
+		if !strings.Contains(err.Error(), `"2.0" is not supported`) {
+			t.Fatalf("unexpected diagnostic: %v", err)
+		}
+		assertPathAbsent(t, req.ProductDir)
+	})
+	t.Run("missing schema version", func(t *testing.T) {
+		req := alignedMutationManifestRequest(t, nil)
+		req.Manifest.SchemaVersion = ""
+		_, err := ComposeFreeCADRuntimeManifest(req)
+		requireRuntimeManifestError(t, err, FreeCADRuntimeManifestStageManifestValidation)
+		if !strings.Contains(err.Error(), "is required") {
 			t.Fatalf("unexpected diagnostic: %v", err)
 		}
 		assertPathAbsent(t, req.ProductDir)
 	})
 	t.Run("unsupported schema version", func(t *testing.T) {
-		req := alignedV2ManifestRequest(t, nil)
+		req := alignedMutationManifestRequest(t, nil)
 		req.Manifest.SchemaVersion = "3.0"
 		_, err := ComposeFreeCADRuntimeManifest(req)
 		requireRuntimeManifestError(t, err, FreeCADRuntimeManifestStageManifestValidation)
@@ -101,22 +127,60 @@ func TestTask11Runtime_AttemptLocalSchemaFailuresUseManifestValidationStage(t *t
 }
 
 func TestTask11Runtime_AttemptLocalValidationFailsBeforeMaterialization(t *testing.T) {
-	req := alignedV2ManifestRequest(t, nil)
-	req.Manifest.SchemaVersion = "3.0"
+	for _, schema := range []string{"", "2.0", "3.0"} {
+		t.Run("schema="+schema, func(t *testing.T) {
+			req := alignedMutationManifestRequest(t, nil)
+			req.Manifest.SchemaVersion = schema
+			writeAttemptSource(t, req, []byte("source"))
+			attempt, err := ComputeFreeCADRuntimeAttempt(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := WriteFreeCADRuntimeManifest(req); err == nil {
+				t.Fatal("expected write to fail on schema validation")
+			}
+			assertPathAbsent(t, attempt.Layout.ManifestPath)
+			assertLaterRuntimeFilesAbsent(t, attempt)
+		})
+	}
+}
+
+// Canonical schema 1.0 mutation-bearing manifests materialize under the
+// canonical filename, and the written bytes are exactly the composed bytes.
+func TestTask11Runtime_MutationBearingSchema1MaterializesCanonicalManifest(t *testing.T) {
+	req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+		m.ManifestFilename = planner.ExportManifestFilename
+	})
+	req.CADRuntime.ManifestFilename = planner.ExportManifestFilename
 	writeAttemptSource(t, req, []byte("source"))
 	attempt, err := ComputeFreeCADRuntimeAttempt(req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := WriteFreeCADRuntimeManifest(req); err == nil {
-		t.Fatal("expected write to fail on schema validation")
+	if filepath.Base(attempt.Layout.ManifestPath) != "prm.export-manifest.json" {
+		t.Fatalf("manifest path %q is not the canonical filename", attempt.Layout.ManifestPath)
 	}
-	assertPathAbsent(t, attempt.Layout.ManifestPath)
-	assertLaterRuntimeFilesAbsent(t, attempt)
+	composed, err := ComposeFreeCADRuntimeManifest(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteFreeCADRuntimeManifest(req); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	onDisk, err := os.ReadFile(attempt.Layout.ManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(onDisk, composed.JSON) {
+		t.Fatalf("written manifest differs from composed bytes:\n%s\nvs\n%s", onDisk, composed.JSON)
+	}
+	if !bytes.Contains(onDisk, []byte(`"schemaVersion": "1.0"`)) || !bytes.Contains(onDisk, []byte(`"partMutations"`)) {
+		t.Fatalf("expected schema 1.0 with partMutations: %s", onDisk)
+	}
 }
 
 // ---------------------------------------------------------------------------
-// PART M — native-only outputs=[] with schema 2.0
+// PART M — native-only outputs=[] with schema 1.0 mutations
 // ---------------------------------------------------------------------------
 
 func TestTask11Runtime_NativeOnlyRuntimeMutationManifests(t *testing.T) {
@@ -133,7 +197,7 @@ func TestTask11Runtime_NativeOnlyRuntimeMutationManifests(t *testing.T) {
 	}
 	for name, apply := range families {
 		t.Run(name, func(t *testing.T) {
-			req := alignedV2ManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+			req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
 				m.PartMutations = nil
 				m.AssemblyMutations = nil
 				m.Outputs = nil
@@ -143,7 +207,7 @@ func TestTask11Runtime_NativeOnlyRuntimeMutationManifests(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if got.Manifest.SchemaVersion != "2.0" {
+			if got.Manifest.SchemaVersion != "1.0" {
 				t.Fatalf("schemaVersion: %q", got.Manifest.SchemaVersion)
 			}
 			if got.Manifest.Outputs == nil || len(got.Manifest.Outputs) != 0 {
@@ -164,7 +228,7 @@ func TestTask11Runtime_NativeOnlyRuntimeMutationManifests(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestTask11Runtime_ProductAndAttemptLocalParity(t *testing.T) {
-	req := alignedV2ManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+	req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
 		m.PartMutations = &planner.ExportManifestMutationCollection{
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 			Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
@@ -211,7 +275,7 @@ func TestTask11Runtime_ProductAndAttemptLocalParity(t *testing.T) {
 }
 
 func TestTask11Runtime_ProductAndAttemptLocalParityIsDeterministic(t *testing.T) {
-	req := alignedV2ManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
+	req := alignedMutationManifestRequest(t, func(m *planner.WriteExportManifestPayload) {
 		m.AssemblyMutations = &planner.ExportManifestMutationCollection{
 			Visibility: []planner.ExportManifestVisibilityMutation{{Object: "SubAsm", Visible: true}},
 		}
@@ -242,7 +306,9 @@ func TestTask11Runtime_ManifestFilenameUnchangedBySchemaVersion(t *testing.T) {
 	if planner.ExportManifestFilename != planner.FreeCADRuntimeExportManifestFilename {
 		t.Fatalf("active filename diverged from canonical: %q", planner.ExportManifestFilename)
 	}
-	if strings.Contains(planner.FreeCADRuntimeExportManifestFilename, "v2") {
-		t.Fatalf("schema 2.0 must not introduce a v2 filename: %q", planner.FreeCADRuntimeExportManifestFilename)
+	for _, versioned := range []string{"v1", "v2", "1.0", "2.0"} {
+		if strings.Contains(planner.FreeCADRuntimeExportManifestFilename, versioned) {
+			t.Fatalf("schema versions must not appear in the active filename: %q", planner.FreeCADRuntimeExportManifestFilename)
+		}
 	}
 }

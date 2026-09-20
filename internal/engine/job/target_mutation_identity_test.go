@@ -286,14 +286,14 @@ func TestTargetMutationIdentity_JobID_PermutationEquivalenceDeterministic10x(t *
 
 func TestTargetMutationIdentity_JobDoesNotIndependentlySort(t *testing.T) {
 	canonicalOrder := planner.WriteExportManifestPayload{
-		ProductKey: "widget", ManifestFilename: "widget.json", SchemaVersion: planner.FreeCADRuntimeMutationManifestSchemaVersion,
+		ProductKey: "widget", ManifestFilename: "widget.json", SchemaVersion: planner.ExportManifestSchemaVersion,
 		Product: planner.ExportManifestProduct{ID: "widget"},
 		PartMutations: &planner.ExportManifestMutationCollection{
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Alpha", Suppressed: true}, {Object: "Zulu", Suppressed: true}},
 		},
 	}
 	reverseOrder := planner.WriteExportManifestPayload{
-		ProductKey: "widget", ManifestFilename: "widget.json", SchemaVersion: planner.FreeCADRuntimeMutationManifestSchemaVersion,
+		ProductKey: "widget", ManifestFilename: "widget.json", SchemaVersion: planner.ExportManifestSchemaVersion,
 		Product: planner.ExportManifestProduct{ID: "widget"},
 		PartMutations: &planner.ExportManifestMutationCollection{
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Zulu", Suppressed: true}, {Object: "Alpha", Suppressed: true}},

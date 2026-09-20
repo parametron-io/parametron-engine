@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -312,8 +313,26 @@ func TestTask13CLI_JSONPlanCarriesCanonicalTargetMutationPayload(t *testing.T) {
 	if hash == "" {
 		t.Fatal("expected non-empty plan hash")
 	}
-	if payload.SchemaVersion != planner.FreeCADRuntimeMutationManifestSchemaVersion {
-		t.Fatalf("expected schemaVersion %q, got %q", planner.FreeCADRuntimeMutationManifestSchemaVersion, payload.SchemaVersion)
+	// The normal planner path emits the single canonical schema for a
+	// mutation-bearing plan; it never selects a separate mutation schema.
+	if payload.SchemaVersion != "1.0" {
+		t.Fatalf("expected canonical schemaVersion \"1.0\", got %q", payload.SchemaVersion)
+	}
+
+	// The raw --json-plan bytes carry the canonical runtime manifest filename
+	// on the RunCADRuntime step and never a schema 2.0 manifest.
+	stdout, err := executeRootCommand(t, []string{"--project", projectDir, "--json-plan"})
+	if err != nil {
+		t.Fatalf("unexpected --json-plan error: %v\n%s", err, stdout)
+	}
+	if !regexp.MustCompile(`"manifestFilename":\s*"prm\.export-manifest\.json"`).MatchString(stdout) {
+		t.Fatalf("expected canonical manifestFilename in --json-plan output:\n%s", stdout)
+	}
+	if regexp.MustCompile(`"schemaVersion":\s*"2\.0"`).MatchString(stdout) {
+		t.Fatalf("--json-plan emitted a schema 2.0 manifest:\n%s", stdout)
+	}
+	if !regexp.MustCompile(`"schemaVersion":\s*"1\.0"`).MatchString(stdout) {
+		t.Fatalf("--json-plan lacks canonical schema 1.0 manifest:\n%s", stdout)
 	}
 
 	if payload.PartMutations == nil {
@@ -403,8 +422,11 @@ func TestTask13CLI_JSONPlanMatchesProductRuntimeManifest(t *testing.T) {
 		t.Fatalf("product-level marshal failed: %v", err)
 	}
 
-	if manifest.SchemaVersion != planner.FreeCADRuntimeMutationManifestSchemaVersion {
-		t.Fatalf("schemaVersion mismatch: got %q", manifest.SchemaVersion)
+	if manifest.SchemaVersion != "1.0" {
+		t.Fatalf("schemaVersion mismatch: got %q want 1.0", manifest.SchemaVersion)
+	}
+	if !strings.Contains(string(data), `"schemaVersion": "1.0"`) || strings.Contains(string(data), `"2.0"`) {
+		t.Fatalf("serialized product manifest is not canonical schema 1.0: %s", data)
 	}
 	if manifest.PartMutations == nil || manifest.AssemblyMutations == nil {
 		t.Fatalf("expected both runtime mutation sections present: %#v", manifest)
@@ -583,6 +605,9 @@ func TestTask13HandoffMatrix_JSONPlanProductAttemptParity(t *testing.T) {
 	attemptManifest := materialization.Manifest
 
 	t.Run("SchemaParity", func(t *testing.T) {
+		if payload.SchemaVersion != "1.0" {
+			t.Fatalf("plan payload is not canonical schema 1.0: %q", payload.SchemaVersion)
+		}
 		if payload.SchemaVersion != productManifest.SchemaVersion || productManifest.SchemaVersion != attemptManifest.SchemaVersion {
 			t.Fatalf("schema parity break: plan=%q product=%q attempt=%q", payload.SchemaVersion, productManifest.SchemaVersion, attemptManifest.SchemaVersion)
 		}
