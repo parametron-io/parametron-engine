@@ -32,8 +32,10 @@ const (
 
 	// FreeCADRuntimeExportManifestFilename is the canonical FreeCAD runtime-facing filename.
 	// ExportManifestFilename is the active Engine runtime-facing manifest filename.
-	ExportManifestFilename                      = FreeCADRuntimeExportManifestFilename
-	ExportManifestSchemaVersion                 = "1.0"
+	ExportManifestFilename      = FreeCADRuntimeExportManifestFilename
+	ExportManifestSchemaVersion = "1.0"
+	// FreeCADRuntimeMutationManifestSchemaVersion is retained temporarily for
+	// test-stage migration. Production planning and projection do not use it.
 	FreeCADRuntimeMutationManifestSchemaVersion = "2.0"
 	FreeCADRuntimeResultFilename                = "prm.result.json"
 	FreeCADRuntimeOutputDirectory               = "outputs"
@@ -451,7 +453,7 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 					ProductKey:             d.name,
 					ManifestFilename:       ExportManifestFilename,
 					ManifestProjectionMode: projectionMode,
-					SchemaVersion:          exportManifestSchemaVersionForProjection(projectionMode, manifestIntent.AssemblyMutations, manifestIntent.PartMutations),
+					SchemaVersion:          ExportManifestSchemaVersion,
 					Adapter:                canonicalAlignedAdapter(d.contract.Adapter),
 					Product: ExportManifestProduct{
 						ID: d.name,
@@ -539,7 +541,7 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 				ProductKey:             d.name,
 				ManifestFilename:       ExportManifestFilename,
 				ManifestProjectionMode: projectionMode,
-				SchemaVersion:          exportManifestSchemaVersionForProjection(projectionMode, manifestIntent.AssemblyMutations, manifestIntent.PartMutations),
+				SchemaVersion:          ExportManifestSchemaVersion,
 				Adapter:                canonicalAlignedAdapter(d.contract.Adapter),
 				Product: ExportManifestProduct{
 					ID: d.name,
@@ -1345,9 +1347,6 @@ func mutationCollectionEmpty(collection *ExportManifestMutationCollection) bool 
 }
 
 func exportManifestSchemaVersionForProjection(mode ExportManifestProjectionMode, assembly, part *ExportManifestMutationCollection) string {
-	if mode == ExportManifestProjectionModeFreeCADRuntimeNative && (hasRuntimeTargetMutations(assembly) || hasRuntimeTargetMutations(part)) {
-		return FreeCADRuntimeMutationManifestSchemaVersion
-	}
 	return ExportManifestSchemaVersion
 }
 
