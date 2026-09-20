@@ -113,6 +113,13 @@ func copyObservationRequestMaterialization(in FreeCADRuntimeObservationRequestMa
 func copyVerificationContract(in verification.Contract) verification.Contract {
 	out := in
 	out.ObservationContext.Parameters = append([]verification.ObservedParameterBinding(nil), in.ObservationContext.Parameters...)
+	if in.ObservationContext.TargetState != nil {
+		targetState := *in.ObservationContext.TargetState
+		targetState.Suppression = append([]verification.TargetIdentity(nil), in.ObservationContext.TargetState.Suppression...)
+		targetState.Visibility = append([]verification.TargetIdentity(nil), in.ObservationContext.TargetState.Visibility...)
+		targetState.Existence = append([]verification.TargetIdentity(nil), in.ObservationContext.TargetState.Existence...)
+		out.ObservationContext.TargetState = &targetState
+	}
 	out.Expected.Components = append([]verification.ExpectedComponent(nil), in.Expected.Components...)
 	out.Expected.Parameters = append([]verification.ExpectedParameter(nil), in.Expected.Parameters...)
 	out.Expected.Metadata = append([]verification.ExpectedMetadata(nil), in.Expected.Metadata...)
@@ -152,7 +159,25 @@ func copyObserved(in *observed.Observed) *observed.Observed {
 	}
 	out.Observation.References = append([]observed.Reference(nil), in.Observation.References...)
 	out.Observation.Components = append([]observed.Component(nil), in.Observation.Components...)
+	if in.Observation.TargetState != nil {
+		targetState := *in.Observation.TargetState
+		targetState.Suppression = copyBooleanTargetEvidence(in.Observation.TargetState.Suppression)
+		targetState.Visibility = copyBooleanTargetEvidence(in.Observation.TargetState.Visibility)
+		targetState.Existence = append([]observed.ExistenceTargetEvidence(nil), in.Observation.TargetState.Existence...)
+		out.Observation.TargetState = &targetState
+	}
 	return &out
+}
+
+func copyBooleanTargetEvidence(in []observed.BooleanTargetEvidence) []observed.BooleanTargetEvidence {
+	out := append([]observed.BooleanTargetEvidence(nil), in...)
+	for index := range out {
+		if in[index].Value != nil {
+			value := *in[index].Value
+			out[index].Value = &value
+		}
+	}
+	return out
 }
 
 func copyObservedValue(in observed.Value) observed.Value {

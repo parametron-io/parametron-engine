@@ -29,6 +29,7 @@ Parametron Engine currently provides:
 - local record-package generation
 - artifact and raw-evidence preservation
 - target-action authoring for suppression, visibility, and deletion intent
+- target-state observation request and result contracts for suppression, visibility, and existence evidence
 - CLI and HTTP API foundations
 
 Equivalent inputs and execution context are designed to produce stable
@@ -153,9 +154,14 @@ as:
 * visibility
 * deletion
 
-Engine resolves and validates this intent and projects it into the external
-runtime contract. The external CAD runtime remains responsible for applying
-native document mutations.
+Engine resolves and validates this intent and projects it into external runtime
+contracts, alongside Engine-owned target-state observation request and result
+contracts for suppression, visibility, and existence evidence.
+
+The external CAD runtime remains responsible for applying native document
+mutations and gathering native document evidence. Expected-versus-observed
+comparison, verification decisions, and normalized record mapping for
+target-state evidence remain subsequent Engine-owned responsibilities.
 
 See the canonical
 [Target-action contract](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/target-action-contract.md).

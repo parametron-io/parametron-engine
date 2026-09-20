@@ -60,21 +60,25 @@ record packaging.
 - **Attempt Management (`internal/engine/cadruntime`)**: Validates attempt
   identity derivation, isolated layout creation (`_working/<attemptID>/`),
   atomic source model preparation, and pre-invocation output cleaning.
-- **Manifest & Request Materialization (`internal/engine/cadruntime`, `internal/engine/adapter/freecad`)**:
+- **Manifest & Request Materialization (`internal/engine/cadruntime`, `internal/engine/verification`, `internal/engine/adapter/freecad`)**:
   Ensures pure, deterministic projection of execution manifests, verification
-  requests (`prm.verification.json`), and reference traversal requests
-  (`prm.reference-traversal-request.json`).
-- **Evidence Intake Validation (`internal/engine/cadruntime`)**: Validates raw
-  `prm.result.json` loading, strict artifact containment checks,
-  `prm.observed.json` working copy fingerprint correlation, and
-  `prm.reference-traversal.json` intake.
+  requests (`prm.verification.json`) including optional request-scoped target-state
+  observation contracts (`suppression`, `visibility`, `existence`) derived from
+  canonical mutation intent, and reference traversal requests
+  (`prm.reference-traversal-request.json`). Validates deterministic canonical
+  serialization (`destination` then `object`) and schema 1.0 preservation.
+- **Evidence Intake Validation (`internal/engine/cadruntime`, `internal/engine/observed`)**:
+  Validates raw `prm.result.json` loading, strict artifact containment checks,
+  `prm.observed.json` working copy fingerprint correlation, strict target-state
+  evidence parsing and canonical serialization preserving distinct boolean evidence states (`observed`, `target_missing`, `unavailable`) and existence evidence states (`exists`, `absent`, `unavailable`) independently from mutation intent, and `prm.reference-traversal.json` intake.
 
 ### 3. Verification and Normalized Records
 
 - **Engine Verification (`internal/engine/verification`)**: Tests in-memory
   comparison of verification contracts against observed CAD state across
   parameters, metadata, references, and components. Validates failure class
-  taxonomy.
+  taxonomy. Raw target-state contract and derivation tests are separated from
+  later expected-versus-observed semantic verification.
 - **Record Contracts (`internal/engine/recordcontract`)**: Validates schema
   versioning, provenance structures, and identity derivation across execution,
   artifact, observation, reference, failure, and verification record families.
@@ -129,6 +133,7 @@ go vet ./...
 # Run targeted package tests
 go test ./internal/authoring/dsl/...
 go test ./internal/engine/verification/...
+go test ./internal/engine/observed/...
 go test ./internal/engine/recordmap/...
 
 # Run with race detector
