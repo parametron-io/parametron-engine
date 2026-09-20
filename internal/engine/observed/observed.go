@@ -87,10 +87,43 @@ type WorkingCopy struct {
 }
 
 type Observation struct {
-	Parameters []Parameter `json:"parameters"`
-	Metadata   []Metadata  `json:"metadata"`
-	References []Reference `json:"references"`
-	Components []Component `json:"components"`
+	Parameters  []Parameter             `json:"parameters"`
+	Metadata    []Metadata              `json:"metadata"`
+	References  []Reference             `json:"references"`
+	Components  []Component             `json:"components"`
+	TargetState *TargetStateObservation `json:"targetState,omitempty"`
+}
+
+const (
+	TargetDestinationAssembly = "assembly"
+	TargetDestinationPart     = "part"
+
+	BooleanEvidenceStatusObserved      = "observed"
+	BooleanEvidenceStatusTargetMissing = "target_missing"
+	BooleanEvidenceStatusUnavailable   = "unavailable"
+
+	ExistenceEvidenceStatusExists      = "exists"
+	ExistenceEvidenceStatusAbsent      = "absent"
+	ExistenceEvidenceStatusUnavailable = "unavailable"
+)
+
+type TargetStateObservation struct {
+	Suppression []BooleanTargetEvidence   `json:"suppression"`
+	Visibility  []BooleanTargetEvidence   `json:"visibility"`
+	Existence   []ExistenceTargetEvidence `json:"existence"`
+}
+
+type BooleanTargetEvidence struct {
+	Destination string `json:"destination"`
+	Object      string `json:"object"`
+	Status      string `json:"status"`
+	Value       *bool  `json:"value,omitempty"`
+}
+
+type ExistenceTargetEvidence struct {
+	Destination string `json:"destination"`
+	Object      string `json:"object"`
+	Status      string `json:"status"`
 }
 
 type Parameter struct {
@@ -329,7 +362,7 @@ func parseWorkingCopyObject(root map[string]any) (WorkingCopy, error) {
 }
 
 func parseObservationObject(root map[string]any) (Observation, error) {
-	if err := ensureAllowedKeys(root, "observation", "parameters", "metadata", "references", "components"); err != nil {
+	if err := ensureAllowedKeys(root, "observation", "parameters", "metadata", "references", "components", "targetState"); err != nil {
 		return Observation{}, err
 	}
 
@@ -350,12 +383,121 @@ func parseObservationObject(root map[string]any) (Observation, error) {
 		return Observation{}, err
 	}
 
-	return Observation{
+	observation := Observation{
 		Parameters: parameters,
 		Metadata:   metadataEntries,
 		References: references,
 		Components: components,
-	}, nil
+	}
+	if _, ok := root["targetState"]; ok {
+		object, ok := root["targetState"].(map[string]any)
+		if !ok {
+			return Observation{}, &ValidationError{Message: "observation.targetState must be an object"}
+		}
+		targetState, err := parseTargetStateObservation(object)
+		if err != nil {
+			return Observation{}, err
+		}
+		observation.TargetState = targetState
+	}
+	return observation, nil
+}
+
+func parseTargetStateObservation(root map[string]any) (*TargetStateObservation, error) {
+	if err := ensureAllowedKeys(root, "observation.targetState", "suppression", "visibility", "existence"); err != nil {
+		return nil, err
+	}
+	parseBoolean := func(field string) ([]BooleanTargetEvidence, error) {
+		value, ok := root[field]
+		if !ok {
+			return nil, &ValidationError{Message: "observation.targetState." + field + " is required"}
+		}
+		items, ok := value.([]any)
+		if !ok {
+			return nil, &ValidationError{Message: "observation.targetState." + field + " must be an array"}
+		}
+		out := make([]BooleanTargetEvidence, 0, len(items))
+		for index, item := range items {
+			object, ok := item.(map[string]any)
+			location := fmt.Sprintf("observation.targetState.%s[%d]", field, index)
+			if !ok {
+				return nil, &ValidationError{Message: location + " must be an object"}
+			}
+			if err := ensureAllowedKeys(object, location, "destination", "object", "status", "value"); err != nil {
+				return nil, err
+			}
+			destination, err := requiredStringField(object, "destination")
+			if err != nil {
+				return nil, wrapIndexedFieldError("observation.targetState."+field, index, err)
+			}
+			name, err := requiredStringField(object, "object")
+			if err != nil {
+				return nil, wrapIndexedFieldError("observation.targetState."+field, index, err)
+			}
+			status, err := requiredStringField(object, "status")
+			if err != nil {
+				return nil, wrapIndexedFieldError("observation.targetState."+field, index, err)
+			}
+			entry := BooleanTargetEvidence{Destination: destination, Object: name, Status: status}
+			if raw, exists := object["value"]; exists {
+				typed, ok := raw.(bool)
+				if !ok {
+					return nil, &ValidationError{Message: location + ".value must be a boolean"}
+				}
+				entry.Value = &typed
+			}
+			out = append(out, entry)
+		}
+		return out, nil
+	}
+	parseExistence := func() ([]ExistenceTargetEvidence, error) {
+		value, ok := root["existence"]
+		if !ok {
+			return nil, &ValidationError{Message: "observation.targetState.existence is required"}
+		}
+		items, ok := value.([]any)
+		if !ok {
+			return nil, &ValidationError{Message: "observation.targetState.existence must be an array"}
+		}
+		out := make([]ExistenceTargetEvidence, 0, len(items))
+		for index, item := range items {
+			object, ok := item.(map[string]any)
+			location := fmt.Sprintf("observation.targetState.existence[%d]", index)
+			if !ok {
+				return nil, &ValidationError{Message: location + " must be an object"}
+			}
+			if err := ensureAllowedKeys(object, location, "destination", "object", "status"); err != nil {
+				return nil, err
+			}
+			destination, err := requiredStringField(object, "destination")
+			if err != nil {
+				return nil, wrapIndexedFieldError("observation.targetState.existence", index, err)
+			}
+			name, err := requiredStringField(object, "object")
+			if err != nil {
+				return nil, wrapIndexedFieldError("observation.targetState.existence", index, err)
+			}
+			status, err := requiredStringField(object, "status")
+			if err != nil {
+				return nil, wrapIndexedFieldError("observation.targetState.existence", index, err)
+			}
+			out = append(out, ExistenceTargetEvidence{Destination: destination, Object: name, Status: status})
+		}
+		return out, nil
+	}
+	suppression, err := parseBoolean("suppression")
+	if err != nil {
+		return nil, err
+	}
+	visibility, err := parseBoolean("visibility")
+	if err != nil {
+		return nil, err
+	}
+	existence, err := parseExistence()
+	if err != nil {
+		return nil, err
+	}
+	return &TargetStateObservation{Suppression: suppression, Visibility: visibility, Existence: existence}, nil
 }
 
 func parseParametersField(root map[string]any, field string) ([]Parameter, error) {
@@ -635,6 +777,20 @@ func validateObserved(observed *Observed) error {
 	if observed.Observation.Components == nil {
 		return &ValidationError{Message: "observation.components is required"}
 	}
+	if targetState := observed.Observation.TargetState; targetState != nil {
+		if targetState.Suppression == nil || targetState.Visibility == nil || targetState.Existence == nil {
+			return &ValidationError{Message: "observation.targetState collections are required"}
+		}
+		if err := validateBooleanTargetEvidence("observation.targetState.suppression", targetState.Suppression); err != nil {
+			return err
+		}
+		if err := validateBooleanTargetEvidence("observation.targetState.visibility", targetState.Visibility); err != nil {
+			return err
+		}
+		if err := validateExistenceTargetEvidence(targetState.Existence); err != nil {
+			return err
+		}
+	}
 	for index, parameter := range observed.Observation.Parameters {
 		if strings.TrimSpace(parameter.ID) == "" {
 			return &ValidationError{Message: fmt.Sprintf("observation.parameters[%d].id is required", index)}
@@ -721,6 +877,63 @@ func validateObserved(observed *Observed) error {
 	return nil
 }
 
+func validateTargetIdentity(location, destination, object string) error {
+	if destination != TargetDestinationAssembly && destination != TargetDestinationPart {
+		return &ValidationError{Message: fmt.Sprintf("%s.destination must be one of %q or %q", location, TargetDestinationAssembly, TargetDestinationPart)}
+	}
+	if strings.TrimSpace(object) == "" || strings.TrimSpace(object) != object || strings.ContainsRune(object, '\x00') {
+		return &ValidationError{Message: location + ".object must be a non-blank exact native object name"}
+	}
+	return nil
+}
+
+func validateBooleanTargetEvidence(location string, entries []BooleanTargetEvidence) error {
+	seen := make(map[string]int, len(entries))
+	for index, entry := range entries {
+		itemLocation := fmt.Sprintf("%s[%d]", location, index)
+		if err := validateTargetIdentity(itemLocation, entry.Destination, entry.Object); err != nil {
+			return err
+		}
+		switch entry.Status {
+		case BooleanEvidenceStatusObserved:
+			if entry.Value == nil {
+				return &ValidationError{Message: itemLocation + ".value is required when status is observed"}
+			}
+		case BooleanEvidenceStatusTargetMissing, BooleanEvidenceStatusUnavailable:
+			if entry.Value != nil {
+				return &ValidationError{Message: itemLocation + ".value must be absent unless status is observed"}
+			}
+		default:
+			return &ValidationError{Message: fmt.Sprintf("%s.status must be one of %q, %q, or %q", itemLocation, BooleanEvidenceStatusObserved, BooleanEvidenceStatusTargetMissing, BooleanEvidenceStatusUnavailable)}
+		}
+		key := entry.Destination + "\x00" + entry.Object
+		if previous, ok := seen[key]; ok {
+			return &ValidationError{Message: fmt.Sprintf("%s duplicates %s[%d]", itemLocation, location, previous)}
+		}
+		seen[key] = index
+	}
+	return nil
+}
+
+func validateExistenceTargetEvidence(entries []ExistenceTargetEvidence) error {
+	seen := make(map[string]int, len(entries))
+	for index, entry := range entries {
+		location := fmt.Sprintf("observation.targetState.existence[%d]", index)
+		if err := validateTargetIdentity(location, entry.Destination, entry.Object); err != nil {
+			return err
+		}
+		if entry.Status != ExistenceEvidenceStatusExists && entry.Status != ExistenceEvidenceStatusAbsent && entry.Status != ExistenceEvidenceStatusUnavailable {
+			return &ValidationError{Message: fmt.Sprintf("%s.status must be one of %q, %q, or %q", location, ExistenceEvidenceStatusExists, ExistenceEvidenceStatusAbsent, ExistenceEvidenceStatusUnavailable)}
+		}
+		key := entry.Destination + "\x00" + entry.Object
+		if previous, ok := seen[key]; ok {
+			return &ValidationError{Message: fmt.Sprintf("%s duplicates observation.targetState.existence[%d]", location, previous)}
+		}
+		seen[key] = index
+	}
+	return nil
+}
+
 func writeWorkingCopy(out *bytes.Buffer, workingCopy WorkingCopy) {
 	out.WriteByte('{')
 	writeJSONString(out, "path")
@@ -750,7 +963,109 @@ func writeObservation(out *bytes.Buffer, observation Observation) {
 	writeJSONString(out, "components")
 	out.WriteByte(':')
 	writeComponents(out, observation.Components)
+	if observation.TargetState != nil {
+		out.WriteByte(',')
+		writeJSONString(out, "targetState")
+		out.WriteByte(':')
+		writeTargetStateObservation(out, *observation.TargetState)
+	}
 	out.WriteByte('}')
+}
+
+func writeTargetStateObservation(out *bytes.Buffer, observation TargetStateObservation) {
+	out.WriteByte('{')
+	writeJSONString(out, "suppression")
+	out.WriteByte(':')
+	writeBooleanTargetEvidence(out, observation.Suppression)
+	out.WriteByte(',')
+	writeJSONString(out, "visibility")
+	out.WriteByte(':')
+	writeBooleanTargetEvidence(out, observation.Visibility)
+	out.WriteByte(',')
+	writeJSONString(out, "existence")
+	out.WriteByte(':')
+	writeExistenceTargetEvidence(out, observation.Existence)
+	out.WriteByte('}')
+}
+
+func writeBooleanTargetEvidence(out *bytes.Buffer, entries []BooleanTargetEvidence) {
+	ordered := append([]BooleanTargetEvidence(nil), entries...)
+	slices.SortFunc(ordered, compareBooleanTargetEvidence)
+	out.WriteByte('[')
+	for index, entry := range ordered {
+		if index > 0 {
+			out.WriteByte(',')
+		}
+		out.WriteByte('{')
+		writeJSONString(out, "destination")
+		out.WriteByte(':')
+		writeJSONString(out, entry.Destination)
+		out.WriteByte(',')
+		writeJSONString(out, "object")
+		out.WriteByte(':')
+		writeJSONString(out, entry.Object)
+		out.WriteByte(',')
+		writeJSONString(out, "status")
+		out.WriteByte(':')
+		writeJSONString(out, entry.Status)
+		if entry.Value != nil {
+			out.WriteByte(',')
+			writeJSONString(out, "value")
+			out.WriteByte(':')
+			if *entry.Value {
+				out.WriteString("true")
+			} else {
+				out.WriteString("false")
+			}
+		}
+		out.WriteByte('}')
+	}
+	out.WriteByte(']')
+}
+
+func writeExistenceTargetEvidence(out *bytes.Buffer, entries []ExistenceTargetEvidence) {
+	ordered := append([]ExistenceTargetEvidence(nil), entries...)
+	slices.SortFunc(ordered, compareExistenceTargetEvidence)
+	out.WriteByte('[')
+	for index, entry := range ordered {
+		if index > 0 {
+			out.WriteByte(',')
+		}
+		out.WriteByte('{')
+		writeJSONString(out, "destination")
+		out.WriteByte(':')
+		writeJSONString(out, entry.Destination)
+		out.WriteByte(',')
+		writeJSONString(out, "object")
+		out.WriteByte(':')
+		writeJSONString(out, entry.Object)
+		out.WriteByte(',')
+		writeJSONString(out, "status")
+		out.WriteByte(':')
+		writeJSONString(out, entry.Status)
+		out.WriteByte('}')
+	}
+	out.WriteByte(']')
+}
+
+func compareBooleanTargetEvidence(left, right BooleanTargetEvidence) int {
+	if cmp := strings.Compare(left.Destination, right.Destination); cmp != 0 {
+		return cmp
+	}
+	if cmp := strings.Compare(left.Object, right.Object); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(left.Status, right.Status)
+}
+
+func compareExistenceTargetEvidence(left, right ExistenceTargetEvidence) int {
+	if cmp := strings.Compare(left.Destination, right.Destination); cmp != 0 {
+		return cmp
+	}
+	if cmp := strings.Compare(left.Object, right.Object); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(left.Status, right.Status)
 }
 
 func writeParameters(out *bytes.Buffer, parameters []Parameter) {

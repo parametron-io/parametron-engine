@@ -161,10 +161,11 @@ type Contract struct {
 }
 
 type Observe struct {
-	Components bool `json:"components"`
-	Parameters bool `json:"parameters"`
-	Metadata   bool `json:"metadata"`
-	References bool `json:"references"`
+	Components  bool `json:"components"`
+	Parameters  bool `json:"parameters"`
+	Metadata    bool `json:"metadata"`
+	References  bool `json:"references"`
+	TargetState bool `json:"targetState,omitempty"`
 }
 
 type Expected struct {
@@ -190,7 +191,24 @@ type ExpectedParameter struct {
 }
 
 type ObservationContext struct {
-	Parameters []ObservedParameterBinding `json:"parameters,omitempty"`
+	Parameters  []ObservedParameterBinding `json:"parameters,omitempty"`
+	TargetState *TargetStateRequest        `json:"targetState,omitempty"`
+}
+
+const (
+	TargetDestinationAssembly = "assembly"
+	TargetDestinationPart     = "part"
+)
+
+type TargetStateRequest struct {
+	Suppression []TargetIdentity `json:"suppression"`
+	Visibility  []TargetIdentity `json:"visibility"`
+	Existence   []TargetIdentity `json:"existence"`
+}
+
+type TargetIdentity struct {
+	Destination string `json:"destination"`
+	Object      string `json:"object"`
 }
 
 type ObservedParameterBinding struct {
@@ -347,6 +365,26 @@ func Validate(contract *Contract) error {
 	}
 	if contract.Checks.References.Enabled && !contract.Observe.References {
 		return &ValidationError{Message: "checks.references.enabled requires observe.references to be true"}
+	}
+	if contract.Observe.TargetState != (contract.ObservationContext.TargetState != nil) {
+		return &ValidationError{Message: "observe.targetState must be true exactly when observationContext.targetState is present"}
+	}
+	if request := contract.ObservationContext.TargetState; request != nil {
+		if request.Suppression == nil || request.Visibility == nil || request.Existence == nil {
+			return &ValidationError{Message: "observationContext.targetState collections are required"}
+		}
+		if len(request.Suppression)+len(request.Visibility)+len(request.Existence) == 0 {
+			return &ValidationError{Message: "observationContext.targetState must request at least one fact"}
+		}
+		if err := validateTargetIdentities("observationContext.targetState.suppression", request.Suppression); err != nil {
+			return err
+		}
+		if err := validateTargetIdentities("observationContext.targetState.visibility", request.Visibility); err != nil {
+			return err
+		}
+		if err := validateTargetIdentities("observationContext.targetState.existence", request.Existence); err != nil {
+			return err
+		}
 	}
 	for index, component := range contract.Expected.Components {
 		if strings.TrimSpace(component.ID) == "" {
@@ -570,6 +608,8 @@ func DeriveFromManifestAndWorkingCopy(manifest planner.WriteExportManifestPayloa
 			References: Check{Enabled: true},
 		},
 	}
+	contract.ObservationContext.TargetState = deriveTargetStateRequest(manifest)
+	contract.Observe.TargetState = contract.ObservationContext.TargetState != nil
 	if contract.Checks.Parameters.Enabled {
 		contract.ObservationContext.Parameters = deriveObservedParameterBindings(manifest.Verification.ObservationParameterLinks)
 	}
@@ -727,6 +767,62 @@ func deriveObservedParameterBindings(bindings []planner.VerificationObservationP
 	}
 	slices.SortFunc(out, compareObservedParameterBindings)
 	return out
+}
+
+func deriveTargetStateRequest(manifest planner.WriteExportManifestPayload) *TargetStateRequest {
+	request := &TargetStateRequest{
+		Suppression: []TargetIdentity{},
+		Visibility:  []TargetIdentity{},
+		Existence:   []TargetIdentity{},
+	}
+	appendCollection := func(destination string, collection *planner.ExportManifestMutationCollection) {
+		if collection == nil {
+			return
+		}
+		for _, mutation := range collection.Suppression {
+			request.Suppression = append(request.Suppression, TargetIdentity{Destination: destination, Object: mutation.Object})
+		}
+		for _, mutation := range collection.Visibility {
+			request.Visibility = append(request.Visibility, TargetIdentity{Destination: destination, Object: mutation.Object})
+		}
+		for _, mutation := range collection.Deletion {
+			request.Existence = append(request.Existence, TargetIdentity{Destination: destination, Object: mutation.Object})
+		}
+	}
+	appendCollection(TargetDestinationAssembly, manifest.AssemblyMutations)
+	appendCollection(TargetDestinationPart, manifest.PartMutations)
+	if len(request.Suppression)+len(request.Visibility)+len(request.Existence) == 0 {
+		return nil
+	}
+	slices.SortFunc(request.Suppression, compareTargetIdentities)
+	slices.SortFunc(request.Visibility, compareTargetIdentities)
+	slices.SortFunc(request.Existence, compareTargetIdentities)
+	return request
+}
+
+func validateTargetIdentities(location string, identities []TargetIdentity) error {
+	seen := make(map[string]int, len(identities))
+	for index, identity := range identities {
+		if identity.Destination != TargetDestinationAssembly && identity.Destination != TargetDestinationPart {
+			return &ValidationError{Message: fmt.Sprintf("%s[%d].destination must be one of %q or %q", location, index, TargetDestinationAssembly, TargetDestinationPart)}
+		}
+		if strings.TrimSpace(identity.Object) == "" || strings.TrimSpace(identity.Object) != identity.Object || strings.ContainsRune(identity.Object, '\x00') {
+			return &ValidationError{Message: fmt.Sprintf("%s[%d].object must be a non-blank exact native object name", location, index)}
+		}
+		key := identity.Destination + "\x00" + identity.Object
+		if previous, ok := seen[key]; ok {
+			return &ValidationError{Message: fmt.Sprintf("%s[%d] duplicates %s[%d]", location, index, location, previous)}
+		}
+		seen[key] = index
+	}
+	return nil
+}
+
+func compareTargetIdentities(left, right TargetIdentity) int {
+	if cmp := strings.Compare(left.Destination, right.Destination); cmp != 0 {
+		return cmp
+	}
+	return strings.Compare(left.Object, right.Object)
 }
 
 func verifyComponents(expected []ExpectedComponent, actual []observed.Component) CategoryResult {
@@ -1062,7 +1158,7 @@ func parseContractObject(root map[string]any) (*Contract, error) {
 }
 
 func parseObserveObject(root map[string]any) (Observe, error) {
-	if err := ensureAllowedKeys(root, "observe", "components", "parameters", "metadata", "references"); err != nil {
+	if err := ensureAllowedKeys(root, "observe", "components", "parameters", "metadata", "references", "targetState"); err != nil {
 		return Observe{}, err
 	}
 	components, err := requiredBoolField(root, "components")
@@ -1081,11 +1177,19 @@ func parseObserveObject(root map[string]any) (Observe, error) {
 	if err != nil {
 		return Observe{}, wrapFieldError("observe", err)
 	}
+	targetState := false
+	if _, ok := root["targetState"]; ok {
+		targetState, err = requiredBoolField(root, "targetState")
+		if err != nil {
+			return Observe{}, wrapFieldError("observe", err)
+		}
+	}
 	return Observe{
-		Components: components,
-		Parameters: parameters,
-		Metadata:   metadata,
-		References: references,
+		Components:  components,
+		Parameters:  parameters,
+		Metadata:    metadata,
+		References:  references,
+		TargetState: targetState,
 	}, nil
 }
 
@@ -1118,7 +1222,7 @@ func parseExpectedObject(root map[string]any) (Expected, error) {
 }
 
 func parseObservationContextObject(root map[string]any) (ObservationContext, error) {
-	if err := ensureAllowedKeys(root, "observationContext", "parameters"); err != nil {
+	if err := ensureAllowedKeys(root, "observationContext", "parameters", "targetState"); err != nil {
 		return ObservationContext{}, err
 	}
 	items, err := requiredArrayField(root, "parameters")
@@ -1159,7 +1263,65 @@ func parseObservationContextObject(root map[string]any) (ObservationContext, err
 			GroupName: groupName,
 		})
 	}
-	return ObservationContext{Parameters: parameters}, nil
+	context := ObservationContext{Parameters: parameters}
+	if _, ok := root["targetState"]; ok {
+		object, err := requiredObjectField(root, "targetState")
+		if err != nil {
+			return ObservationContext{}, wrapFieldError("observationContext", err)
+		}
+		request, err := parseTargetStateRequest(object)
+		if err != nil {
+			return ObservationContext{}, err
+		}
+		context.TargetState = request
+	}
+	return context, nil
+}
+
+func parseTargetStateRequest(root map[string]any) (*TargetStateRequest, error) {
+	if err := ensureAllowedKeys(root, "observationContext.targetState", "suppression", "visibility", "existence"); err != nil {
+		return nil, err
+	}
+	parse := func(field string) ([]TargetIdentity, error) {
+		items, err := requiredArrayField(root, field)
+		if err != nil {
+			return nil, wrapFieldError("observationContext.targetState", err)
+		}
+		out := make([]TargetIdentity, 0, len(items))
+		for index, item := range items {
+			object, ok := item.(map[string]any)
+			location := fmt.Sprintf("observationContext.targetState.%s[%d]", field, index)
+			if !ok {
+				return nil, &ValidationError{Message: location + " must be an object"}
+			}
+			if err := ensureAllowedKeys(object, location, "destination", "object"); err != nil {
+				return nil, err
+			}
+			destination, err := requiredStringField(object, "destination")
+			if err != nil {
+				return nil, wrapIndexedFieldError("observationContext.targetState."+field, index, err)
+			}
+			name, err := requiredStringField(object, "object")
+			if err != nil {
+				return nil, wrapIndexedFieldError("observationContext.targetState."+field, index, err)
+			}
+			out = append(out, TargetIdentity{Destination: destination, Object: name})
+		}
+		return out, nil
+	}
+	suppression, err := parse("suppression")
+	if err != nil {
+		return nil, err
+	}
+	visibility, err := parse("visibility")
+	if err != nil {
+		return nil, err
+	}
+	existence, err := parse("existence")
+	if err != nil {
+		return nil, err
+	}
+	return &TargetStateRequest{Suppression: suppression, Visibility: visibility, Existence: existence}, nil
 }
 
 func parseChecksObject(root map[string]any) (Checks, error) {
@@ -1394,6 +1556,12 @@ func writeObserve(out *bytes.Buffer, observe Observe) {
 	writeJSONString(out, "references")
 	out.WriteByte(':')
 	writeBool(out, observe.References)
+	if observe.TargetState {
+		out.WriteByte(',')
+		writeJSONString(out, "targetState")
+		out.WriteByte(':')
+		writeBool(out, true)
+	}
 	out.WriteByte('}')
 }
 
@@ -1428,7 +1596,50 @@ func writeObservationContext(out *bytes.Buffer, context ObservationContext) {
 		out.WriteByte('}')
 	}
 	out.WriteByte(']')
+	if context.TargetState != nil {
+		out.WriteByte(',')
+		writeJSONString(out, "targetState")
+		out.WriteByte(':')
+		writeTargetStateRequest(out, *context.TargetState)
+	}
 	out.WriteByte('}')
+}
+
+func writeTargetStateRequest(out *bytes.Buffer, request TargetStateRequest) {
+	out.WriteByte('{')
+	writeJSONString(out, "suppression")
+	out.WriteByte(':')
+	writeTargetIdentities(out, request.Suppression)
+	out.WriteByte(',')
+	writeJSONString(out, "visibility")
+	out.WriteByte(':')
+	writeTargetIdentities(out, request.Visibility)
+	out.WriteByte(',')
+	writeJSONString(out, "existence")
+	out.WriteByte(':')
+	writeTargetIdentities(out, request.Existence)
+	out.WriteByte('}')
+}
+
+func writeTargetIdentities(out *bytes.Buffer, identities []TargetIdentity) {
+	ordered := append([]TargetIdentity(nil), identities...)
+	slices.SortFunc(ordered, compareTargetIdentities)
+	out.WriteByte('[')
+	for index, identity := range ordered {
+		if index > 0 {
+			out.WriteByte(',')
+		}
+		out.WriteByte('{')
+		writeJSONString(out, "destination")
+		out.WriteByte(':')
+		writeJSONString(out, identity.Destination)
+		out.WriteByte(',')
+		writeJSONString(out, "object")
+		out.WriteByte(':')
+		writeJSONString(out, identity.Object)
+		out.WriteByte('}')
+	}
+	out.WriteByte(']')
 }
 
 func writeExpected(out *bytes.Buffer, expected Expected) {
