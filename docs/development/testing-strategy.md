@@ -76,16 +76,27 @@ record packaging.
 
 - **Engine Verification (`internal/engine/verification`)**: Tests in-memory
   comparison of verification contracts against observed CAD state across
-  parameters, metadata, references, and components. Validates failure class
-  taxonomy. Raw target-state contract and derivation tests are separated from
-  later expected-versus-observed semantic verification.
+  parameters, metadata, references, components, and target state. Target-state
+  coverage derives expected suppression, visibility, and absence state from
+  canonical mutation intent; compares actual evidence using exact target
+  identity; and verifies typed mismatch, missing-target, unavailable-evidence,
+  and omitted-evidence classifications. It also proves malformed evidence is
+  rejected before semantic comparison, requested mutation values cannot replace
+  observations, and deterministic verification ordering selects the same first
+  failure for equivalent inputs.
 - **Record Contracts (`internal/engine/recordcontract`)**: Validates schema
   versioning, provenance structures, and identity derivation across execution,
-  artifact, observation, reference, failure, and verification record families.
+  artifact, observation, reference, failure, and verification record families,
+  including normalized target-state observation facts and target-state
+  verification category and failure vocabulary within those existing families.
 - **Record Mapping (`internal/engine/recordmap`)**: Tests mapping from operational
   files (`prm.report.json`, `prm.metadata.json`, legacy `result.json` payloads,
-  observed state, traversals) to normalized record structures. This legacy
-  result-mapper coverage is distinct from the active runtime transport filename.
+  observed state, traversals) to normalized record structures. Target-state
+  tests cover deterministic observation and verification mapping, stable record
+  identity, and verification provenance linking the raw verification request and
+  observed evidence. Mapper coverage does not imply that every normal-run path
+  emits those records. Legacy result-mapper coverage remains distinct from the
+  active runtime transport filename.
 - **Record Package Writer & Emission (`internal/engine/recordpackage`, `internal/engine/recordemit`)**:
   Verifies deterministic package generation, manifest indexing, and raw evidence
   preservation under `raw/`. CAD evidence tests read authoritative attempt
@@ -117,6 +128,11 @@ record packaging.
 - **Fake Runtime Proof (`scripts/cad_runtime_integration_proof.py --mode fake`)**:
   Executes end-to-end multi-attempt retry sequences, timeout handling, and
   verification failure scenarios using a deterministic mock CAD runtime.
+- **Verification Boundary (`internal/engine/cadruntime`)**: Uses a fake external
+  capability to prove target-state verification results and typed failures cross
+  the runtime boundary as Engine verification outcomes rather than CAD-native
+  runtime failures. This suite does not exercise real FreeCAD target-state
+  mutation or observation.
 - **Opt-in Real FreeCAD Integration (`scripts/cad_runtime_integration_proof.py --mode real`)**:
   Executes live CAD mutation, recompute, export, and verification against
   `parametron-freecad` and FreeCAD binaries.
@@ -134,6 +150,8 @@ go vet ./...
 go test ./internal/authoring/dsl/...
 go test ./internal/engine/verification/...
 go test ./internal/engine/observed/...
+go test ./internal/engine/cadruntime/...
+go test ./internal/engine/recordcontract/...
 go test ./internal/engine/recordmap/...
 
 # Run with race detector

@@ -30,6 +30,7 @@ Parametron Engine currently provides:
 - artifact and raw-evidence preservation
 - target-action authoring for suppression, visibility, and deletion intent
 - target-state observation request and result contracts for suppression, visibility, and existence evidence
+- Engine-owned target-state expectation derivation, verification, failure classification, and normalized record mapping
 - CLI and HTTP API foundations
 
 Equivalent inputs and execution context are designed to produce stable
@@ -156,12 +157,22 @@ as:
 
 Engine resolves and validates this intent and projects it into external runtime
 contracts, alongside Engine-owned target-state observation request and result
-contracts for suppression, visibility, and existence evidence.
+contracts for suppression, visibility, and existence evidence. The serialized
+schema `1.0` request identifies the targets to observe; Engine retains the
+expected final state in memory, derived from canonical mutation intent.
 
 The external CAD runtime remains responsible for applying native document
-mutations and gathering native document evidence. Expected-versus-observed
-comparison, verification decisions, and normalized record mapping for
-target-state evidence remain subsequent Engine-owned responsibilities.
+mutations and gathering native document evidence. Engine compares accepted raw
+observations with its expected state and classifies state mismatches, explicit
+missing targets, unavailable native evidence, and omitted required evidence.
+It can map accepted target-state evidence and verification outcomes into the
+existing normalized observation and verification record families while
+preserving raw evidence separately.
+
+These verification and mapping capabilities do not by themselves emit
+target-state normalized records through every normal execution and record-package
+path; that integration remains separate from the mapper contracts described
+here.
 
 See the canonical
 [Target-action contract](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/target-action-contract.md).
