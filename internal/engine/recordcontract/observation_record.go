@@ -11,10 +11,11 @@ import (
 type ObservationKind string
 
 const (
-	ObservationKindParameter ObservationKind = "parameter"
-	ObservationKindMetadata  ObservationKind = "metadata"
-	ObservationKindReference ObservationKind = "reference"
-	ObservationKindComponent ObservationKind = "component"
+	ObservationKindParameter   ObservationKind = "parameter"
+	ObservationKindMetadata    ObservationKind = "metadata"
+	ObservationKindReference   ObservationKind = "reference"
+	ObservationKindComponent   ObservationKind = "component"
+	ObservationKindTargetState ObservationKind = "target_state"
 )
 
 // ObservationValue captures normalized observation value material.
@@ -320,7 +321,7 @@ func NormalizeObservationKind(kind ObservationKind) ObservationKind {
 
 func knownObservationKind(kind ObservationKind) bool {
 	switch NormalizeObservationKind(kind) {
-	case ObservationKindParameter, ObservationKindMetadata, ObservationKindReference, ObservationKindComponent:
+	case ObservationKindParameter, ObservationKindMetadata, ObservationKindReference, ObservationKindComponent, ObservationKindTargetState:
 		return true
 	default:
 		return false
@@ -390,6 +391,16 @@ func validateObservationFact(fact ObservationFact, index int) error {
 		}
 	case ObservationKindComponent:
 		// subject identity already validated above
+	case ObservationKindTargetState:
+		if fact.Subject.ID == "" || fact.Subject.Name == "" {
+			return fmt.Errorf("%w: fact %d target-state subject destination and object are required", ErrInvalidObservationRecord, index)
+		}
+		if fact.Key != "suppression" && fact.Key != "visibility" && fact.Key != "existence" {
+			return fmt.Errorf("%w: fact %d target-state key is invalid", ErrInvalidObservationRecord, index)
+		}
+		if fact.Value.Kind != "target_state_evidence" || fact.Value.Raw == "" {
+			return fmt.Errorf("%w: fact %d target-state evidence value is required", ErrInvalidObservationRecord, index)
+		}
 	}
 
 	if err := validateObservationEvidence(fact.Evidence, index); err != nil {

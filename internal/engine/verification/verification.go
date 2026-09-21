@@ -30,6 +30,9 @@ var (
 	ErrParameterMismatch          = errors.New("parameter mismatch")
 	ErrMetadataMismatch           = errors.New("metadata mismatch")
 	ErrReferenceMismatch          = errors.New("reference mismatch")
+	ErrTargetStateMismatch        = errors.New("target state mismatch")
+	ErrTargetMissing              = errors.New("target missing")
+	ErrNativeEvidenceUnavailable  = errors.New("native evidence unavailable")
 	ErrRequiredObservationMissing = errors.New("required observation missing")
 	ErrObservationMissing         = ErrRequiredObservationMissing
 	ErrInternal                   = errors.New("internal verification error")
@@ -121,6 +124,12 @@ func (e *VerifyError) Unwrap() []error {
 			return []error{ErrMetadataMismatch}
 		case FailureClassReferenceMismatch:
 			return []error{ErrReferenceMismatch}
+		case FailureClassTargetStateMismatch:
+			return []error{ErrTargetStateMismatch}
+		case FailureClassTargetMissing:
+			return []error{ErrTargetMissing}
+		case FailureClassNativeEvidenceUnavailable:
+			return []error{ErrNativeEvidenceUnavailable}
 		case FailureClassRequiredObservationMissing:
 			return []error{ErrObservationMissing}
 		case FailureClassInternalError:
@@ -143,6 +152,12 @@ func (e *VerifyError) Unwrap() []error {
 		return []error{ErrMetadataMismatch, e.Err}
 	case FailureClassReferenceMismatch:
 		return []error{ErrReferenceMismatch, e.Err}
+	case FailureClassTargetStateMismatch:
+		return []error{ErrTargetStateMismatch, e.Err}
+	case FailureClassTargetMissing:
+		return []error{ErrTargetMissing, e.Err}
+	case FailureClassNativeEvidenceUnavailable:
+		return []error{ErrNativeEvidenceUnavailable, e.Err}
 	case FailureClassRequiredObservationMissing:
 		return []error{ErrObservationMissing, e.Err}
 	case FailureClassInternalError:
@@ -169,10 +184,29 @@ type Observe struct {
 }
 
 type Expected struct {
-	Components []ExpectedComponent `json:"components"`
-	Parameters []ExpectedParameter `json:"parameters"`
-	Metadata   []ExpectedMetadata  `json:"metadata"`
-	References []ExpectedReference `json:"references"`
+	Components  []ExpectedComponent  `json:"components"`
+	Parameters  []ExpectedParameter  `json:"parameters"`
+	Metadata    []ExpectedMetadata   `json:"metadata"`
+	References  []ExpectedReference  `json:"references"`
+	TargetState *ExpectedTargetState `json:"-"`
+}
+
+type ExpectedTargetState struct {
+	Suppression []ExpectedBooleanTargetState   `json:"suppression"`
+	Visibility  []ExpectedBooleanTargetState   `json:"visibility"`
+	Existence   []ExpectedExistenceTargetState `json:"existence"`
+}
+
+type ExpectedBooleanTargetState struct {
+	Destination string `json:"destination"`
+	Object      string `json:"object"`
+	Value       bool   `json:"value"`
+}
+
+type ExpectedExistenceTargetState struct {
+	Destination string `json:"destination"`
+	Object      string `json:"object"`
+	Status      string `json:"status"`
 }
 
 type ExpectedComponent struct {
@@ -266,6 +300,9 @@ const (
 	FailureClassParameterMismatch          FailureClass = "parameter_mismatch"
 	FailureClassMetadataMismatch           FailureClass = "metadata_mismatch"
 	FailureClassReferenceMismatch          FailureClass = "reference_mismatch"
+	FailureClassTargetStateMismatch        FailureClass = "target_state_mismatch"
+	FailureClassTargetMissing              FailureClass = "target_missing"
+	FailureClassNativeEvidenceUnavailable  FailureClass = "native_evidence_unavailable"
 	FailureClassRequiredObservationMissing FailureClass = "required_observation_missing"
 	FailureClassInternalError              FailureClass = "internal_verification_error"
 )
@@ -278,10 +315,11 @@ type Result struct {
 }
 
 type CategoryResults struct {
-	Components CategoryResult `json:"components"`
-	Parameters CategoryResult `json:"parameters"`
-	Metadata   CategoryResult `json:"metadata"`
-	References CategoryResult `json:"references"`
+	Components  CategoryResult `json:"components"`
+	Parameters  CategoryResult `json:"parameters"`
+	Metadata    CategoryResult `json:"metadata"`
+	References  CategoryResult `json:"references"`
+	TargetState CategoryResult `json:"targetState,omitempty"`
 }
 
 type CategoryResult struct {
@@ -292,11 +330,13 @@ type CategoryResult struct {
 }
 
 const (
-	componentVerificationDisabledMessage = "component verification is disabled"
-	componentsNotEvaluatedMessage        = "component verification was not evaluated"
-	parameterVerificationDisabledMessage = "parameter verification is disabled in schema version 1.0 baseline"
-	metadataNotEvaluatedMessage          = "metadata verification was not evaluated"
-	referencesNotEvaluatedMessage        = "reference verification was not evaluated"
+	componentVerificationDisabledMessage   = "component verification is disabled"
+	componentsNotEvaluatedMessage          = "component verification was not evaluated"
+	parameterVerificationDisabledMessage   = "parameter verification is disabled in schema version 1.0 baseline"
+	metadataNotEvaluatedMessage            = "metadata verification was not evaluated"
+	referencesNotEvaluatedMessage          = "reference verification was not evaluated"
+	targetStateNotEvaluatedMessage         = "target-state verification was not evaluated"
+	targetStateVerificationDisabledMessage = "target-state verification is disabled"
 )
 
 func Parse(data []byte) (*Contract, error) {
@@ -384,6 +424,24 @@ func Validate(contract *Contract) error {
 		}
 		if err := validateTargetIdentities("observationContext.targetState.existence", request.Existence); err != nil {
 			return err
+		}
+	}
+	if expected := contract.Expected.TargetState; expected != nil {
+		if expected.Suppression == nil || expected.Visibility == nil || expected.Existence == nil {
+			return &ValidationError{Message: "expected.targetState collections are required"}
+		}
+		if err := validateExpectedBooleanTargetStates("expected.targetState.suppression", expected.Suppression); err != nil {
+			return err
+		}
+		if err := validateExpectedBooleanTargetStates("expected.targetState.visibility", expected.Visibility); err != nil {
+			return err
+		}
+		if err := validateExpectedExistenceTargetStates("expected.targetState.existence", expected.Existence); err != nil {
+			return err
+		}
+		request := contract.ObservationContext.TargetState
+		if request == nil || !targetStateExpectationsMatchRequest(*expected, *request) {
+			return &ValidationError{Message: "expected.targetState identities must exactly match observationContext.targetState"}
 		}
 	}
 	for index, component := range contract.Expected.Components {
@@ -610,6 +668,7 @@ func DeriveFromManifestAndWorkingCopy(manifest planner.WriteExportManifestPayloa
 	}
 	contract.ObservationContext.TargetState = deriveTargetStateRequest(manifest)
 	contract.Observe.TargetState = contract.ObservationContext.TargetState != nil
+	contract.Expected.TargetState = deriveExpectedTargetState(manifest)
 	if contract.Checks.Parameters.Enabled {
 		contract.ObservationContext.Parameters = deriveObservedParameterBindings(manifest.Verification.ObservationParameterLinks)
 	}
@@ -623,15 +682,20 @@ func Verify(contract *Contract, obs *observed.Observed) (*Result, error) {
 	if err := Validate(contract); err != nil {
 		return failResult(FailureClassContractInvalid, fmt.Sprintf("verification contract invalid: %v", err), defaultCategoryResults(contract), err)
 	}
+	if contract.Observe.TargetState && contract.Expected.TargetState == nil {
+		err := &ValidationError{Message: "expected target state is required for target-state verification"}
+		return failResult(FailureClassContractInvalid, fmt.Sprintf("verification contract invalid: %v", err), defaultCategoryResults(contract), err)
+	}
 	if err := validateObservedForVerification(obs); err != nil {
 		return failResult(FailureClassObservedInvalid, fmt.Sprintf("observed artifact invalid: %v", err), defaultCategoryResults(contract), err)
 	}
 
 	categories := CategoryResults{
-		Components: componentCategoryResult(contract),
-		Parameters: parameterCategoryResult(contract),
-		Metadata:   skippedCategoryResult(contract.Checks.Metadata.Enabled, metadataNotEvaluatedMessage),
-		References: skippedCategoryResult(contract.Checks.References.Enabled, referencesNotEvaluatedMessage),
+		Components:  componentCategoryResult(contract),
+		Parameters:  parameterCategoryResult(contract),
+		Metadata:    skippedCategoryResult(contract.Checks.Metadata.Enabled, metadataNotEvaluatedMessage),
+		References:  skippedCategoryResult(contract.Checks.References.Enabled, referencesNotEvaluatedMessage),
+		TargetState: skippedCategoryResult(contract.Observe.TargetState, targetStateNotEvaluatedMessage),
 	}
 
 	if contract.Checks.Components.Enabled {
@@ -645,6 +709,9 @@ func Verify(contract *Contract, obs *observed.Observed) (*Result, error) {
 	}
 	if contract.Checks.References.Enabled {
 		categories.References = verifyReferences(contract.Expected.References, obs.Observation.References)
+	}
+	if contract.Observe.TargetState {
+		categories.TargetState = verifyTargetState(*contract.Expected.TargetState, obs.Observation.TargetState)
 	}
 
 	result := aggregateResult(categories)
@@ -682,6 +749,7 @@ func firstEnabledFailure(categories CategoryResults) *CategoryResult {
 		categories.Parameters,
 		categories.Metadata,
 		categories.References,
+		categories.TargetState,
 	}
 	for i := range ordered {
 		if !ordered[i].Enabled || ordered[i].Status != CategoryStatusFail {
@@ -798,6 +866,87 @@ func deriveTargetStateRequest(manifest planner.WriteExportManifestPayload) *Targ
 	slices.SortFunc(request.Visibility, compareTargetIdentities)
 	slices.SortFunc(request.Existence, compareTargetIdentities)
 	return request
+}
+
+func deriveExpectedTargetState(manifest planner.WriteExportManifestPayload) *ExpectedTargetState {
+	expected := &ExpectedTargetState{Suppression: []ExpectedBooleanTargetState{}, Visibility: []ExpectedBooleanTargetState{}, Existence: []ExpectedExistenceTargetState{}}
+	appendCollection := func(destination string, collection *planner.ExportManifestMutationCollection) {
+		if collection == nil {
+			return
+		}
+		for _, mutation := range collection.Suppression {
+			expected.Suppression = append(expected.Suppression, ExpectedBooleanTargetState{Destination: destination, Object: mutation.Object, Value: mutation.Suppressed})
+		}
+		for _, mutation := range collection.Visibility {
+			expected.Visibility = append(expected.Visibility, ExpectedBooleanTargetState{Destination: destination, Object: mutation.Object, Value: mutation.Visible})
+		}
+		for _, mutation := range collection.Deletion {
+			expected.Existence = append(expected.Existence, ExpectedExistenceTargetState{Destination: destination, Object: mutation.Object, Status: observed.ExistenceEvidenceStatusAbsent})
+		}
+	}
+	appendCollection(TargetDestinationAssembly, manifest.AssemblyMutations)
+	appendCollection(TargetDestinationPart, manifest.PartMutations)
+	if len(expected.Suppression)+len(expected.Visibility)+len(expected.Existence) == 0 {
+		return nil
+	}
+	slices.SortFunc(expected.Suppression, compareExpectedBooleanTargetStates)
+	slices.SortFunc(expected.Visibility, compareExpectedBooleanTargetStates)
+	slices.SortFunc(expected.Existence, compareExpectedExistenceTargetStates)
+	return expected
+}
+
+func validateExpectedBooleanTargetStates(location string, entries []ExpectedBooleanTargetState) error {
+	identities := make([]TargetIdentity, len(entries))
+	for i, entry := range entries {
+		identities[i] = TargetIdentity{Destination: entry.Destination, Object: entry.Object}
+	}
+	return validateTargetIdentities(location, identities)
+}
+
+func validateExpectedExistenceTargetStates(location string, entries []ExpectedExistenceTargetState) error {
+	identities := make([]TargetIdentity, len(entries))
+	for i, entry := range entries {
+		if entry.Status != observed.ExistenceEvidenceStatusAbsent {
+			return &ValidationError{Message: fmt.Sprintf("%s[%d].status must be %q", location, i, observed.ExistenceEvidenceStatusAbsent)}
+		}
+		identities[i] = TargetIdentity{Destination: entry.Destination, Object: entry.Object}
+	}
+	return validateTargetIdentities(location, identities)
+}
+
+func targetStateExpectationsMatchRequest(expected ExpectedTargetState, request TargetStateRequest) bool {
+	if len(expected.Suppression) != len(request.Suppression) || len(expected.Visibility) != len(request.Visibility) || len(expected.Existence) != len(request.Existence) {
+		return false
+	}
+	suppression := append([]TargetIdentity(nil), request.Suppression...)
+	visibility := append([]TargetIdentity(nil), request.Visibility...)
+	existence := append([]TargetIdentity(nil), request.Existence...)
+	slices.SortFunc(suppression, compareTargetIdentities)
+	slices.SortFunc(visibility, compareTargetIdentities)
+	slices.SortFunc(existence, compareTargetIdentities)
+	for i, entry := range expected.Suppression {
+		if (TargetIdentity{Destination: entry.Destination, Object: entry.Object}) != suppression[i] {
+			return false
+		}
+	}
+	for i, entry := range expected.Visibility {
+		if (TargetIdentity{Destination: entry.Destination, Object: entry.Object}) != visibility[i] {
+			return false
+		}
+	}
+	for i, entry := range expected.Existence {
+		if (TargetIdentity{Destination: entry.Destination, Object: entry.Object}) != existence[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func compareExpectedBooleanTargetStates(left, right ExpectedBooleanTargetState) int {
+	return compareTargetIdentities(TargetIdentity{left.Destination, left.Object}, TargetIdentity{right.Destination, right.Object})
+}
+func compareExpectedExistenceTargetStates(left, right ExpectedExistenceTargetState) int {
+	return compareTargetIdentities(TargetIdentity{left.Destination, left.Object}, TargetIdentity{right.Destination, right.Object})
 }
 
 func validateTargetIdentities(location string, identities []TargetIdentity) error {
@@ -988,6 +1137,84 @@ func verifyReferences(expected []ExpectedReference, actual []observed.Reference)
 	return passedCategoryResult(true, fmt.Sprintf("verified %d reference entries", len(expected)))
 }
 
+func verifyTargetState(expected ExpectedTargetState, actual *observed.TargetStateObservation) CategoryResult {
+	if actual == nil {
+		return failedCategoryResult(true, FailureClassRequiredObservationMissing, "required target-state observation is missing")
+	}
+	for _, entry := range expected.Suppression {
+		result := verifyBooleanTargetState("suppression", entry, actual.Suppression)
+		if result != nil {
+			return *result
+		}
+	}
+	for _, entry := range expected.Visibility {
+		result := verifyBooleanTargetState("visibility", entry, actual.Visibility)
+		if result != nil {
+			return *result
+		}
+	}
+	for _, entry := range expected.Existence {
+		var matched *observed.ExistenceTargetEvidence
+		for i := range actual.Existence {
+			if actual.Existence[i].Destination == entry.Destination && actual.Existence[i].Object == entry.Object {
+				matched = &actual.Existence[i]
+				break
+			}
+		}
+		identity := fmt.Sprintf("%s/%s", entry.Destination, entry.Object)
+		if matched == nil {
+			return failedCategoryResult(true, FailureClassRequiredObservationMissing, fmt.Sprintf("required existence evidence for target %q is missing", identity))
+		}
+		switch matched.Status {
+		case observed.ExistenceEvidenceStatusAbsent:
+		case observed.ExistenceEvidenceStatusExists:
+			return failedCategoryResult(true, FailureClassTargetStateMismatch, fmt.Sprintf("target %q existence mismatch: want %q, got %q", identity, entry.Status, matched.Status))
+		case observed.ExistenceEvidenceStatusUnavailable:
+			return failedCategoryResult(true, FailureClassNativeEvidenceUnavailable, fmt.Sprintf("native existence evidence for target %q is unavailable", identity))
+		default:
+			return failedCategoryResult(true, FailureClassInternalError, fmt.Sprintf("internal verification error: unsupported validated existence status %q", matched.Status))
+		}
+	}
+	count := len(expected.Suppression) + len(expected.Visibility) + len(expected.Existence)
+	return passedCategoryResult(true, fmt.Sprintf("verified %d target-state entries", count))
+}
+
+func verifyBooleanTargetState(family string, expected ExpectedBooleanTargetState, actual []observed.BooleanTargetEvidence) *CategoryResult {
+	var matched *observed.BooleanTargetEvidence
+	for i := range actual {
+		if actual[i].Destination == expected.Destination && actual[i].Object == expected.Object {
+			matched = &actual[i]
+			break
+		}
+	}
+	identity := fmt.Sprintf("%s/%s", expected.Destination, expected.Object)
+	if matched == nil {
+		result := failedCategoryResult(true, FailureClassRequiredObservationMissing, fmt.Sprintf("required %s evidence for target %q is missing", family, identity))
+		return &result
+	}
+	switch matched.Status {
+	case observed.BooleanEvidenceStatusObserved:
+		if matched.Value == nil {
+			result := failedCategoryResult(true, FailureClassInternalError, fmt.Sprintf("internal verification error: observed %s value for target %q is absent", family, identity))
+			return &result
+		}
+		if *matched.Value != expected.Value {
+			result := failedCategoryResult(true, FailureClassTargetStateMismatch, fmt.Sprintf("target %q %s mismatch: want %t, got %t", identity, family, expected.Value, *matched.Value))
+			return &result
+		}
+		return nil
+	case observed.BooleanEvidenceStatusTargetMissing:
+		result := failedCategoryResult(true, FailureClassTargetMissing, fmt.Sprintf("target %q is missing while verifying %s", identity, family))
+		return &result
+	case observed.BooleanEvidenceStatusUnavailable:
+		result := failedCategoryResult(true, FailureClassNativeEvidenceUnavailable, fmt.Sprintf("native %s evidence for target %q is unavailable", family, identity))
+		return &result
+	default:
+		result := failedCategoryResult(true, FailureClassInternalError, fmt.Sprintf("internal verification error: unsupported validated %s status %q", family, matched.Status))
+		return &result
+	}
+}
+
 func failResult(class FailureClass, message string, categories CategoryResults, cause error) (*Result, error) {
 	return &Result{
 		Status:     StatusFail,
@@ -1033,16 +1260,18 @@ func validateObservedForVerification(obs *observed.Observed) error {
 
 func defaultCategoryResults(contract *Contract) CategoryResults {
 	results := CategoryResults{
-		Components: skippedCategoryResult(false, componentsNotEvaluatedMessage),
-		Parameters: parameterCategoryResult(nil),
-		Metadata:   skippedCategoryResult(false, metadataNotEvaluatedMessage),
-		References: skippedCategoryResult(false, referencesNotEvaluatedMessage),
+		Components:  skippedCategoryResult(false, componentsNotEvaluatedMessage),
+		Parameters:  parameterCategoryResult(nil),
+		Metadata:    skippedCategoryResult(false, metadataNotEvaluatedMessage),
+		References:  skippedCategoryResult(false, referencesNotEvaluatedMessage),
+		TargetState: skippedCategoryResult(false, targetStateVerificationDisabledMessage),
 	}
 	if contract != nil {
 		results.Components = componentCategoryResult(contract)
 		results.Parameters = parameterCategoryResult(contract)
 		results.Metadata = skippedCategoryResult(contract.Checks.Metadata.Enabled, metadataNotEvaluatedMessage)
 		results.References = skippedCategoryResult(contract.Checks.References.Enabled, referencesNotEvaluatedMessage)
+		results.TargetState = skippedCategoryResult(contract.Observe.TargetState, targetStateNotEvaluatedMessage)
 	}
 	return results
 }

@@ -124,6 +124,13 @@ func copyVerificationContract(in verification.Contract) verification.Contract {
 	out.Expected.Parameters = append([]verification.ExpectedParameter(nil), in.Expected.Parameters...)
 	out.Expected.Metadata = append([]verification.ExpectedMetadata(nil), in.Expected.Metadata...)
 	out.Expected.References = append([]verification.ExpectedReference(nil), in.Expected.References...)
+	if in.Expected.TargetState != nil {
+		targetState := *in.Expected.TargetState
+		targetState.Suppression = append([]verification.ExpectedBooleanTargetState(nil), in.Expected.TargetState.Suppression...)
+		targetState.Visibility = append([]verification.ExpectedBooleanTargetState(nil), in.Expected.TargetState.Visibility...)
+		targetState.Existence = append([]verification.ExpectedExistenceTargetState(nil), in.Expected.TargetState.Existence...)
+		out.Expected.TargetState = &targetState
+	}
 	return out
 }
 

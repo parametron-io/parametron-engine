@@ -20,10 +20,11 @@ const (
 type VerificationCategory string
 
 const (
-	VerificationCategoryComponents VerificationCategory = "components"
-	VerificationCategoryParameters VerificationCategory = "parameters"
-	VerificationCategoryMetadata   VerificationCategory = "metadata"
-	VerificationCategoryReferences VerificationCategory = "references"
+	VerificationCategoryComponents  VerificationCategory = "components"
+	VerificationCategoryParameters  VerificationCategory = "parameters"
+	VerificationCategoryMetadata    VerificationCategory = "metadata"
+	VerificationCategoryReferences  VerificationCategory = "references"
+	VerificationCategoryTargetState VerificationCategory = "target_state"
 )
 
 // VerificationFailureClass is a normalized verification failure classification vocabulary value.
@@ -36,6 +37,9 @@ const (
 	VerificationFailureClassParameterMismatch          VerificationFailureClass = "parameter_mismatch"
 	VerificationFailureClassMetadataMismatch           VerificationFailureClass = "metadata_mismatch"
 	VerificationFailureClassReferenceMismatch          VerificationFailureClass = "reference_mismatch"
+	VerificationFailureClassTargetStateMismatch        VerificationFailureClass = "target_state_mismatch"
+	VerificationFailureClassTargetMissing              VerificationFailureClass = "target_missing"
+	VerificationFailureClassNativeEvidenceUnavailable  VerificationFailureClass = "native_evidence_unavailable"
 	VerificationFailureClassRequiredObservationMissing VerificationFailureClass = "required_observation_missing"
 	VerificationFailureClassInternalError              VerificationFailureClass = "internal_verification_error"
 )
@@ -323,7 +327,7 @@ func knownVerificationOutcome(outcome VerificationOutcome) bool {
 func knownVerificationCategory(category VerificationCategory) bool {
 	switch NormalizeVerificationCategory(category) {
 	case VerificationCategoryComponents, VerificationCategoryParameters,
-		VerificationCategoryMetadata, VerificationCategoryReferences:
+		VerificationCategoryMetadata, VerificationCategoryReferences, VerificationCategoryTargetState:
 		return true
 	default:
 		return false
@@ -335,6 +339,8 @@ func knownVerificationFailureClass(class VerificationFailureClass) bool {
 	case VerificationFailureClassContractInvalid, VerificationFailureClassObservedInvalid,
 		VerificationFailureClassComponentMismatch, VerificationFailureClassParameterMismatch,
 		VerificationFailureClassMetadataMismatch, VerificationFailureClassReferenceMismatch,
+		VerificationFailureClassTargetStateMismatch, VerificationFailureClassTargetMissing,
+		VerificationFailureClassNativeEvidenceUnavailable,
 		VerificationFailureClassRequiredObservationMissing, VerificationFailureClassInternalError:
 		return true
 	default:
