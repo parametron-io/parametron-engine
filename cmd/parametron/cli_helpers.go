@@ -483,6 +483,7 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 			PlanHash:           opts.Planned.PlanHash,
 			Report:             runReport,
 			Metadata:           runMetadata,
+			Artifacts:          artifacts,
 			ReferenceTraversal: referenceTraversalRunEvidence(schedulerResult, executionErr == nil),
 		}
 		emitInput.CADRuntime, packageEmitErr = cadRuntimeRunEvidence(schedulerResult, executionErr == nil)
@@ -542,6 +543,11 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 		return nil, nil
 	}
 	evidence := &recordemit.CADRuntimeRunEvidence{}
+	evidence.ObservedValue = candidate.Observed
+	evidence.VerificationResult = candidate.VerificationResult
+	evidence.JobID = candidate.JobID
+	evidence.ProductKey = candidate.ProductKey
+	evidence.StepRef = candidate.StepID
 	for _, source := range []struct {
 		path    string
 		content *[]byte

@@ -11,6 +11,7 @@ import (
 	"parametron/internal/engine/adapter/freecad"
 	"parametron/internal/engine/artifact"
 	"parametron/internal/engine/cadruntime"
+	"parametron/internal/engine/observed"
 	"parametron/internal/engine/verification"
 )
 
@@ -57,6 +58,8 @@ type CADRuntimeOutcome struct {
 	ReferenceTraversalPath string
 	ReferenceTraversalJSON []byte
 	Artifacts              []CADRuntimeArtifactOutcome
+	Observed               *observed.Observed
+	VerificationResult     *verification.Result
 	Verification           artifact.VerificationOutcome
 	VerificationClass      verification.FailureClass
 	Failure                *CADRuntimeFailureOutcome
@@ -135,6 +138,11 @@ func cloneCADRuntimeOutcome(in *CADRuntimeOutcome) *CADRuntimeOutcome {
 	out := *in
 	out.Artifacts = append([]CADRuntimeArtifactOutcome(nil), in.Artifacts...)
 	out.ReferenceTraversalJSON = append([]byte(nil), in.ReferenceTraversalJSON...)
+	out.Observed = cloneObserved(in.Observed)
+	if in.VerificationResult != nil {
+		result := *in.VerificationResult
+		out.VerificationResult = &result
+	}
 	if in.Failure != nil {
 		failure := *in.Failure
 		out.Failure = &failure
@@ -154,6 +162,8 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 		ResultPath:             run.Runtime.ExecutionRequest.ResultPath,
 		ReferenceTraversalPath: run.Runtime.ReferenceTraversalPath,
 		ReferenceTraversalJSON: append([]byte(nil), run.Runtime.ReferenceTraversalJSON...),
+		Observed:               cloneObserved(run.Runtime.Observed),
+		VerificationResult:     cloneVerificationResult(run.Verification),
 		Verification:           artifact.VerificationOutcomeUnknown,
 	}
 
@@ -267,6 +277,61 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 	default:
 		return e.consumptionError(CADRuntimeConsumptionStageOutcomeValidation, req, identity.ID, "", "", "", "", verificationErr.Stage, orchestrationErr)
 	}
+}
+
+func cloneVerificationResult(in *verification.Result) *verification.Result {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	return &out
+}
+
+func cloneObserved(in *observed.Observed) *observed.Observed {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	out.Observation.Parameters = append(make([]observed.Parameter, 0, len(in.Observation.Parameters)), in.Observation.Parameters...)
+	for i := range out.Observation.Parameters {
+		out.Observation.Parameters[i].Value = cloneObservedValue(in.Observation.Parameters[i].Value)
+	}
+	out.Observation.Metadata = append(make([]observed.Metadata, 0, len(in.Observation.Metadata)), in.Observation.Metadata...)
+	for i := range out.Observation.Metadata {
+		out.Observation.Metadata[i].Value = cloneObservedValue(in.Observation.Metadata[i].Value)
+	}
+	out.Observation.References = append(make([]observed.Reference, 0, len(in.Observation.References)), in.Observation.References...)
+	out.Observation.Components = append(make([]observed.Component, 0, len(in.Observation.Components)), in.Observation.Components...)
+	if in.Observation.TargetState != nil {
+		targetState := *in.Observation.TargetState
+		targetState.Suppression = cloneBooleanTargetEvidence(in.Observation.TargetState.Suppression)
+		targetState.Visibility = cloneBooleanTargetEvidence(in.Observation.TargetState.Visibility)
+		targetState.Existence = append(make([]observed.ExistenceTargetEvidence, 0, len(in.Observation.TargetState.Existence)), in.Observation.TargetState.Existence...)
+		out.Observation.TargetState = &targetState
+	}
+	return &out
+}
+
+func cloneBooleanTargetEvidence(in []observed.BooleanTargetEvidence) []observed.BooleanTargetEvidence {
+	out := append(make([]observed.BooleanTargetEvidence, 0, len(in)), in...)
+	for i := range out {
+		if in[i].Value != nil {
+			value := *in[i].Value
+			out[i].Value = &value
+		}
+	}
+	return out
+}
+
+func cloneObservedValue(in observed.Value) observed.Value {
+	if in.IsZero() {
+		return observed.Value{}
+	}
+	out, err := observed.NewValue(in.Raw())
+	if err != nil {
+		panic("copy validated observed value: " + err.Error())
+	}
+	return out
 }
 
 func validateConsumedRuntimeIdentity(req adapter.CADRuntimeOrchestrationRequest, run cadruntime.FreeCADRuntimeVerifiedRun) error {

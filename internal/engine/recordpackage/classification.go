@@ -1,6 +1,10 @@
 package recordpackage
 
-import "strings"
+import (
+	"strings"
+
+	"parametron/internal/engine/recordcontract"
+)
 
 // RawReportContractPath returns the canonical raw report evidence contract path.
 func RawReportContractPath() string {
@@ -61,11 +65,23 @@ func IsNormalizedRecordContractPath(path string) bool {
 	if err := ValidateContractPath(path); err != nil {
 		return false
 	}
+	if isArtifactRecordContractPath(path) {
+		return true
+	}
 	entry, ok := entryForValidatedContractPath(path)
 	if !ok {
 		return false
 	}
 	return entry.Role == EntryRoleNormalizedRecord && entry.Kind == EntryKindFile
+}
+
+func isArtifactRecordContractPath(contractPath string) bool {
+	parts := strings.Split(contractPath, "/")
+	if len(parts) != 4 || parts[0] != RecordsDirectoryName || parts[1] != ArtifactRecordsDirectoryName || parts[2] == "" {
+		return false
+	}
+	fileName, ok := recordcontract.FileNameForFamily(recordcontract.FamilyArtifact)
+	return ok && parts[3] == fileName
 }
 
 // IsRawHandoffRuntimeProvenanceContractPath reports whether path is the raw handoff
