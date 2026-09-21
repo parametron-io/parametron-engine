@@ -3,6 +3,7 @@ package recordmap
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"parametron/internal/engine/executor"
 	"parametron/internal/engine/recordcontract"
@@ -19,6 +20,10 @@ type CADRuntimeFailureMappingInput struct {
 	Provenance           recordcontract.Provenance
 	Linkage              recordcontract.FailureLinkage
 	EvidenceDigestSHA256 string
+	// RetryCount and OccurredAt are Engine-owned operational context supplied by
+	// the caller (from the run report); they are never derived from the runtime.
+	RetryCount int
+	OccurredAt *time.Time
 }
 
 // MapCADRuntimeFailure maps already interpreted, adapter-neutral CAD runtime
@@ -37,11 +42,13 @@ func MapCADRuntimeFailure(input CADRuntimeFailureMappingInput) (recordcontract.F
 		RecordKey:  strings.TrimSpace(input.RecordKey) + failureRecordKeySuffix,
 		Provenance: provenance,
 		Failure: recordcontract.FailureSummary{
-			Class:    recordcontract.FailureClass(strings.TrimSpace(input.Failure.Class)),
-			Severity: recordcontract.FailureSeverityError,
-			Stage:    recordcontract.FailureStage(strings.TrimSpace(input.Failure.SemanticStage)),
-			Code:     strings.TrimSpace(input.Failure.Code),
-			Message:  strings.TrimSpace(input.Failure.Message),
+			Class:      recordcontract.FailureClass(strings.TrimSpace(input.Failure.Class)),
+			Severity:   recordcontract.FailureSeverityError,
+			Stage:      recordcontract.FailureStage(strings.TrimSpace(input.Failure.SemanticStage)),
+			Code:       strings.TrimSpace(input.Failure.Code),
+			Message:    strings.TrimSpace(input.Failure.Message),
+			RetryCount: input.RetryCount,
+			OccurredAt: optionalTimePtr(input.OccurredAt),
 			Linkage: recordcontract.FailureLinkage{
 				JobID:      strings.TrimSpace(input.Linkage.JobID),
 				ProductKey: strings.TrimSpace(input.Linkage.ProductKey),

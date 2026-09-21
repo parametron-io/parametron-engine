@@ -395,58 +395,6 @@ func TestCLIProjectRun_NonCADRunEmitsNoObservationOrVerificationRecords(t *testi
 	}
 }
 
-func TestCLIProjectRun_FailedRuntimeKeepsReportDerivedFailureAndSkipsRuntimeMappings(t *testing.T) {
-	resetGlobals()
-	chdirToTemp(t)
-	setPathWithoutFreeCAD(t)
-
-	projectDir := writeProjectExecutionFixture(t)
-	run := runFailedCLIExecutionForProject(t, projectDir, filepath.Join(t.TempDir(), "out"))
-	if run.err == nil {
-		t.Fatal("expected a failed run")
-	}
-	files := packageFilesFor(t, run.result)
-	manifest := readCLIRecordPackageManifest(t, recordPackageRoot(run.result.RunRoot))
-	families := manifestFamilies(manifest)
-
-	if len(families["execution"]) != 1 || len(families["failure"]) != 1 {
-		t.Fatalf("manifest families = %#v, want one execution and one report-derived failure record", families)
-	}
-	for _, family := range []string{"observation", "verification", "reference"} {
-		if len(families[family]) != 0 {
-			t.Fatalf("%s record emitted for a failed run: %#v", family, families[family])
-		}
-	}
-	// The aligned runtime result (status "failed") is not evidence the failure
-	// record is derived from: no runtime raw evidence is captured for a failed
-	// run and the failure record cites only the report.
-	for _, contractPath := range []string{
-		recordpackage.RawRuntimeResultContractPath(), recordpackage.RawObservedContractPath(), recordpackage.RawVerificationContractPath(),
-	} {
-		if _, ok := files[contractPath]; ok {
-			t.Fatalf("raw runtime evidence %q captured for a failed run", contractPath)
-		}
-	}
-	failure := readCLIFailureRecord(t, recordPackageRoot(run.result.RunRoot))
-	for _, evidence := range failure.Failure.Evidence {
-		if evidence.SourceKind != "report" || evidence.SourceRef != recordpackage.RawReportContractPath() {
-			t.Fatalf("failure record cites non-report evidence %+v; aligned runtime results must not be routed through the legacy runtime-result mapper", evidence)
-		}
-	}
-	if !hasFailureRecordEvidence(failure, "report", recordpackage.RawReportContractPath()) {
-		t.Fatalf("failure evidence = %#v, want the raw report", failure.Failure.Evidence)
-	}
-	// Artifact records that exist are still identity-addressed and indexed.
-	for _, entry := range families["artifact"] {
-		if want := "records/artifacts/" + entry.IdentityID + "/parametron.artifact-record.json"; entry.ContractPath != want {
-			t.Fatalf("artifact entry %#v path != %q", entry, want)
-		}
-		if _, ok := files[entry.ContractPath]; !ok {
-			t.Fatalf("manifest indexes %q but it was not written", entry.ContractPath)
-		}
-	}
-}
-
 func TestCLIProjectRun_EquivalentRunsInDifferentOutputRootsKeepArtifactAndExecutionRecordsStable(t *testing.T) {
 	resetGlobals()
 	chdirToTemp(t)

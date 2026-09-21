@@ -42,6 +42,12 @@ func TestRecordContractPathsDeriveFromRegistry(t *testing.T) {
 	seen := make(map[recordcontract.Family]bool, len(definitions))
 
 	for _, def := range definitions {
+		seen[def.Family] = true
+		if def.Family == recordcontract.FamilyArtifact {
+			// Artifact records are plural and identity-addressed; the family
+			// has no singleton registry path.
+			continue
+		}
 		got, ok := recordpackage.RecordContractPath(def.Family)
 		if !ok {
 			t.Fatalf("RecordContractPath(%q) ok = false, want true", def.Family)
@@ -55,13 +61,38 @@ func TestRecordContractPathsDeriveFromRegistry(t *testing.T) {
 		if got != want {
 			t.Fatalf("RecordContractPath(%q) = %q, want %q", def.Family, got, want)
 		}
-		seen[def.Family] = true
 	}
 
 	for _, family := range expectedRecordFamilies() {
 		if !seen[family] {
 			t.Fatalf("recordcontract.Definitions() missing expected family %q", family)
 		}
+	}
+}
+
+func TestSingletonArtifactRecordPathIsNotAContractPath(t *testing.T) {
+	t.Parallel()
+
+	const singleton = "records/parametron.artifact-record.json"
+
+	if got, ok := recordpackage.RecordContractPath(recordcontract.FamilyArtifact); ok {
+		t.Fatalf("RecordContractPath(artifact) = %q, true; want no singleton path", got)
+	}
+	for _, entry := range recordpackage.RecordEntries() {
+		if entry.ContractPath == singleton || entry.Family == recordcontract.FamilyArtifact {
+			t.Fatalf("RecordEntries() contains artifact/singleton entry %#v", entry)
+		}
+	}
+	if recordpackage.IsNormalizedRecordContractPath(singleton) {
+		t.Fatalf("IsNormalizedRecordContractPath(%q) = true, want false", singleton)
+	}
+	if entry, ok := recordpackage.EntryForContractPath(singleton); ok {
+		t.Fatalf("EntryForContractPath(%q) = %#v, true; want false", singleton, entry)
+	}
+	identityPath, err := recordpackage.ArtifactRecordContractPath("abc123")
+	if err != nil || identityPath != "records/artifacts/abc123/parametron.artifact-record.json" ||
+		!recordpackage.IsNormalizedRecordContractPath(identityPath) {
+		t.Fatalf("identity-addressed artifact path = %q, %v", identityPath, err)
 	}
 }
 
@@ -83,14 +114,21 @@ func TestUnknownRecordFamilyBehavior(t *testing.T) {
 func TestRecordEntriesFollowRegistryOrder(t *testing.T) {
 	t.Parallel()
 
-	definitions := recordcontract.Definitions()
+	// RecordEntries lists only the singleton record families, in registry
+	// order; the plural artifact family is addressed by identity instead.
+	var singletons []recordcontract.Definition
+	for _, def := range recordcontract.Definitions() {
+		if def.Family != recordcontract.FamilyArtifact {
+			singletons = append(singletons, def)
+		}
+	}
 	entries := recordpackage.RecordEntries()
-	if len(entries) != len(definitions) {
-		t.Fatalf("len(RecordEntries()) = %d, want %d", len(entries), len(definitions))
+	if len(entries) != len(singletons) {
+		t.Fatalf("len(RecordEntries()) = %d, want %d", len(entries), len(singletons))
 	}
 
 	for i, entry := range entries {
-		def := definitions[i]
+		def := singletons[i]
 		wantPath, ok := recordpackage.RecordContractPath(def.Family)
 		if !ok {
 			t.Fatalf("RecordContractPath(%q) ok = false, want true", def.Family)

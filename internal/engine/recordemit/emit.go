@@ -110,7 +110,7 @@ func EmitRunPackage(input RunEmitInput) error {
 		records = append(records, recordpackage.ArtifactRecord(artifactRecord))
 	}
 	if input.CADRuntime != nil {
-		runtimeRecords, runtimeFailure, err := mapCADRuntimeRecords(input.CADRuntime, recordKey, provenance)
+		runtimeRecords, runtimeFailure, err := mapCADRuntimeRecords(input.CADRuntime, recordKey, planHash, provenance, failureRecord)
 		if err != nil {
 			return err
 		}
@@ -155,7 +155,7 @@ func EmitRunPackage(input RunEmitInput) error {
 	})
 }
 
-func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey string, provenance recordcontract.Provenance) ([]recordpackage.Record, *recordcontract.FailureRecord, error) {
+func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey, planHash string, provenance recordcontract.Provenance, reportFailure *recordcontract.FailureRecord) ([]recordpackage.Record, *recordcontract.FailureRecord, error) {
 	if evidence == nil {
 		return nil, nil, nil
 	}
@@ -190,13 +190,26 @@ func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey string, pro
 	}
 	var failureRecord *recordcontract.FailureRecord
 	if evidence.Failure != nil {
-		mapped, err := recordmap.MapCADRuntimeFailure(recordmap.CADRuntimeFailureMappingInput{
+		// A failed run has no metadata provenance; like the report-derived
+		// failure record it replaces, the record still names its plan.
+		failureProvenance := provenance
+		if strings.TrimSpace(failureProvenance.Plan.PlanHash) == "" {
+			failureProvenance.Plan.PlanHash = planHash
+		}
+		mappingInput := recordmap.CADRuntimeFailureMappingInput{
 			Failure:              *evidence.Failure,
 			RecordKey:            recordKey,
-			Provenance:           provenance,
+			Provenance:           failureProvenance,
 			Linkage:              recordcontract.FailureLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
 			EvidenceDigestSHA256: evidenceDigest(evidence.Result),
-		})
+		}
+		// Only Engine-owned operational context comes from the report-derived
+		// failure; class, stage, code and message stay runtime-native.
+		if reportFailure != nil {
+			mappingInput.RetryCount = reportFailure.Failure.RetryCount
+			mappingInput.OccurredAt = reportFailure.Failure.OccurredAt
+		}
+		mapped, err := recordmap.MapCADRuntimeFailure(mappingInput)
 		if err != nil {
 			return nil, nil, fmt.Errorf("recordemit: map CAD runtime failure: %w", err)
 		}

@@ -115,6 +115,7 @@ func TestIsNormalizedRecordContractPathClassifiesIdentityAddressedArtifactRecord
 	}
 
 	for _, path := range []string{
+		"records/parametron.artifact-record.json",
 		"records/artifacts/parametron.artifact-record.json",
 		"records/artifacts/abc123/other.json",
 		"records/artifacts/abc123/parametron.execution-record.json",

@@ -2040,7 +2040,9 @@ func TestCLIProjectRun_FailedNormalRunEmitsFailureRecordPackage(t *testing.T) {
 	}
 	assertManifestHasRecord(t, manifest, "execution", recordpackage.MustRecordContractPath("execution"), wantPackageKey)
 	assertManifestHasRecord(t, manifest, "failure", recordpackage.MustRecordContractPath("failure"), wantFailureKey)
-	assertManifestRawEvidencePaths(t, manifest, []string{recordpackage.RawReportContractPath()})
+	// The aligned runtime reported a native failure, so its result is
+	// preserved next to the report and the failure record is derived from it.
+	assertManifestRawEvidencePaths(t, manifest, []string{recordpackage.RawReportContractPath(), recordpackage.RawRuntimeResultContractPath()})
 
 	failure := readCLIFailureRecord(t, packageRoot)
 	if err := recordcontract.ValidateFailureRecord(failure); err != nil {
@@ -2058,8 +2060,11 @@ func TestCLIProjectRun_FailedNormalRunEmitsFailureRecordPackage(t *testing.T) {
 	if failure.Failure.Class == "" || failure.Failure.Stage == "" || failure.Failure.Severity == "" || failure.Failure.Message == "" {
 		t.Fatalf("failure summary missing required normalized material: %#v", failure.Failure)
 	}
-	if !hasFailureRecordEvidence(failure, "report", recordpackage.RawReportContractPath()) {
-		t.Fatalf("failure evidence = %#v, want raw report evidence", failure.Failure.Evidence)
+	if !hasFailureRecordEvidence(failure, "runtime-result", recordpackage.RawRuntimeResultContractPath()) {
+		t.Fatalf("failure evidence = %#v, want raw runtime result evidence", failure.Failure.Evidence)
+	}
+	if failure.Failure.Code != "controlled_failure" {
+		t.Fatalf("failure code = %q, want the native runtime failure code", failure.Failure.Code)
 	}
 	if failure.Provenance.Plan.PlanHash != run.planned.PlanHash {
 		t.Fatalf("failure provenance plan hash = %q, want %q", failure.Provenance.Plan.PlanHash, run.planned.PlanHash)
@@ -2901,6 +2906,15 @@ if mode == "malformed_result":
         handle.write("{")
     sys.exit(0)
 
+if mode == "failure_raw":
+    # Writes the exact bytes given in the environment, so tests control the
+    # result's formatting and content; no variable means no result file.
+    raw_result = os.environ.get("PARAMETRON_TASK13_RUNTIME_RAW_RESULT")
+    if raw_result is not None:
+        with open(result_path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(raw_result)
+    sys.exit(17)
+
 if mode == "failure":
     result = {
         "schemaVersion": "1.0",
@@ -2973,7 +2987,7 @@ if requested_target_state:
     def boolean_evidence(items, value):
         return [{"destination": i["destination"], "object": i["object"], "status": "observed", "value": value} for i in items]
     observed["observation"]["targetState"] = {
-        "suppression": boolean_evidence(requested_target_state.get("suppression", []), True),
+        "suppression": boolean_evidence(requested_target_state.get("suppression", []), mode != "verification_mismatch"),
         "visibility": boolean_evidence(requested_target_state.get("visibility", []), False),
         "existence": [{"destination": i["destination"], "object": i["object"], "status": "absent"} for i in requested_target_state.get("existence", [])]
     }
