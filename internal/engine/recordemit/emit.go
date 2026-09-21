@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"parametron/internal/engine/artifact"
+	"parametron/internal/engine/executor"
 	"parametron/internal/engine/metadata"
 	"parametron/internal/engine/observed"
 	"parametron/internal/engine/recordcontract"
@@ -41,6 +42,7 @@ type CADRuntimeRunEvidence struct {
 	Observed           []byte
 	ObservedValue      *observed.Observed
 	VerificationResult *verification.Result
+	Failure            *executor.CADRuntimeFailureOutcome
 	JobID              string
 	ProductKey         string
 	StepRef            string
@@ -95,9 +97,7 @@ func EmitRunPackage(input RunEmitInput) error {
 	records := []recordpackage.Record{
 		recordpackage.ExecutionRecord(mappedReport.ExecutionRecord),
 	}
-	if mappedReport.FailureRecord != nil {
-		records = append(records, recordpackage.FailureRecord(*mappedReport.FailureRecord))
-	}
+	failureRecord := mappedReport.FailureRecord
 	mappedArtifacts, err := recordmap.MapArtifactStoreRecords(recordmap.ArtifactMappingInput{
 		Artifacts:       input.Artifacts,
 		RecordKeyPrefix: recordKey,
@@ -110,11 +110,17 @@ func EmitRunPackage(input RunEmitInput) error {
 		records = append(records, recordpackage.ArtifactRecord(artifactRecord))
 	}
 	if input.CADRuntime != nil {
-		runtimeRecords, err := mapCADRuntimeRecords(input.CADRuntime, recordKey, provenance)
+		runtimeRecords, runtimeFailure, err := mapCADRuntimeRecords(input.CADRuntime, recordKey, provenance)
 		if err != nil {
 			return err
 		}
 		records = append(records, runtimeRecords...)
+		if runtimeFailure != nil {
+			failureRecord = runtimeFailure
+		}
+	}
+	if failureRecord != nil {
+		records = append(records, recordpackage.FailureRecord(*failureRecord))
 	}
 	var traversalRaw *recordpackage.RawEvidenceFile
 	if input.ReferenceTraversal != nil {
@@ -149,9 +155,9 @@ func EmitRunPackage(input RunEmitInput) error {
 	})
 }
 
-func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey string, provenance recordcontract.Provenance) ([]recordpackage.Record, error) {
+func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey string, provenance recordcontract.Provenance) ([]recordpackage.Record, *recordcontract.FailureRecord, error) {
 	if evidence == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	linkage := recordmap.ObservedMappingLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef}
 	records := make([]recordpackage.Record, 0, 2)
@@ -164,7 +170,7 @@ func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey string, pro
 			EvidenceDigestSHA256: evidenceDigest(evidence.Observed),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("recordemit: map observed evidence: %w", err)
+			return nil, nil, fmt.Errorf("recordemit: map observed evidence: %w", err)
 		}
 		records = append(records, recordpackage.ObservationRecord(mapped))
 	}
@@ -178,11 +184,25 @@ func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey string, pro
 			ObservedEvidenceDigestSHA256: evidenceDigest(evidence.Observed),
 		})
 		if err != nil {
-			return nil, fmt.Errorf("recordemit: map verification result: %w", err)
+			return nil, nil, fmt.Errorf("recordemit: map verification result: %w", err)
 		}
 		records = append(records, recordpackage.VerificationRecord(mapped))
 	}
-	return records, nil
+	var failureRecord *recordcontract.FailureRecord
+	if evidence.Failure != nil {
+		mapped, err := recordmap.MapCADRuntimeFailure(recordmap.CADRuntimeFailureMappingInput{
+			Failure:              *evidence.Failure,
+			RecordKey:            recordKey,
+			Provenance:           provenance,
+			Linkage:              recordcontract.FailureLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
+			EvidenceDigestSHA256: evidenceDigest(evidence.Result),
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("recordemit: map CAD runtime failure: %w", err)
+		}
+		failureRecord = &mapped
+	}
+	return records, failureRecord, nil
 }
 
 func evidenceDigest(content []byte) string {

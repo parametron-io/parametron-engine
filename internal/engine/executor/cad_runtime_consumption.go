@@ -36,11 +36,17 @@ type CADRuntimeArtifactOutcome struct {
 }
 
 type CADRuntimeFailureOutcome struct {
+	// RuntimeNative is true only when the aligned adapter result contained a
+	// validated native failure. Engine verification and evidence-consumption
+	// failures deliberately remain false.
+	RuntimeNative  bool
+	Class          string
+	SemanticStage  string
 	Classification string
 	Boundary       string
 	Category       string
 	Code           string
-	Stage          string
+	Stage          string // adapter-native stage
 	Message        string
 }
 
@@ -256,17 +262,22 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 		_ = errors.As(orchestrationErr, &runErr)
 		boundary, category, code, nativeStage, classification := "engine", "runtime", "", "", ""
 		message := verificationErr.Error()
-		if run.Runtime.Result != nil && run.Runtime.Result.Failure != nil {
+		runtimeNative := false
+		semanticClass, semanticStage := "", ""
+		if run.Runtime.Result != nil && run.Runtime.Result.Status == freecad.FreeCADRuntimeResultStatusFailed && run.Runtime.Result.Failure != nil {
 			failure := run.Runtime.Result.Failure
 			boundary, category, code, classification = failure.Boundary, failure.Category, failure.Code, failure.Code
 			if failure.Stage != nil {
 				nativeStage = *failure.Stage
 			}
 			message = failure.Message
+			runtimeNative = true
+			semanticClass, semanticStage = classifyFreeCADRuntimeFailure(failure)
 		} else if runErr != nil {
 			code, nativeStage, classification = runErr.Stage, runErr.Stage, runErr.Stage
 		}
 		outcome.Failure = &CADRuntimeFailureOutcome{
+			RuntimeNative: runtimeNative, Class: semanticClass, SemanticStage: semanticStage,
 			Classification: classification, Boundary: boundary, Category: category,
 			Code: code, Stage: nativeStage, Message: message,
 		}
@@ -276,6 +287,39 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 			classification, boundary, category, code, nativeStage, errors.New(message), orchestrationErr)
 	default:
 		return e.consumptionError(CADRuntimeConsumptionStageOutcomeValidation, req, identity.ID, "", "", "", "", verificationErr.Stage, orchestrationErr)
+	}
+}
+
+func classifyFreeCADRuntimeFailure(failure *freecad.FreeCADRuntimeResultFailure) (string, string) {
+	if failure == nil {
+		return "runtime", "runtime"
+	}
+	nativeStage := ""
+	if failure.Stage != nil {
+		nativeStage = *failure.Stage
+	}
+
+	switch {
+	case failure.Category == "arguments", failure.Code == "invalid_arguments",
+		nativeStage == "argument_validation", nativeStage == "manifest_loading",
+		nativeStage == "manifest_compatibility", nativeStage == "manifest_validation",
+		nativeStage == "source_document_resolution":
+		return "validation", "validation"
+	case failure.Category == "freecad_unavailable", failure.Code == "freecad_unavailable",
+		nativeStage == "freecad_resolution", nativeStage == "document_open":
+		return "adapter", "adapter"
+	case nativeStage == "artifact_export":
+		return "export", "export"
+	case failure.Category == "observation", failure.Code == "observation_failure",
+		nativeStage == "observation", nativeStage == "observation_output",
+		nativeStage == "reference_traversal", nativeStage == "reference_traversal_output_containment",
+		nativeStage == "reference_traversal_output_write":
+		return "adapter", "adapter"
+	default:
+		// Includes parameter assignment, recompute, document save, result
+		// write, unknown or absent stages, and future otherwise-valid native
+		// runtime failure vocabulary.
+		return "runtime", "runtime"
 	}
 }
 

@@ -8,6 +8,6 @@ var (
 	ErrInvalidArtifactMapping           = errors.New("invalid artifact mapping")
 	ErrInvalidObservedMapping           = errors.New("invalid observed mapping")
 	ErrInvalidVerificationMapping       = errors.New("invalid verification mapping")
-	ErrInvalidRuntimeResultMapping      = errors.New("invalid runtime result mapping")
+	ErrInvalidCADRuntimeFailureMapping  = errors.New("invalid CAD runtime failure mapping")
 	ErrInvalidReferenceTraversalMapping = errors.New("invalid reference traversal mapping")
 )

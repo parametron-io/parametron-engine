@@ -102,6 +102,9 @@ func RawEvidenceDirectoryContractPath() string {
 
 // RecordContractPath returns the canonical normalized record contract path for family.
 func RecordContractPath(family recordcontract.Family) (string, bool) {
+	if recordcontract.NormalizeFamily(family) == recordcontract.FamilyArtifact {
+		return "", false
+	}
 	fileName, ok := recordcontract.FileNameForFamily(family)
 	if !ok {
 		return "", false
@@ -147,6 +150,9 @@ func RecordEntries() []Entry {
 	definitions := recordcontract.Definitions()
 	out := make([]Entry, 0, len(definitions))
 	for _, def := range definitions {
+		if def.Family == recordcontract.FamilyArtifact {
+			continue
+		}
 		path, ok := RecordContractPath(def.Family)
 		if !ok {
 			panic(fmt.Sprintf("recordpackage: missing record path for family %q", def.Family))
