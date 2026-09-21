@@ -15,6 +15,7 @@ const (
 	observedReferenceRecordKeySuffix = ":reference"
 	observedComponentKindKey         = "kind"
 	observedStringValueKind          = "string"
+	observedTargetStateValueKind     = "target_state_evidence"
 )
 
 var observedEvidenceRef = recordpackage.RawObservedContractPath()
@@ -167,7 +168,11 @@ func mapObservationFacts(input ObservedMappingInput) ([]recordcontract.Observati
 	evidence := observedObservationEvidence(strings.TrimSpace(input.EvidenceDigestSHA256))
 	linkage := observedObservationLinkage(input.Linkage)
 
-	facts := make([]recordcontract.ObservationFact, 0, len(obs.Components)+len(obs.Parameters)+len(obs.Metadata)+len(obs.References))
+	targetStateCount := 0
+	if obs.TargetState != nil {
+		targetStateCount = len(obs.TargetState.Suppression) + len(obs.TargetState.Visibility) + len(obs.TargetState.Existence)
+	}
+	facts := make([]recordcontract.ObservationFact, 0, len(obs.Components)+len(obs.Parameters)+len(obs.Metadata)+len(obs.References)+targetStateCount)
 
 	for _, component := range obs.Components {
 		raw, err := canonicalObservedJSONString(component.Kind)
@@ -231,6 +236,37 @@ func mapObservationFacts(input ObservedMappingInput) ([]recordcontract.Observati
 			Linkage:  linkage,
 			Evidence: evidence,
 		})
+	}
+
+	if targetState := obs.TargetState; targetState != nil {
+		appendBoolean := func(family string, entries []observed.BooleanTargetEvidence) error {
+			for _, entry := range entries {
+				raw, err := json.Marshal(struct {
+					Status string `json:"status"`
+					Value  *bool  `json:"value,omitempty"`
+				}{Status: entry.Status, Value: entry.Value})
+				if err != nil {
+					return err
+				}
+				facts = append(facts, recordcontract.ObservationFact{Kind: recordcontract.ObservationKindTargetState, Subject: recordcontract.ObservationSubject{ID: entry.Destination, Name: entry.Object}, Key: family, Value: recordcontract.ObservationValue{Kind: observedTargetStateValueKind, Raw: string(raw)}, Linkage: linkage, Evidence: evidence})
+			}
+			return nil
+		}
+		if err := appendBoolean("suppression", targetState.Suppression); err != nil {
+			return nil, fmt.Errorf("%w: encode suppression evidence: %w", ErrInvalidObservedMapping, err)
+		}
+		if err := appendBoolean("visibility", targetState.Visibility); err != nil {
+			return nil, fmt.Errorf("%w: encode visibility evidence: %w", ErrInvalidObservedMapping, err)
+		}
+		for _, entry := range targetState.Existence {
+			raw, err := json.Marshal(struct {
+				Status string `json:"status"`
+			}{Status: entry.Status})
+			if err != nil {
+				return nil, fmt.Errorf("%w: encode existence evidence: %w", ErrInvalidObservedMapping, err)
+			}
+			facts = append(facts, recordcontract.ObservationFact{Kind: recordcontract.ObservationKindTargetState, Subject: recordcontract.ObservationSubject{ID: entry.Destination, Name: entry.Object}, Key: "existence", Value: recordcontract.ObservationValue{Kind: observedTargetStateValueKind, Raw: string(raw)}, Linkage: linkage, Evidence: evidence})
+		}
 	}
 
 	return facts, nil

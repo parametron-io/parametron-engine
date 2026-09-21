@@ -167,6 +167,7 @@ func freeCADRuntimeVerificationCategoriesPassed(categories verification.Category
 		categories.Parameters,
 		categories.Metadata,
 		categories.References,
+		categories.TargetState,
 	} {
 		if category.Enabled && category.Status != verification.CategoryStatusPass {
 			return false

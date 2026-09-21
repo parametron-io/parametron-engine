@@ -10,10 +10,12 @@ import (
 )
 
 const (
-	verificationEvidenceKind = "verification"
+	verificationEvidenceKind         = "verification"
+	verificationObservedEvidenceKind = "observed"
 )
 
 var verificationEvidenceRef = recordpackage.RawVerificationContractPath()
+var verificationObservedEvidenceRef = recordpackage.RawObservedContractPath()
 
 // VerificationMappingLinkage carries caller-supplied deterministic linkage material.
 // The mapper must not infer missing job/product/step identity from PDM or runtime paths.
@@ -41,6 +43,9 @@ type VerificationMappingInput struct {
 	// Optional digest of raw/verification/prm.verification.json request evidence.
 	// If present, it must be a lowercase 64-character SHA-256 hex digest.
 	EvidenceDigestSHA256 string
+
+	// Optional digest of raw/observed/prm.observed.json used by target-state comparison.
+	ObservedEvidenceDigestSHA256 string
 }
 
 // VerificationMappingOutput carries a normalized verification record.
@@ -95,6 +100,9 @@ func validateVerificationMappingInput(input VerificationMappingInput) error {
 	if err := validateVerificationDigestSHA256("evidenceDigestSha256", input.EvidenceDigestSHA256); err != nil {
 		return err
 	}
+	if err := validateVerificationDigestSHA256("observedEvidenceDigestSha256", input.ObservedEvidenceDigestSHA256); err != nil {
+		return err
+	}
 	if _, err := mapVerificationOutcome(input.Result.Status); err != nil {
 		return err
 	}
@@ -109,13 +117,16 @@ func mapVerificationSummary(input VerificationMappingInput) (recordcontract.Veri
 
 	digest := strings.TrimSpace(input.EvidenceDigestSHA256)
 	evidence := verificationRecordEvidence(digest)
+	if input.Result.Categories.TargetState.Enabled {
+		evidence = append(evidence, verificationObservedRecordEvidence(strings.TrimSpace(input.ObservedEvidenceDigestSHA256)))
+	}
 
 	failureClass, err := mapTopLevelVerificationFailureClass(outcome, input.Result.Failure)
 	if err != nil {
 		return recordcontract.VerificationSummary{}, err
 	}
 
-	categories, err := mapVerificationCategoryResults(input.Result, digest)
+	categories, err := mapVerificationCategoryResults(input.Result, digest, strings.TrimSpace(input.ObservedEvidenceDigestSHA256))
 	if err != nil {
 		return recordcontract.VerificationSummary{}, err
 	}
@@ -130,7 +141,7 @@ func mapVerificationSummary(input VerificationMappingInput) (recordcontract.Veri
 	}, nil
 }
 
-func mapVerificationCategoryResults(result verification.Result, digest string) ([]recordcontract.VerificationCategoryResult, error) {
+func mapVerificationCategoryResults(result verification.Result, digest, observedDigest string) ([]recordcontract.VerificationCategoryResult, error) {
 	ordered := []struct {
 		category recordcontract.VerificationCategory
 		item     verification.CategoryResult
@@ -140,10 +151,16 @@ func mapVerificationCategoryResults(result verification.Result, digest string) (
 		{recordcontract.VerificationCategoryMetadata, result.Categories.Metadata},
 		{recordcontract.VerificationCategoryReferences, result.Categories.References},
 	}
+	if result.Categories.TargetState.Enabled {
+		ordered = append(ordered, struct {
+			category recordcontract.VerificationCategory
+			item     verification.CategoryResult
+		}{recordcontract.VerificationCategoryTargetState, result.Categories.TargetState})
+	}
 
 	out := make([]recordcontract.VerificationCategoryResult, 0, len(ordered))
 	for _, entry := range ordered {
-		mapped, err := mapVerificationCategoryResult(entry.category, entry.item, digest, result)
+		mapped, err := mapVerificationCategoryResult(entry.category, entry.item, digest, observedDigest, result)
 		if err != nil {
 			return nil, err
 		}
@@ -157,6 +174,7 @@ func mapVerificationCategoryResult(
 	category recordcontract.VerificationCategory,
 	result verification.CategoryResult,
 	digest string,
+	observedDigest string,
 	topResult verification.Result,
 ) (recordcontract.VerificationCategoryResult, error) {
 	outcome, err := mapCategoryOutcome(result.Status)
@@ -169,13 +187,17 @@ func mapVerificationCategoryResult(
 		return recordcontract.VerificationCategoryResult{}, err
 	}
 
+	evidence := verificationRecordEvidence(digest)
+	if category == recordcontract.VerificationCategoryTargetState && result.Enabled {
+		evidence = append(evidence, verificationObservedRecordEvidence(observedDigest))
+	}
 	return recordcontract.VerificationCategoryResult{
 		Category:     category,
 		Enabled:      result.Enabled,
 		Outcome:      outcome,
 		Message:      strings.TrimSpace(result.Message),
 		FailureClass: failureClass,
-		Evidence:     verificationRecordEvidence(digest),
+		Evidence:     evidence,
 	}, nil
 }
 
@@ -234,6 +256,12 @@ func isFirstEnabledFailedCategory(result verification.Result, category recordcon
 		{recordcontract.VerificationCategoryMetadata, result.Categories.Metadata},
 		{recordcontract.VerificationCategoryReferences, result.Categories.References},
 	}
+	if result.Categories.TargetState.Enabled {
+		ordered = append(ordered, struct {
+			category recordcontract.VerificationCategory
+			item     verification.CategoryResult
+		}{recordcontract.VerificationCategoryTargetState, result.Categories.TargetState})
+	}
 
 	for _, entry := range ordered {
 		if !entry.item.Enabled || entry.item.Status != verification.CategoryStatusFail {
@@ -285,6 +313,12 @@ func mapVerificationFailureClass(class verification.FailureClass) (recordcontrac
 		return recordcontract.VerificationFailureClassMetadataMismatch, nil
 	case verification.FailureClassReferenceMismatch:
 		return recordcontract.VerificationFailureClassReferenceMismatch, nil
+	case verification.FailureClassTargetStateMismatch:
+		return recordcontract.VerificationFailureClassTargetStateMismatch, nil
+	case verification.FailureClassTargetMissing:
+		return recordcontract.VerificationFailureClassTargetMissing, nil
+	case verification.FailureClassNativeEvidenceUnavailable:
+		return recordcontract.VerificationFailureClassNativeEvidenceUnavailable, nil
 	case verification.FailureClassRequiredObservationMissing:
 		return recordcontract.VerificationFailureClassRequiredObservationMissing, nil
 	case verification.FailureClassInternalError:
@@ -302,6 +336,13 @@ func enrichVerificationProvenance(input VerificationMappingInput) (recordcontrac
 		return recordcontract.Provenance{}, err
 	}
 	provenance.Evidence = evidence
+	if input.Result.Categories.TargetState.Enabled {
+		evidence, err = appendVerificationObservedEvidence(provenance.Evidence, strings.TrimSpace(input.ObservedEvidenceDigestSHA256))
+		if err != nil {
+			return recordcontract.Provenance{}, err
+		}
+		provenance.Evidence = evidence
+	}
 
 	normalized := recordcontract.NormalizeProvenance(provenance)
 	if err := recordcontract.ValidateProvenance(normalized); err != nil {
@@ -309,6 +350,27 @@ func enrichVerificationProvenance(input VerificationMappingInput) (recordcontrac
 	}
 
 	return normalized, nil
+}
+
+func appendVerificationObservedEvidence(existing []recordcontract.EvidenceReference, digest string) ([]recordcontract.EvidenceReference, error) {
+	out := copyEvidenceReferences(existing)
+	for i, item := range out {
+		if strings.TrimSpace(item.Kind) == verificationObservedEvidenceKind && strings.TrimSpace(item.Ref) == verificationObservedEvidenceRef {
+			existingDigest := strings.TrimSpace(item.DigestSHA256)
+			if existingDigest != "" && digest != "" && existingDigest != digest {
+				return nil, fmt.Errorf("%w: conflicting digest for observed evidence reference", ErrInvalidVerificationMapping)
+			}
+			if existingDigest == "" && digest != "" {
+				out[i].DigestSHA256 = digest
+			}
+			return out, nil
+		}
+	}
+	return append(out, recordcontract.EvidenceReference{Kind: verificationObservedEvidenceKind, Ref: verificationObservedEvidenceRef, DigestSHA256: digest}), nil
+}
+
+func verificationObservedRecordEvidence(digest string) recordcontract.VerificationEvidence {
+	return recordcontract.VerificationEvidence{SourceKind: verificationObservedEvidenceKind, SourceRef: verificationObservedEvidenceRef, DigestSHA256: digest}
 }
 
 func appendVerificationEvidence(existing []recordcontract.EvidenceReference, digest string) ([]recordcontract.EvidenceReference, error) {
