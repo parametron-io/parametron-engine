@@ -483,9 +483,14 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 			PlanHash:           opts.Planned.PlanHash,
 			Report:             runReport,
 			Metadata:           runMetadata,
+			Artifacts:          artifacts,
 			ReferenceTraversal: referenceTraversalRunEvidence(schedulerResult, executionErr == nil),
 		}
-		emitInput.CADRuntime, packageEmitErr = cadRuntimeRunEvidence(schedulerResult, executionErr == nil)
+		if executionErr == nil {
+			emitInput.CADRuntime, packageEmitErr = cadRuntimeRunEvidence(schedulerResult, true)
+		} else {
+			emitInput.CADRuntime, packageEmitErr = cadRuntimeFailureRunEvidence(schedulerResult, runReport)
+		}
 		if packageEmitErr == nil {
 			packageEmitErr = recordemit.EmitRunPackage(emitInput)
 		}
@@ -542,6 +547,11 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 		return nil, nil
 	}
 	evidence := &recordemit.CADRuntimeRunEvidence{}
+	evidence.ObservedValue = candidate.Observed
+	evidence.VerificationResult = candidate.VerificationResult
+	evidence.JobID = candidate.JobID
+	evidence.ProductKey = candidate.ProductKey
+	evidence.StepRef = candidate.StepID
 	for _, source := range []struct {
 		path    string
 		content *[]byte
@@ -557,6 +567,72 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 		*source.content = content
 	}
 	return evidence, nil
+}
+
+func cadRuntimeFailureRunEvidence(execution scheduler.ExecutionResult, runReport report.Report) (*recordemit.CADRuntimeRunEvidence, error) {
+	if runReport.Error == nil || runReport.Status == report.StatusSuccess {
+		return nil, nil
+	}
+
+	wantProduct := strings.TrimSpace(runReport.Error.ProductID)
+	wantStep := strings.TrimSpace(runReport.Error.StepID)
+	wantJob := reportFailureJobID(runReport.Jobs, wantProduct)
+	var candidate *executor.CADRuntimeOutcome
+	for _, jobExecution := range execution.Jobs {
+		outcome := jobExecution.CADRuntimeOutcome
+		if jobExecution.Err == nil || outcome == nil || outcome.Failure == nil || !outcome.Failure.RuntimeNative {
+			continue
+		}
+		if wantProduct != "" && outcome.ProductKey != wantProduct {
+			continue
+		}
+		if wantStep != "" && outcome.StepID != wantStep {
+			continue
+		}
+		if wantJob != "" && outcome.JobID != wantJob {
+			continue
+		}
+		if candidate != nil {
+			return nil, nil
+		}
+		candidate = outcome
+	}
+	if candidate == nil {
+		return nil, nil
+	}
+	result, err := cadruntime.ReadOptionalFreeCADRuntimeEvidence(candidate.WorkingCopyDir, candidate.ResultPath)
+	if err != nil {
+		return nil, fmt.Errorf("read CAD runtime evidence %q: %w", candidate.ResultPath, err)
+	}
+	if len(result) == 0 {
+		return nil, nil
+	}
+	failure := *candidate.Failure
+	return &recordemit.CADRuntimeRunEvidence{
+		Result:     result,
+		Failure:    &failure,
+		JobID:      candidate.JobID,
+		ProductKey: candidate.ProductKey,
+		StepRef:    candidate.StepID,
+	}, nil
+}
+
+func reportFailureJobID(jobs []report.JobReport, productKey string) string {
+	if productKey == "" {
+		return ""
+	}
+	matched := ""
+	count := 0
+	for _, job := range jobs {
+		if job.ProductKey == productKey {
+			matched = job.JobID
+			count++
+		}
+	}
+	if count == 1 {
+		return matched
+	}
+	return ""
 }
 
 func referenceTraversalRunEvidence(execution scheduler.ExecutionResult, overallExecutionSucceeded bool) *recordemit.ReferenceTraversalRunEvidence {

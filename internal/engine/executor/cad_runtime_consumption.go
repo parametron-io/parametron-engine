@@ -11,6 +11,7 @@ import (
 	"parametron/internal/engine/adapter/freecad"
 	"parametron/internal/engine/artifact"
 	"parametron/internal/engine/cadruntime"
+	"parametron/internal/engine/observed"
 	"parametron/internal/engine/verification"
 )
 
@@ -35,11 +36,17 @@ type CADRuntimeArtifactOutcome struct {
 }
 
 type CADRuntimeFailureOutcome struct {
+	// RuntimeNative is true only when the aligned adapter result contained a
+	// validated native failure. Engine verification and evidence-consumption
+	// failures deliberately remain false.
+	RuntimeNative  bool
+	Class          string
+	SemanticStage  string
 	Classification string
 	Boundary       string
 	Category       string
 	Code           string
-	Stage          string
+	Stage          string // adapter-native stage
 	Message        string
 }
 
@@ -57,6 +64,8 @@ type CADRuntimeOutcome struct {
 	ReferenceTraversalPath string
 	ReferenceTraversalJSON []byte
 	Artifacts              []CADRuntimeArtifactOutcome
+	Observed               *observed.Observed
+	VerificationResult     *verification.Result
 	Verification           artifact.VerificationOutcome
 	VerificationClass      verification.FailureClass
 	Failure                *CADRuntimeFailureOutcome
@@ -135,6 +144,11 @@ func cloneCADRuntimeOutcome(in *CADRuntimeOutcome) *CADRuntimeOutcome {
 	out := *in
 	out.Artifacts = append([]CADRuntimeArtifactOutcome(nil), in.Artifacts...)
 	out.ReferenceTraversalJSON = append([]byte(nil), in.ReferenceTraversalJSON...)
+	out.Observed = cloneObserved(in.Observed)
+	if in.VerificationResult != nil {
+		result := *in.VerificationResult
+		out.VerificationResult = &result
+	}
 	if in.Failure != nil {
 		failure := *in.Failure
 		out.Failure = &failure
@@ -154,6 +168,8 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 		ResultPath:             run.Runtime.ExecutionRequest.ResultPath,
 		ReferenceTraversalPath: run.Runtime.ReferenceTraversalPath,
 		ReferenceTraversalJSON: append([]byte(nil), run.Runtime.ReferenceTraversalJSON...),
+		Observed:               cloneObserved(run.Runtime.Observed),
+		VerificationResult:     cloneVerificationResult(run.Verification),
 		Verification:           artifact.VerificationOutcomeUnknown,
 	}
 
@@ -246,17 +262,22 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 		_ = errors.As(orchestrationErr, &runErr)
 		boundary, category, code, nativeStage, classification := "engine", "runtime", "", "", ""
 		message := verificationErr.Error()
-		if run.Runtime.Result != nil && run.Runtime.Result.Failure != nil {
+		runtimeNative := false
+		semanticClass, semanticStage := "", ""
+		if run.Runtime.Result != nil && run.Runtime.Result.Status == freecad.FreeCADRuntimeResultStatusFailed && run.Runtime.Result.Failure != nil {
 			failure := run.Runtime.Result.Failure
 			boundary, category, code, classification = failure.Boundary, failure.Category, failure.Code, failure.Code
 			if failure.Stage != nil {
 				nativeStage = *failure.Stage
 			}
 			message = failure.Message
+			runtimeNative = true
+			semanticClass, semanticStage = classifyFreeCADRuntimeFailure(failure)
 		} else if runErr != nil {
 			code, nativeStage, classification = runErr.Stage, runErr.Stage, runErr.Stage
 		}
 		outcome.Failure = &CADRuntimeFailureOutcome{
+			RuntimeNative: runtimeNative, Class: semanticClass, SemanticStage: semanticStage,
 			Classification: classification, Boundary: boundary, Category: category,
 			Code: code, Stage: nativeStage, Message: message,
 		}
@@ -267,6 +288,94 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 	default:
 		return e.consumptionError(CADRuntimeConsumptionStageOutcomeValidation, req, identity.ID, "", "", "", "", verificationErr.Stage, orchestrationErr)
 	}
+}
+
+func classifyFreeCADRuntimeFailure(failure *freecad.FreeCADRuntimeResultFailure) (string, string) {
+	if failure == nil {
+		return "runtime", "runtime"
+	}
+	nativeStage := ""
+	if failure.Stage != nil {
+		nativeStage = *failure.Stage
+	}
+
+	switch {
+	case failure.Category == "arguments", failure.Code == "invalid_arguments",
+		nativeStage == "argument_validation", nativeStage == "manifest_loading",
+		nativeStage == "manifest_compatibility", nativeStage == "manifest_validation",
+		nativeStage == "source_document_resolution":
+		return "validation", "validation"
+	case failure.Category == "freecad_unavailable", failure.Code == "freecad_unavailable",
+		nativeStage == "freecad_resolution", nativeStage == "document_open":
+		return "adapter", "adapter"
+	case nativeStage == "artifact_export":
+		return "export", "export"
+	case failure.Category == "observation", failure.Code == "observation_failure",
+		nativeStage == "observation", nativeStage == "observation_output",
+		nativeStage == "reference_traversal", nativeStage == "reference_traversal_output_containment",
+		nativeStage == "reference_traversal_output_write":
+		return "adapter", "adapter"
+	default:
+		// Includes parameter assignment, recompute, document save, result
+		// write, unknown or absent stages, and future otherwise-valid native
+		// runtime failure vocabulary.
+		return "runtime", "runtime"
+	}
+}
+
+func cloneVerificationResult(in *verification.Result) *verification.Result {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	return &out
+}
+
+func cloneObserved(in *observed.Observed) *observed.Observed {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	out.Observation.Parameters = append(make([]observed.Parameter, 0, len(in.Observation.Parameters)), in.Observation.Parameters...)
+	for i := range out.Observation.Parameters {
+		out.Observation.Parameters[i].Value = cloneObservedValue(in.Observation.Parameters[i].Value)
+	}
+	out.Observation.Metadata = append(make([]observed.Metadata, 0, len(in.Observation.Metadata)), in.Observation.Metadata...)
+	for i := range out.Observation.Metadata {
+		out.Observation.Metadata[i].Value = cloneObservedValue(in.Observation.Metadata[i].Value)
+	}
+	out.Observation.References = append(make([]observed.Reference, 0, len(in.Observation.References)), in.Observation.References...)
+	out.Observation.Components = append(make([]observed.Component, 0, len(in.Observation.Components)), in.Observation.Components...)
+	if in.Observation.TargetState != nil {
+		targetState := *in.Observation.TargetState
+		targetState.Suppression = cloneBooleanTargetEvidence(in.Observation.TargetState.Suppression)
+		targetState.Visibility = cloneBooleanTargetEvidence(in.Observation.TargetState.Visibility)
+		targetState.Existence = append(make([]observed.ExistenceTargetEvidence, 0, len(in.Observation.TargetState.Existence)), in.Observation.TargetState.Existence...)
+		out.Observation.TargetState = &targetState
+	}
+	return &out
+}
+
+func cloneBooleanTargetEvidence(in []observed.BooleanTargetEvidence) []observed.BooleanTargetEvidence {
+	out := append(make([]observed.BooleanTargetEvidence, 0, len(in)), in...)
+	for i := range out {
+		if in[i].Value != nil {
+			value := *in[i].Value
+			out[i].Value = &value
+		}
+	}
+	return out
+}
+
+func cloneObservedValue(in observed.Value) observed.Value {
+	if in.IsZero() {
+		return observed.Value{}
+	}
+	out, err := observed.NewValue(in.Raw())
+	if err != nil {
+		panic("copy validated observed value: " + err.Error())
+	}
+	return out
 }
 
 func validateConsumedRuntimeIdentity(req adapter.CADRuntimeOrchestrationRequest, run cadruntime.FreeCADRuntimeVerifiedRun) error {

@@ -99,9 +99,18 @@ func validateRecord(record Record) (validatedRecord, error) {
 		return validatedRecord{}, err
 	}
 
-	contractPath, ok := RecordContractPath(family)
-	if !ok {
-		return validatedRecord{}, fmt.Errorf("%w: unknown record family %q", ErrInvalidRecord, family)
+	var contractPath string
+	if family == recordcontract.FamilyArtifact {
+		contractPath, err = ArtifactRecordContractPath(identityID)
+	} else {
+		var ok bool
+		contractPath, ok = RecordContractPath(family)
+		if !ok {
+			return validatedRecord{}, fmt.Errorf("%w: unknown record family %q", ErrInvalidRecord, family)
+		}
+	}
+	if err != nil {
+		return validatedRecord{}, fmt.Errorf("%w: %w", ErrInvalidRecord, err)
 	}
 
 	return validatedRecord{
@@ -163,16 +172,29 @@ func validateRecords(records []Record) ([]validatedRecord, error) {
 
 	validated := make([]validatedRecord, 0, len(records))
 	seenFamilies := make(map[recordcontract.Family]struct{}, len(records))
+	seenArtifactIdentities := make(map[string]struct{})
+	seenContractPaths := make(map[string]struct{}, len(records))
 
 	for i, record := range records {
 		item, err := validateRecord(record)
 		if err != nil {
 			return nil, fmt.Errorf("records[%d]: %w", i, err)
 		}
-		if _, exists := seenFamilies[item.family]; exists {
-			return nil, fmt.Errorf("records[%d]: %w: duplicate family %q", i, ErrInvalidRecord, item.family)
+		if item.family == recordcontract.FamilyArtifact {
+			if _, exists := seenArtifactIdentities[item.identityID]; exists {
+				return nil, fmt.Errorf("records[%d]: %w: duplicate artifact identity %q", i, ErrInvalidRecord, item.identityID)
+			}
+			seenArtifactIdentities[item.identityID] = struct{}{}
+		} else {
+			if _, exists := seenFamilies[item.family]; exists {
+				return nil, fmt.Errorf("records[%d]: %w: duplicate family %q", i, ErrInvalidRecord, item.family)
+			}
+			seenFamilies[item.family] = struct{}{}
 		}
-		seenFamilies[item.family] = struct{}{}
+		if _, exists := seenContractPaths[item.contractPath]; exists {
+			return nil, fmt.Errorf("records[%d]: %w: duplicate contract path %q", i, ErrInvalidRecord, item.contractPath)
+		}
+		seenContractPaths[item.contractPath] = struct{}{}
 		validated = append(validated, item)
 	}
 
@@ -187,6 +209,13 @@ func sortValidatedRecords(records []validatedRecord) {
 	}
 
 	sort.SliceStable(records, func(i, j int) bool {
-		return familyOrder[records[i].family] < familyOrder[records[j].family]
+		left, right := familyOrder[records[i].family], familyOrder[records[j].family]
+		if left != right {
+			return left < right
+		}
+		if records[i].family == recordcontract.FamilyArtifact {
+			return records[i].identityID < records[j].identityID
+		}
+		return records[i].contractPath < records[j].contractPath
 	})
 }

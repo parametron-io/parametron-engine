@@ -107,10 +107,11 @@ func validateRawEvidenceFiles(files []RawEvidenceFile) ([]validatedRawEvidenceFi
 
 func ensurePackageDirectories(layout Layout, artifacts []validatedArtifactFile, rawEvidence []validatedRawEvidenceFile) error {
 	required := map[string]struct{}{
-		RecordsDirectoryContractPath():       {},
-		ArtifactsDirectoryContractPath():     {},
-		ArtifactFilesDirectoryContractPath(): {},
-		RawEvidenceDirectoryContractPath():   {},
+		RecordsDirectoryContractPath():         {},
+		ArtifactRecordsDirectoryContractPath(): {},
+		ArtifactsDirectoryContractPath():       {},
+		ArtifactFilesDirectoryContractPath():   {},
+		RawEvidenceDirectoryContractPath():     {},
 	}
 
 	for _, entry := range RawEvidenceEntries() {

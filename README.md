@@ -137,9 +137,32 @@ parametron-record-package/
 
 The package separates normalized records from raw runtime evidence.
 
+Normal execution emits applicable execution, artifact, observation, reference,
+failure, and verification records through this package. Artifact records are
+plural: each artifact has its own normalized record at
+`records/artifacts/<identityId>/parametron.artifact-record.json`, ordered by
+record identity. Other record families remain singular. Duplicate artifact
+identities or resolved record paths are rejected.
+
 Typical raw evidence includes runtime results, metadata, verification material,
 observations, manifests, and runtime handoff data. Raw evidence is preserved as
 evidence and is not treated as equivalent to normalized Engine records.
+Observation and verification records come from Engine-owned typed
+interpretation; raw bytes remain independently preserved for provenance.
+
+Adapter-native CAD failures are interpreted by the adapter/runtime boundary as
+a generic Engine CAD runtime failure outcome before `MapCADRuntimeFailure`
+produces the normalized `FailureRecord`. A valid, uniquely correlated failure
+from the terminal failed CAD outcome takes precedence over the report-derived
+failure; otherwise the report-derived record remains authoritative. The package
+still contains at most one failure record, while execution remains
+report-derived and Engine retry context and plan provenance are retained.
+Normal package failure records omit `OccurredAt` because their deterministic
+report material has operational timestamps stripped. Runtime-native failures
+remain distinct from malformed, invalid, missing, or unavailable evidence and
+from Engine verification mismatches. Exact native result bytes are preserved
+at `raw/runtime/prm.result.json`, and their SHA-256 digest supplies normalized
+provenance without making the normalized record a mirror of native vocabulary.
 
 See the canonical
 [record contracts](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/record-contracts.md)
@@ -169,10 +192,10 @@ It can map accepted target-state evidence and verification outcomes into the
 existing normalized observation and verification record families while
 preserving raw evidence separately.
 
-These verification and mapping capabilities do not by themselves emit
-target-state normalized records through every normal execution and record-package
-path; that integration remains separate from the mapper contracts described
-here.
+Normal execution emits these target-state observation and verification records
+when the corresponding evidence is requested and available. No separate
+target-state record family exists, raw `prm.observed.json` remains separate
+evidence, and requested values are never substituted for observations.
 
 See the canonical
 [Target-action contract](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/target-action-contract.md).

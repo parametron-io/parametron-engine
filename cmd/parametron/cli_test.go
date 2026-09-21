@@ -1841,25 +1841,56 @@ func TestCLIProjectRun_RepeatedEquivalentNormalRunsEmitDeterministicRecordPackag
 
 	projectDir := writeProjectExecutionFixture(t)
 
-	first := runCLIExecutionForProject(t, projectDir, filepath.Join(t.TempDir(), "out-a"))
+	// Equivalent runs share one output root: the attempt working-copy path is
+	// part of the raw observed/verification evidence (and therefore of the
+	// digests and identities of the records derived from it), so a different
+	// output root is legitimately a different run.
+	outDir := filepath.Join(t.TempDir(), "out")
+	first := runCLIExecutionForProject(t, projectDir, outDir)
 	if first.result.Cached {
 		t.Fatal("expected first run to execute")
 	}
+	firstFiles := readRecordPackageFiles(t, recordPackageRoot(first.result.RunRoot))
 	if err := os.RemoveAll(".cache"); err != nil {
 		t.Fatalf("failed to clear cache before equivalent rerun: %v", err)
 	}
-	second := runCLIExecutionForProject(t, projectDir, filepath.Join(t.TempDir(), "out-b"))
+	if err := os.RemoveAll(outDir); err != nil {
+		t.Fatalf("failed to clear output root before equivalent rerun: %v", err)
+	}
+	second := runCLIExecutionForProject(t, projectDir, outDir)
 	if second.result.Cached {
 		t.Fatal("expected second run to execute")
 	}
+	if first.result.RunRoot != second.result.RunRoot {
+		t.Fatalf("equivalent runs used different run roots: %q vs %q", first.result.RunRoot, second.result.RunRoot)
+	}
 
-	firstFiles := readRecordPackageFiles(t, recordPackageRoot(first.result.RunRoot))
 	secondFiles := readRecordPackageFiles(t, recordPackageRoot(second.result.RunRoot))
 	assertSamePackageFileSet(t, firstFiles, secondFiles)
 
 	stablePaths := deterministicRecordPackagePaths(t, firstFiles)
 	for _, path := range stablePaths {
 		assertPackageFileBytesEqual(t, path, firstFiles[path], secondFiles[path])
+	}
+	// The stable set covers every normalized runtime record family.
+	for _, want := range []string{
+		recordpackage.PackageManifestContractPath(),
+		recordpackage.MustRecordContractPath("execution"),
+		recordpackage.MustRecordContractPath("observation"),
+		recordpackage.MustRecordContractPath("verification"),
+	} {
+		if !containsString(stablePaths, want) {
+			t.Fatalf("deterministic package paths %v missing %q", stablePaths, want)
+		}
+	}
+	artifactRecords := 0
+	for _, path := range stablePaths {
+		if strings.HasPrefix(path, "records/artifacts/") {
+			artifactRecords++
+		}
+	}
+	if artifactRecords < 2 {
+		t.Fatalf("deterministic package paths %v include %d artifact records, want several", stablePaths, artifactRecords)
 	}
 
 	firstManifest := readCLIRecordPackageManifest(t, recordPackageRoot(first.result.RunRoot))
@@ -1895,13 +1926,19 @@ func TestRecordEmitRunPackage_ReemissionIntoSameRunRootIsIdempotent(t *testing.T
 	}
 	before := readRecordPackageFiles(t, packageRoot)
 
-	// Re-emission does not reconstruct CAD runtime evidence from run-root
-	// paths; a caller reproducing an equivalent package must resupply the
-	// same attempt evidence bytes it already holds.
-	cadRuntimeEvidence := &recordemit.CADRuntimeRunEvidence{
-		Result:       before[recordpackage.RawRuntimeResultContractPath()],
-		Verification: before[recordpackage.RawVerificationContractPath()],
-		Observed:     before[recordpackage.RawObservedContractPath()],
+	// EmitRunPackage is an in-process emission boundary: it reads only the
+	// report/metadata/artifact-store raw evidence from the run root, and takes
+	// every typed mapping input (artifacts, interpreted observed value,
+	// verification result, CAD attempt evidence) from its caller. A caller
+	// reproducing an equivalent package supplies the same typed inputs it
+	// gets from a normal run -- here the scheduler result for the attempt
+	// evidence and the run's persisted artifact-store manifest for artifacts.
+	cadRuntimeEvidence, err := cadRuntimeRunEvidence(run.result.Execution, true)
+	if err != nil || cadRuntimeEvidence == nil {
+		t.Fatalf("cadRuntimeRunEvidence = %#v, err = %v", cadRuntimeEvidence, err)
+	}
+	if cadRuntimeEvidence.ObservedValue == nil || cadRuntimeEvidence.VerificationResult == nil {
+		t.Fatalf("normal-run CAD evidence lacks typed values: %#v", cadRuntimeEvidence)
 	}
 
 	if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
@@ -1909,6 +1946,7 @@ func TestRecordEmitRunPackage_ReemissionIntoSameRunRootIsIdempotent(t *testing.T
 		PlanHash:   run.planned.PlanHash,
 		Report:     run.report,
 		Metadata:   &run.metadata,
+		Artifacts:  runRootArtifacts(t, run.result.RunRoot),
 		CADRuntime: cadRuntimeEvidence,
 	}); err != nil {
 		t.Fatalf("EmitRunPackage(second) failed: %v", err)
@@ -2002,7 +2040,9 @@ func TestCLIProjectRun_FailedNormalRunEmitsFailureRecordPackage(t *testing.T) {
 	}
 	assertManifestHasRecord(t, manifest, "execution", recordpackage.MustRecordContractPath("execution"), wantPackageKey)
 	assertManifestHasRecord(t, manifest, "failure", recordpackage.MustRecordContractPath("failure"), wantFailureKey)
-	assertManifestRawEvidencePaths(t, manifest, []string{recordpackage.RawReportContractPath()})
+	// The aligned runtime reported a native failure, so its result is
+	// preserved next to the report and the failure record is derived from it.
+	assertManifestRawEvidencePaths(t, manifest, []string{recordpackage.RawReportContractPath(), recordpackage.RawRuntimeResultContractPath()})
 
 	failure := readCLIFailureRecord(t, packageRoot)
 	if err := recordcontract.ValidateFailureRecord(failure); err != nil {
@@ -2020,8 +2060,11 @@ func TestCLIProjectRun_FailedNormalRunEmitsFailureRecordPackage(t *testing.T) {
 	if failure.Failure.Class == "" || failure.Failure.Stage == "" || failure.Failure.Severity == "" || failure.Failure.Message == "" {
 		t.Fatalf("failure summary missing required normalized material: %#v", failure.Failure)
 	}
-	if !hasFailureRecordEvidence(failure, "report", recordpackage.RawReportContractPath()) {
-		t.Fatalf("failure evidence = %#v, want raw report evidence", failure.Failure.Evidence)
+	if !hasFailureRecordEvidence(failure, "runtime-result", recordpackage.RawRuntimeResultContractPath()) {
+		t.Fatalf("failure evidence = %#v, want raw runtime result evidence", failure.Failure.Evidence)
+	}
+	if failure.Failure.Code != "controlled_failure" {
+		t.Fatalf("failure code = %q, want the native runtime failure code", failure.Failure.Code)
 	}
 	if failure.Provenance.Plan.PlanHash != run.planned.PlanHash {
 		t.Fatalf("failure provenance plan hash = %q, want %q", failure.Provenance.Plan.PlanHash, run.planned.PlanHash)
@@ -2604,11 +2647,9 @@ func assertManifestRawEvidencePaths(t *testing.T, manifest cliRecordPackageManif
 func assertManifestOrdering(t *testing.T, manifest cliRecordPackageManifest) {
 	t.Helper()
 
-	for i := 1; i < len(manifest.Records); i++ {
-		if manifest.Records[i-1].ContractPath > manifest.Records[i].ContractPath {
-			t.Fatalf("manifest record entries are not deterministic by contract path: %#v", manifest.Records)
-		}
-	}
+	// Records are ordered by record-contract family, not by contract path;
+	// artifact records (the only plural family) are ordered by identity.
+	assertManifestFamilyOrdering(t, manifest)
 
 	wantRawPrefix := []string{
 		recordpackage.RawReportContractPath(),
@@ -2865,6 +2906,15 @@ if mode == "malformed_result":
         handle.write("{")
     sys.exit(0)
 
+if mode == "failure_raw":
+    # Writes the exact bytes given in the environment, so tests control the
+    # result's formatting and content; no variable means no result file.
+    raw_result = os.environ.get("PARAMETRON_TASK13_RUNTIME_RAW_RESULT")
+    if raw_result is not None:
+        with open(result_path, "w", encoding="utf-8", newline="") as handle:
+            handle.write(raw_result)
+    sys.exit(17)
+
 if mode == "failure":
     result = {
         "schemaVersion": "1.0",
@@ -2930,6 +2980,17 @@ observed = {
         "components": components
     }
 }
+requested_target_state = contract.get("observationContext", {}).get("targetState")
+if requested_target_state:
+    # Report the states the Engine-derived target-state intents expect:
+    # suppress -> suppressed, hide -> not visible, delete -> absent.
+    def boolean_evidence(items, value):
+        return [{"destination": i["destination"], "object": i["object"], "status": "observed", "value": value} for i in items]
+    observed["observation"]["targetState"] = {
+        "suppression": boolean_evidence(requested_target_state.get("suppression", []), mode != "verification_mismatch"),
+        "visibility": boolean_evidence(requested_target_state.get("visibility", []), False),
+        "existence": [{"destination": i["destination"], "object": i["object"], "status": "absent"} for i in requested_target_state.get("existence", [])]
+    }
 if mode == "observed_mismatch":
     observed["workingCopy"]["sha256"] = "0" * 64
 with open(os.path.join(output_dir, "prm.observed.json"), "w", encoding="utf-8") as handle:

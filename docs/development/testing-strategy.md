@@ -90,18 +90,30 @@ record packaging.
   including normalized target-state observation facts and target-state
   verification category and failure vocabulary within those existing families.
 - **Record Mapping (`internal/engine/recordmap`)**: Tests mapping from operational
-  files (`prm.report.json`, `prm.metadata.json`, legacy `result.json` payloads,
-  observed state, traversals) to normalized record structures. Target-state
-  tests cover deterministic observation and verification mapping, stable record
+  reports, metadata, artifacts, typed observed state, traversals, Engine
+  verification results, and generic CAD runtime failure outcomes to normalized
+  record structures. Target-state tests cover deterministic observation and
+  verification mapping within the existing record families, stable record
   identity, and verification provenance linking the raw verification request and
-  observed evidence. Mapper coverage does not imply that every normal-run path
-  emits those records. Legacy result-mapper coverage remains distinct from the
-  active runtime transport filename.
+  observed evidence. CAD failure tests prove that runtime-specific
+  interpretation occurs before the adapter-neutral `MapCADRuntimeFailure`
+  boundary and that exact raw result bytes supply digest provenance. Current
+  FreeCAD vocabulary maps validation failures to `validation / validation`,
+  adapter availability and native observation/traversal failures to
+  `adapter / adapter`, artifact export failures to `export / export`, and
+  ordinary or otherwise-valid unknown failures to `runtime / runtime`.
 - **Record Package Writer & Emission (`internal/engine/recordpackage`, `internal/engine/recordemit`)**:
-  Verifies deterministic package generation, manifest indexing, and raw evidence
-  preservation under `raw/`. CAD evidence tests read authoritative attempt
-  paths, preserve source bytes, reject run-root guessing, and avoid arbitrary
-  selection when multiple outcomes are eligible.
+  Verifies normal-run emission, deterministic package generation, manifest
+  indexing, and raw evidence preservation under `raw/`. Artifact tests cover
+  zero, one, and multiple records at the identity-addressed
+  `records/artifacts/<identityId>/parametron.artifact-record.json` path, stable
+  identity ordering, and duplicate rejection while other record families remain
+  singular. CAD evidence tests prove observation, verification, and target-state
+  emission from typed Engine material; preserve exact source bytes; reject
+  run-root guessing; and avoid arbitrary selection when multiple outcomes are
+  eligible. Failure tests cover terminal failed-outcome correlation,
+  runtime-native precedence, report-derived fallback, verification-failure
+  separation, exact-byte digest provenance, and deterministic repeated output.
 
 ### 4. Scheduler, Executor, and Cache
 

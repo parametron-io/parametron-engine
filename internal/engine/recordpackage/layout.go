@@ -19,6 +19,9 @@ const (
 	// RecordsDirectoryName is the canonical normalized records directory.
 	RecordsDirectoryName = "records"
 
+	// ArtifactRecordsDirectoryName contains identity-addressed artifact records.
+	ArtifactRecordsDirectoryName = "artifacts"
+
 	// ArtifactsDirectoryName is the canonical packaged artifacts directory.
 	ArtifactsDirectoryName = "artifacts"
 
@@ -99,6 +102,9 @@ func RawEvidenceDirectoryContractPath() string {
 
 // RecordContractPath returns the canonical normalized record contract path for family.
 func RecordContractPath(family recordcontract.Family) (string, bool) {
+	if recordcontract.NormalizeFamily(family) == recordcontract.FamilyArtifact {
+		return "", false
+	}
 	fileName, ok := recordcontract.FileNameForFamily(family)
 	if !ok {
 		return "", false
@@ -108,6 +114,25 @@ func RecordContractPath(family recordcontract.Family) (string, bool) {
 		return "", false
 	}
 	return path, true
+}
+
+// ArtifactRecordsDirectoryContractPath returns the artifact-record collection directory.
+func ArtifactRecordsDirectoryContractPath() string {
+	return mustJoinContractPath(RecordsDirectoryName, ArtifactRecordsDirectoryName)
+}
+
+// ArtifactRecordContractPath returns the canonical identity-addressed path for
+// one normalized artifact record.
+func ArtifactRecordContractPath(identityID string) (string, error) {
+	identityID = strings.TrimSpace(identityID)
+	if identityID == "" {
+		return "", fmt.Errorf("%w: artifact record identity is required", ErrInvalidLayoutPath)
+	}
+	fileName, ok := recordcontract.FileNameForFamily(recordcontract.FamilyArtifact)
+	if !ok {
+		return "", fmt.Errorf("%w: artifact record family is not registered", ErrInvalidLayoutPath)
+	}
+	return JoinContractPath(ArtifactRecordsDirectoryContractPath(), identityID, fileName)
 }
 
 // MustRecordContractPath returns the canonical normalized record contract path for family
@@ -125,6 +150,9 @@ func RecordEntries() []Entry {
 	definitions := recordcontract.Definitions()
 	out := make([]Entry, 0, len(definitions))
 	for _, def := range definitions {
+		if def.Family == recordcontract.FamilyArtifact {
+			continue
+		}
 		path, ok := RecordContractPath(def.Family)
 		if !ok {
 			panic(fmt.Sprintf("recordpackage: missing record path for family %q", def.Family))

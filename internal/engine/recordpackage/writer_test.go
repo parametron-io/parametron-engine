@@ -192,6 +192,9 @@ func TestWritePackageMaterializesLayoutRecordsAndManifest(t *testing.T) {
 	if !reflect.DeepEqual(manifest.Records, wantEntries) {
 		t.Fatalf("manifest records = %#v, want %#v", manifest.Records, wantEntries)
 	}
+	if _, err := os.Stat(filepath.Join(root, "records", "parametron.artifact-record.json")); !os.IsNotExist(err) {
+		t.Fatalf("superseded singleton artifact record path exists (stat err = %v)", err)
+	}
 
 	for _, entry := range manifest.Records {
 		recordPath := filepath.Join(root, filepath.FromSlash(entry.ContractPath))
@@ -863,11 +866,18 @@ func expectedRecordManifestEntries(t *testing.T) []struct {
 		IdentityID   string `json:"identityId"`
 	}, 0, len(recordcontract.Definitions()))
 	for _, def := range recordcontract.Definitions() {
-		path, ok := recordpackage.RecordContractPath(def.Family)
-		if !ok {
-			t.Fatalf("RecordContractPath(%q) ok = false, want true", def.Family)
-		}
 		record := recordsByFamily[def.Family]
+		var path string
+		if def.Family == recordcontract.FamilyArtifact {
+			// Artifact records are addressed by record identity; the family
+			// has no singleton path.
+			path = artifactIdentityPath(t, record.identityID)
+		} else {
+			var ok bool
+			if path, ok = recordpackage.RecordContractPath(def.Family); !ok {
+				t.Fatalf("RecordContractPath(%q) ok = false, want true", def.Family)
+			}
+		}
 		out = append(out, struct {
 			Family       string `json:"family"`
 			ContractPath string `json:"contractPath"`

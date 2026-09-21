@@ -301,7 +301,7 @@ class FakeCLISuccessUsesNormalAlignedPathTests(unittest.TestCase):
         self.assertEqual(item["status"], "passed")
         self.assertEqual(item["runtimeInvocations"], 1)
         for key in ("planHash", "jobID", "manifestHash", "requestHash", "resultHash",
-                    "stepHash", "artifactManifestHash", "recordPackageHash"):
+                    "stepHash", "artifactManifestHash", "recordPackageStableHash"):
             self.assertTrue(item[key], f"{key} missing/empty")
         self.assertTrue(item["metadataPresent"])
         self.assertEqual(item["stepCount"], 1)
@@ -420,7 +420,7 @@ class RepeatedFakeRunsExecuteRuntimeTwiceTests(unittest.TestCase):
         self.assertEqual(item["runtimeInvocations"], 2)
         self.assertTrue(item["stable"])
         for key in ("planHash", "jobID", "manifestHash", "requestHash", "resultHash",
-                    "stepHash", "artifactManifestHash", "recordPackageHash"):
+                    "stepHash", "artifactManifestHash", "recordPackageStableHash"):
             self.assertTrue(item[key])
 
 
@@ -634,6 +634,217 @@ class SourceAndOwnershipBoundaryTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8").lower()
             for token in ("recordcontract", "recordemit", "recordmap", "recordpackage.persist", " pdm "):
                 self.assertNotIn(token, text)
+
+
+# ============ Repeated record-package comparison (structured) ============
+
+def _digest(content):
+    return harness.sha256_hex(content)
+
+
+def _canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+
+
+def _with_identity(record):
+    record["identity"]["ID"] = ""
+    record["identity"]["ID"] = _digest(_canonical(record))
+    return record
+
+
+def _evidence(ref, content):
+    return {"sourceKind": "observed", "sourceRef": ref, "digestSha256": _digest(content)}
+
+
+def build_snapshot(tag, *, obs_value="10", outcome="pass", plan="plan1"):
+    """Synthetic single-run package snapshot for a run under its own attempt root."""
+    out = f"/tmp/proof/{tag}/output"
+    root = f"{out}/{plan}/products/Box/_working/box-attempt-000001"
+    observed = _canonical({"workingCopy": {"path": root, "sha256": "s"},
+                           "observation": {"metadata": [{"key": "k", "value": obs_value}],
+                                           "references": [{"kind": "working_copy_path", "name": root}]}})
+    verification = _canonical({"expected": {"references": [{"kind": "working_copy_path", "name": root}]}})
+    raw = {harness.OBSERVED_RAW: observed, harness.VERIFICATION_RAW: verification,
+           harness.METADATA_RAW: b"{}"}
+    obs_ev = _evidence(harness.OBSERVED_RAW, observed)
+    ver_ev = {"sourceKind": "verification", "sourceRef": harness.VERIFICATION_RAW,
+              "digestSha256": _digest(verification)}
+    key = f"engine-run:{plan}"
+    records = {
+        "records/parametron.execution-record.json": _with_identity(
+            {"family": "execution", "recordKey": key, "identity": {"ID": ""}, "run": {"plan": plan}}),
+        "records/artifacts/x/parametron.artifact-record.json": _with_identity(
+            {"family": "artifact", "recordKey": key + ":artifact:x", "identity": {"ID": ""}, "path": "a.step"}),
+        "records/parametron.observation-record.json": _with_identity(
+            {"family": "observation", "recordKey": key + ":observation", "identity": {"ID": ""},
+             "provenance": {"Evidence": [{"Kind": "observed", "Ref": harness.OBSERVED_RAW,
+                                          "DigestSHA256": obs_ev["digestSha256"]}]},
+             "observation": {"facts": [
+                 {"kind": "metadata", "key": "k", "subject": {"id": "k"},
+                  "value": {"kind": "string", "raw": json.dumps(obs_value)}, "evidence": obs_ev},
+                 {"kind": "reference", "key": "working_copy_path", "subject": {"name": root},
+                  "value": {"kind": "string", "raw": json.dumps(root)}, "evidence": obs_ev}]}}),
+        "records/parametron.verification-record.json": _with_identity(
+            {"family": "verification", "recordKey": key + ":verification", "identity": {"ID": ""},
+             "provenance": {"Evidence": [{"Kind": "verification", "Ref": harness.VERIFICATION_RAW,
+                                          "DigestSHA256": ver_ev["digestSha256"]}]},
+             "verification": {"outcome": outcome, "categories": [{"category": "metadata", "outcome": outcome,
+                                                                  "evidence": [ver_ev]}],
+                              "evidence": [ver_ev]}}),
+    }
+    entries = [{"family": r["family"], "contractPath": path, "recordKey": r["recordKey"],
+                "identityId": r["identity"]["ID"]} for path, r in records.items()]
+    return {
+        "manifest": {"schemaVersion": "1.0", "packageKey": key, "layoutVersion": "1.0",
+                     "ownership": {"producer": "engine"}, "records": entries},
+        "records": {path: _canonical(r) for path, r in records.items()},
+        "raw": raw, "outputRoots": [out],
+    }
+
+
+def edit(snapshot, family, mutate, *, reidentify=True):
+    """Mutates one decoded record and keeps its manifest entry consistent."""
+    entry = next(e for e in snapshot["manifest"]["records"] if e["family"] == family)
+    record = json.loads(snapshot["records"][entry["contractPath"]])
+    mutate(record)
+    if reidentify:
+        _with_identity(record)
+    entry["identityId"] = record["identity"]["ID"]
+    snapshot["records"][entry["contractPath"]] = _canonical(record)
+    return snapshot
+
+
+REQUIRED = ("execution", "artifact", "observation", "verification")
+
+
+class RepeatedRecordPackageComparisonTests(unittest.TestCase):
+    def compare(self, a, b):
+        return harness.compare_repeated_record_packages(a, b, required_families=REQUIRED)
+
+    def assertRejected(self, a, b, fragment=None):
+        with self.assertRaises(harness.ProofFailure) as ctx:
+            self.compare(a, b)
+        if fragment:
+            self.assertIn(fragment, str(ctx.exception))
+
+    def test_accepts_only_attempt_root_evidence_variance(self):
+        a, b = build_snapshot("run1"), build_snapshot("run2")
+        # Precondition: the identities genuinely differ and so do the raw bytes.
+        ids = lambda s: {e["family"]: e["identityId"] for e in s["manifest"]["records"]}
+        self.assertNotEqual(ids(a)["observation"], ids(b)["observation"])
+        self.assertNotEqual(ids(a)["verification"], ids(b)["verification"])
+        self.assertNotEqual(a["raw"][harness.OBSERVED_RAW], b["raw"][harness.OBSERVED_RAW])
+        self.assertEqual(ids(a)["execution"], ids(b)["execution"])
+        self.assertEqual(self.compare(a, b), ["observation", "verification"])
+
+    def test_accepts_identical_evidence(self):
+        self.assertEqual(self.compare(build_snapshot("run1"), build_snapshot("run1")), [])
+
+    def test_rejects_semantic_variance(self):
+        cases = {
+            "observation value": (lambda: build_snapshot("run2", obs_value="11"), "observation normalized"),
+            "verification outcome": (lambda: build_snapshot("run2", outcome="fail"), "verification normalized"),
+        }
+        for name, (make, fragment) in cases.items():
+            with self.subTest(name=name):
+                self.assertRejected(build_snapshot("run1"), make(), fragment)
+
+        def failure_class(record):
+            record["verification"]["categories"][0]["failureClass"] = "mismatch"
+        with self.subTest(name="verification failure category"):
+            self.assertRejected(build_snapshot("run1"),
+                                edit(build_snapshot("run2"), "verification", failure_class),
+                                "verification normalized")
+
+    def test_rejects_stable_family_variance(self):
+        def setter(key, value):
+            return lambda record: record.__setitem__(key, value)
+        with self.subTest(name="execution identity"):
+            self.assertRejected(build_snapshot("run1"),
+                                edit(build_snapshot("run2"), "execution", setter("run", {"plan": "other"})),
+                                "execution identity differs")
+        with self.subTest(name="artifact identity"):
+            self.assertRejected(build_snapshot("run1"),
+                                edit(build_snapshot("run2"), "artifact", setter("path", "b.step")),
+                                "artifact identity differs")
+        with self.subTest(name="package key"):
+            b = build_snapshot("run2")
+            b["manifest"]["packageKey"] = "engine-run:other"
+            self.assertRejected(build_snapshot("run1"), b, "packageKey")
+        with self.subTest(name="record order"):
+            b = build_snapshot("run2")
+            b["manifest"]["records"].reverse()
+            self.assertRejected(build_snapshot("run1"), b)
+        with self.subTest(name="artifact contract path"):
+            b = build_snapshot("run2")
+            entry = next(e for e in b["manifest"]["records"] if e["family"] == "artifact")
+            old = entry["contractPath"]
+            entry["contractPath"] = "records/artifacts/y/parametron.artifact-record.json"
+            b["records"][entry["contractPath"]] = b["records"].pop(old)
+            self.assertRejected(build_snapshot("run1"), b, "contractPath")
+        for family in ("observation", "verification"):
+            with self.subTest(name=f"{family} record key"):
+                b = build_snapshot("run2")
+                next(e for e in b["manifest"]["records"] if e["family"] == family)["recordKey"] = "engine-run:x"
+                self.assertRejected(build_snapshot("run1"), b)
+            with self.subTest(name=f"{family} contract path"):
+                b = build_snapshot("run2")
+                entry = next(e for e in b["manifest"]["records"] if e["family"] == family)
+                old = entry["contractPath"]
+                entry["contractPath"] = "records/elsewhere.json"
+                b["records"][entry["contractPath"]] = b["records"].pop(old)
+                self.assertRejected(build_snapshot("run1"), b, "contractPath")
+        with self.subTest(name="missing required family"):
+            a, b = build_snapshot("run1"), build_snapshot("run2")
+            for snap in (a, b):
+                snap["manifest"]["records"] = [e for e in snap["manifest"]["records"]
+                                               if e["family"] != "verification"]
+            self.assertRejected(a, b, "missing")
+
+    def test_rejects_provenance_corruption(self):
+        with self.subTest(name="digest is not exact raw SHA-256"):
+            def corrupt(record):
+                record["provenance"]["Evidence"][0]["DigestSHA256"] = _digest(b"normalized json, not raw")
+            self.assertRejected(build_snapshot("run1"),
+                                edit(build_snapshot("run2"), "observation", corrupt), "exact packaged raw bytes")
+        with self.subTest(name="digest for raw evidence that was rewritten"):
+            b = build_snapshot("run2")
+            b["raw"][harness.VERIFICATION_RAW] += b" "
+            self.assertRejected(build_snapshot("run1"), b, "exact packaged raw bytes")
+        with self.subTest(name="wrong evidence ref"):
+            def rewire(record):
+                record["provenance"]["Evidence"][0]["Ref"] = harness.VERIFICATION_RAW
+            self.assertRejected(build_snapshot("run1"),
+                                edit(build_snapshot("run2"), "observation", rewire), "non-canonical evidence ref")
+        with self.subTest(name="missing exact digest"):
+            def blank(record):
+                record["provenance"]["Evidence"][0]["DigestSHA256"] = ""
+            self.assertRejected(build_snapshot("run1"),
+                                edit(build_snapshot("run2"), "observation", blank), "lacks its exact raw digest")
+        for family in ("observation", "verification"):
+            with self.subTest(name=f"{family} identity changed without evidence variance"):
+                a = build_snapshot("run1")
+                b = edit(build_snapshot("run1"), family,
+                         lambda r: r["identity"].__setitem__("ID", "f" * 64), reidentify=False)
+                self.assertRejected(a, b, "identity differs without differing")
+
+    def test_rejects_unexpected_path_material(self):
+        with self.subTest(name="working_copy_path outside output root"):
+            b = build_snapshot("run2")
+            outside = "/elsewhere/_working/att"
+            def move(record):
+                for fact in record["observation"]["facts"]:
+                    if fact["key"] == "working_copy_path":
+                        fact["subject"]["name"] = outside
+                        fact["value"]["raw"] = json.dumps(outside)
+            edit(b, "observation", move)
+            self.assertRejected(build_snapshot("run1"), b, "not beneath this run's output root")
+        with self.subTest(name="attempt root leaks into another field"):
+            b = build_snapshot("run2")
+            root = next(f for f in json.loads(b["records"]["records/parametron.observation-record.json"])
+                        ["observation"]["facts"] if f["key"] == "working_copy_path")["subject"]["name"]
+            edit(b, "observation", lambda r: r["observation"]["facts"][0].__setitem__("note", root))
+            self.assertRejected(build_snapshot("run1"), b)
 
 
 if __name__ == "__main__":

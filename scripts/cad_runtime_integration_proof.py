@@ -120,6 +120,17 @@ def cache_isolated_cli(ctx, name, mode, *, runtime, expect_success=True):
     }
 
 
+def stable_package_manifest_digest(path):
+    """Digest of the package manifest with only the evidence-dependent
+    identityIds elided: those legitimately vary with attempt-root raw evidence
+    (see compare_repeated_record_packages). Not a digest of the manifest bytes."""
+    manifest = json_file(path)
+    for entry in manifest["records"]:
+        if entry["family"] in EVIDENCE_DEPENDENT_FAMILIES:
+            entry["identityId"] = "<evidence-dependent>"
+    return hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 def stable_cli_facts(item):
     manifests = [path for path in item["out"].rglob("manifest.json")
                  if "parametron-record-package" not in path.parts]
@@ -148,9 +159,215 @@ def stable_cli_facts(item):
         "stepHash": digest(steps[0]),
         "artifactManifestHash": normalized_json_digest(manifest),
         "metadataPresent": metadata.exists(),
-        "recordPackageHash": digest(record_manifest),
+        "recordPackageStableHash": stable_package_manifest_digest(record_manifest),
         "stepCount": len(steps),
     }
+
+
+# --- Record-package comparison -------------------------------------------
+#
+# Equivalent runs with equivalent runtime evidence yield deterministic
+# normalized output. Repeated proof runs deliberately execute under different
+# attempt roots, so their exact raw observed/verification bytes differ by the
+# attempt-root path. Those exact bytes legitimately feed the observation and
+# verification records (evidence digests; the established working_copy_path
+# observation fact), hence those two identities may differ. Everything else in
+# the package must be exactly equal.
+
+OBSERVED_RAW = "raw/observed/prm.observed.json"
+VERIFICATION_RAW = "raw/verification/prm.verification.json"
+METADATA_RAW = "raw/prm.metadata.json"
+EVIDENCE_DEPENDENT_FAMILIES = ("observation", "verification")
+ALLOWED_EVIDENCE_REFS = {
+    "observation": {OBSERVED_RAW, METADATA_RAW},
+    "verification": {VERIFICATION_RAW, OBSERVED_RAW, METADATA_RAW},
+}
+REQUIRED_EXACT_EVIDENCE = {"observation": OBSERVED_RAW, "verification": VERIFICATION_RAW}
+ATTEMPT_ROOT_PLACEHOLDER = "<attempt-root>"
+DIGEST_PLACEHOLDER = "<exact-raw-digest>"
+
+
+def sha256_hex(content):
+    return hashlib.sha256(content).hexdigest()
+
+
+def record_package_snapshot(item):
+    """Reads one run's record package into plain data: manifest, exact record
+    bytes, exact packaged raw bytes, and the output root."""
+    manifest_path = find_one(item["out"], "parametron.record-package.json")
+    package = manifest_path.parent
+    manifest = json_file(manifest_path)
+    records = {entry["contractPath"]: (package / entry["contractPath"]).read_bytes()
+               for entry in manifest["records"]}
+    raw = {entry["contractPath"]: (package / entry["contractPath"]).read_bytes()
+           for entry in manifest.get("rawEvidence", [])}
+    # Raw evidence must be the exact accepted source bytes, never rewritten.
+    for contract_path, name in ((OBSERVED_RAW, "prm.observed.json"),
+                                (VERIFICATION_RAW, "prm.verification.json"),
+                                ("raw/runtime/prm.result.json", "prm.result.json")):
+        if contract_path in raw:
+            source = find_one_outside_record_package(item["out"], name)
+            require(source.read_bytes() == raw[contract_path],
+                    f"packaged {contract_path} is not the exact source evidence bytes")
+    return {"manifest": manifest, "records": records, "raw": raw,
+            "outputRoots": sorted({str(item["out"]), str(item["out"].resolve())})}
+
+
+def evidence_pairs(value):
+    """Every (ref, digest) evidence pair beneath a decoded record."""
+    pairs = []
+    if isinstance(value, dict):
+        for ref_key, digest_key in (("sourceRef", "digestSha256"), ("Ref", "DigestSHA256")):
+            if ref_key in value and digest_key in value:
+                pairs.append((value[ref_key], value[digest_key]))
+        for child in value.values():
+            pairs.extend(evidence_pairs(child))
+    elif isinstance(value, list):
+        for child in value:
+            pairs.extend(evidence_pairs(child))
+    return pairs
+
+
+def replace_digests(value, raw):
+    if isinstance(value, dict):
+        out = {}
+        for key, child in value.items():
+            if key in ("digestSha256", "DigestSHA256") and child and child in {sha256_hex(b) for b in raw.values()}:
+                out[key] = DIGEST_PLACEHOLDER
+            else:
+                out[key] = replace_digests(child, raw)
+        return out
+    if isinstance(value, list):
+        return [replace_digests(child, raw) for child in value]
+    return value
+
+
+def attempt_root_fact(record, snapshot):
+    """The single established working_copy_path observation fact; returns
+    (fact, path) after proving it is confined to this run's attempt root."""
+    facts = [fact for fact in record["observation"]["facts"]
+             if fact.get("kind") == "reference" and fact.get("key") == "working_copy_path"]
+    require(len(facts) == 1, f"expected exactly one working_copy_path fact, found {len(facts)}")
+    fact = facts[0]
+    path = fact["subject"]["name"]
+    require(fact["value"]["kind"] == "string" and json.loads(fact["value"]["raw"]) == path,
+            "working_copy_path fact value does not equal its subject")
+    require(path.startswith("/") and any(path.startswith(root + "/") for root in snapshot["outputRoots"]),
+            f"working_copy_path {path!r} is not beneath this run's output root")
+    parts = path.split("/")
+    require("_working" in parts and parts.index("_working") < len(parts) - 1,
+            f"working_copy_path {path!r} is not an attempt root beneath _working")
+    return fact, path
+
+
+def validate_record_package_snapshot(snapshot):
+    """Positive provenance proof for one package. Returns per-family facts
+    used by the repeated comparison."""
+    manifest, raw = snapshot["manifest"], snapshot["raw"]
+    decoded = {}
+    for entry in manifest["records"]:
+        record = json.loads(snapshot["records"][entry["contractPath"]])
+        require(record["family"] == entry["family"] and record["recordKey"] == entry["recordKey"]
+                and record["identity"]["ID"] == entry["identityId"],
+                f"manifest entry {entry['contractPath']} disagrees with its record")
+        decoded.setdefault(entry["family"], []).append(record)
+    facts = {}
+    for family in EVIDENCE_DEPENDENT_FAMILIES:
+        records = decoded.get(family, [])
+        require(len(records) <= 1, f"expected at most one {family} record, found {len(records)}")
+        if not records:
+            continue
+        record = records[0]
+        pairs = evidence_pairs(record)
+        refs = set()
+        for ref, digest in pairs:
+            require(ref in ALLOWED_EVIDENCE_REFS[family],
+                    f"{family} record has non-canonical evidence ref {ref!r}")
+            refs.add(ref)
+            if digest:
+                require(ref in raw, f"{family} evidence {ref!r} has a digest but no packaged raw file")
+                require(digest == sha256_hex(raw[ref]),
+                        f"{family} evidence digest for {ref!r} is not SHA-256 of the exact packaged raw bytes")
+            else:
+                require(ref != REQUIRED_EXACT_EVIDENCE[family] and ref != OBSERVED_RAW,
+                        f"{family} evidence {ref!r} lacks its exact raw digest")
+        require(REQUIRED_EXACT_EVIDENCE[family] in refs, f"{family} record does not reference its raw evidence")
+        facts[family] = {"record": record, "refs": refs}
+    if "observation" in facts:
+        _, path = attempt_root_fact(facts["observation"]["record"], snapshot)
+        facts["attemptRoot"] = path
+        for contract_path in (OBSERVED_RAW, VERIFICATION_RAW):
+            if contract_path in raw:
+                require(path.encode() in raw[contract_path],
+                        f"{contract_path} does not carry the attempt root")
+    return facts
+
+
+def _evidence_material(family, facts, snapshot):
+    raw = snapshot["raw"]
+    material = {"observed": sha256_hex(raw[OBSERVED_RAW]) if OBSERVED_RAW in facts[family]["refs"] else None}
+    if family == "observation":
+        material["attemptRoot"] = facts["attemptRoot"]
+    else:
+        material["verification"] = sha256_hex(raw[VERIFICATION_RAW])
+    return material
+
+
+def _normalized_dependent_record(family, facts, snapshot):
+    record = json.loads(json.dumps(facts[family]["record"]))
+    record["identity"]["ID"] = "<identity>"
+    root = facts.get("attemptRoot")
+    if family == "observation":
+        fact, path = attempt_root_fact(record, snapshot)
+        fact["subject"]["name"] = ATTEMPT_ROOT_PLACEHOLDER
+        fact["value"]["raw"] = json.dumps(ATTEMPT_ROOT_PLACEHOLDER)
+    record = replace_digests(record, snapshot["raw"])
+    if root:
+        require(root not in json.dumps(record),
+                f"attempt root leaks into {family} record beyond the working_copy_path fact")
+    return record
+
+
+def compare_repeated_record_packages(a, b, required_families=("execution", "artifact")):
+    """Compares two snapshots of equivalent runs under different attempt roots.
+    Returns the list of families whose identity legitimately differs."""
+    facts_a, facts_b = validate_record_package_snapshot(a), validate_record_package_snapshot(b)
+    ma, mb = a["manifest"], b["manifest"]
+    for key in ("schemaVersion", "packageKey", "layoutVersion", "ownership"):
+        require(ma.get(key) == mb.get(key), f"record package {key} differs: {ma.get(key)!r} != {mb.get(key)!r}")
+    ea, eb = ma["records"], mb["records"]
+    require(len(ea) == len(eb), f"record count differs: {len(ea)} != {len(eb)}")
+    for x, y in zip(ea, eb):
+        for key in ("family", "contractPath", "recordKey"):
+            require(x[key] == y[key], f"record entry {key} differs: {x[key]!r} != {y[key]!r}")
+    families = {entry["family"] for entry in ea}
+    for family in required_families:
+        require(family in families, f"required record family {family!r} missing from package")
+    varying = []
+    for x, y in zip(ea, eb):
+        family, path = x["family"], x["contractPath"]
+        if family not in EVIDENCE_DEPENDENT_FAMILIES:
+            require(x["identityId"] == y["identityId"], f"{family} identity differs at {path}")
+            require(a["records"][path] == b["records"][path], f"{family} record bytes differ at {path}")
+            continue
+        norm_a = _normalized_dependent_record(family, facts_a, a)
+        norm_b = _normalized_dependent_record(family, facts_b, b)
+        require(norm_a == norm_b, f"{family} normalized semantics differ beyond attempt-root evidence")
+        mat_a = _evidence_material(family, facts_a, a)
+        mat_b = _evidence_material(family, facts_b, b)
+        # The raw evidence itself may differ only by the attempt root.
+        for contract_path in (OBSERVED_RAW, VERIFICATION_RAW):
+            if contract_path in a["raw"] and contract_path in b["raw"] and "attemptRoot" in facts_a and "attemptRoot" in facts_b:
+                ra = a["raw"][contract_path].replace(facts_a["attemptRoot"].encode(), b"<attempt-root>")
+                rb = b["raw"][contract_path].replace(facts_b["attemptRoot"].encode(), b"<attempt-root>")
+                require(ra == rb, f"{contract_path} differs beyond the attempt root")
+        if x["identityId"] != y["identityId"]:
+            require(mat_a != mat_b,
+                    f"{family} identity differs without differing exact-evidence material")
+            varying.append(family)
+        else:
+            require(a["records"][path] == b["records"][path], f"{family} record bytes differ under equal identity")
+    return varying
 
 
 def normalized_report_outcome(report):
@@ -458,8 +675,12 @@ def fake_proof(ctx, runtime):
     second = cache_isolated_cli(ctx, "fake-repeat-2", "success", runtime=runtime)
     a, b = stable_cli_facts(first), stable_cli_facts(second)
     require(a == b, f"repeated fake stable facts differ: {a!r} != {b!r}")
+    varying = compare_repeated_record_packages(
+        record_package_snapshot(first), record_package_snapshot(second),
+        required_families=("execution", "artifact", "observation", "verification"))
     scenarios.append({"name": "fake_repeated", "status": "passed",
-                      "runtimeInvocations": 2, "stable": True, **a})
+                      "runtimeInvocations": 2, "stable": True,
+                      "recordPackageIdentityVariance": varying, **a})
 
     stale_root = "fake-stale"
     stale = cache_isolated_cli(ctx, stale_root, "success", runtime=runtime)
@@ -542,9 +763,12 @@ def real_proof(ctx):
     a, b = runs[0][1], runs[1][1]
     stable_keys = (
         "planHash", "jobID", "manifestHash", "requestHash", "resultHash",
-        "recordPackageHash", "stepCount",
+        "recordPackageStableHash", "stepCount",
     )
     require(all(a[key] == b[key] for key in stable_keys), "real repeated Engine identity differs")
+    package_variance = compare_repeated_record_packages(
+        record_package_snapshot(runs[0][0]), record_package_snapshot(runs[1][0]),
+        required_families=("execution", "artifact", "observation", "verification"))
     observed_a = find_one_outside_record_package(runs[0][0]["out"], "prm.observed.json")
     observed_b = find_one_outside_record_package(runs[1][0]["out"], "prm.observed.json")
     require(normalized_observed_semantics(observed_a) == normalized_observed_semantics(observed_b),
@@ -581,7 +805,8 @@ def real_proof(ctx):
         "preparedSourceSHA256": normalized_observed_semantics(observed_a)["workingCopy"]["sha256"],
         "planHash": a["planHash"],
         "jobID": a["jobID"],
-        "recordPackageStable": a["recordPackageHash"] == b["recordPackageHash"],
+        "recordPackageStable": True,
+        "recordPackageIdentityVariance": package_variance,
     }
 
 

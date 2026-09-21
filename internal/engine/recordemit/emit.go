@@ -11,11 +11,15 @@ import (
 	"strings"
 	"time"
 
+	"parametron/internal/engine/artifact"
+	"parametron/internal/engine/executor"
 	"parametron/internal/engine/metadata"
+	"parametron/internal/engine/observed"
 	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/recordmap"
 	"parametron/internal/engine/recordpackage"
 	"parametron/internal/engine/report"
+	"parametron/internal/engine/verification"
 )
 
 const packageKeyPrefix = "engine-run:"
@@ -26,15 +30,22 @@ type RunEmitInput struct {
 	PlanHash           string
 	Report             report.Report
 	Metadata           *metadata.Metadata
+	Artifacts          []artifact.Artifact
 	ReferenceTraversal *ReferenceTraversalRunEvidence
 	CADRuntime         *CADRuntimeRunEvidence
 }
 
 // CADRuntimeRunEvidence carries unchanged bytes read from one execution attempt.
 type CADRuntimeRunEvidence struct {
-	Result       []byte
-	Verification []byte
-	Observed     []byte
+	Result             []byte
+	Verification       []byte
+	Observed           []byte
+	ObservedValue      *observed.Observed
+	VerificationResult *verification.Result
+	Failure            *executor.CADRuntimeFailureOutcome
+	JobID              string
+	ProductKey         string
+	StepRef            string
 }
 
 type ReferenceTraversalRunEvidence struct {
@@ -86,8 +97,30 @@ func EmitRunPackage(input RunEmitInput) error {
 	records := []recordpackage.Record{
 		recordpackage.ExecutionRecord(mappedReport.ExecutionRecord),
 	}
-	if mappedReport.FailureRecord != nil {
-		records = append(records, recordpackage.FailureRecord(*mappedReport.FailureRecord))
+	failureRecord := mappedReport.FailureRecord
+	mappedArtifacts, err := recordmap.MapArtifactStoreRecords(recordmap.ArtifactMappingInput{
+		Artifacts:       input.Artifacts,
+		RecordKeyPrefix: recordKey,
+		Provenance:      provenance,
+	})
+	if err != nil {
+		return fmt.Errorf("recordemit: map artifacts: %w", err)
+	}
+	for _, artifactRecord := range mappedArtifacts.ArtifactRecords {
+		records = append(records, recordpackage.ArtifactRecord(artifactRecord))
+	}
+	if input.CADRuntime != nil {
+		runtimeRecords, runtimeFailure, err := mapCADRuntimeRecords(input.CADRuntime, recordKey, planHash, provenance, failureRecord)
+		if err != nil {
+			return err
+		}
+		records = append(records, runtimeRecords...)
+		if runtimeFailure != nil {
+			failureRecord = runtimeFailure
+		}
+	}
+	if failureRecord != nil {
+		records = append(records, recordpackage.FailureRecord(*failureRecord))
 	}
 	var traversalRaw *recordpackage.RawEvidenceFile
 	if input.ReferenceTraversal != nil {
@@ -120,6 +153,76 @@ func EmitRunPackage(input RunEmitInput) error {
 		RawEvidenceFiles:          rawEvidence,
 		OverwriteExisting:         true,
 	})
+}
+
+func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey, planHash string, provenance recordcontract.Provenance, reportFailure *recordcontract.FailureRecord) ([]recordpackage.Record, *recordcontract.FailureRecord, error) {
+	if evidence == nil {
+		return nil, nil, nil
+	}
+	linkage := recordmap.ObservedMappingLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef}
+	records := make([]recordpackage.Record, 0, 2)
+	if evidence.ObservedValue != nil {
+		mapped, err := recordmap.MapObservedToObservationRecord(recordmap.ObservedMappingInput{
+			Observed:             *evidence.ObservedValue,
+			RecordKey:            recordKey + ":observation",
+			Provenance:           provenance,
+			Linkage:              linkage,
+			EvidenceDigestSHA256: evidenceDigest(evidence.Observed),
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("recordemit: map observed evidence: %w", err)
+		}
+		records = append(records, recordpackage.ObservationRecord(mapped))
+	}
+	if evidence.VerificationResult != nil {
+		mapped, err := recordmap.MapVerificationToVerificationRecord(recordmap.VerificationMappingInput{
+			Result:                       *evidence.VerificationResult,
+			RecordKey:                    recordKey + ":verification",
+			Provenance:                   provenance,
+			Linkage:                      recordmap.VerificationMappingLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
+			EvidenceDigestSHA256:         evidenceDigest(evidence.Verification),
+			ObservedEvidenceDigestSHA256: evidenceDigest(evidence.Observed),
+		})
+		if err != nil {
+			return nil, nil, fmt.Errorf("recordemit: map verification result: %w", err)
+		}
+		records = append(records, recordpackage.VerificationRecord(mapped))
+	}
+	var failureRecord *recordcontract.FailureRecord
+	if evidence.Failure != nil {
+		// A failed run has no metadata provenance; like the report-derived
+		// failure record it replaces, the record still names its plan.
+		failureProvenance := provenance
+		if strings.TrimSpace(failureProvenance.Plan.PlanHash) == "" {
+			failureProvenance.Plan.PlanHash = planHash
+		}
+		mappingInput := recordmap.CADRuntimeFailureMappingInput{
+			Failure:              *evidence.Failure,
+			RecordKey:            recordKey,
+			Provenance:           failureProvenance,
+			Linkage:              recordcontract.FailureLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
+			EvidenceDigestSHA256: evidenceDigest(evidence.Result),
+		}
+		// Only Engine-owned operational context comes from the report-derived
+		// failure; class, stage, code and message stay runtime-native.
+		if reportFailure != nil {
+			mappingInput.RetryCount = reportFailure.Failure.RetryCount
+			mappingInput.OccurredAt = reportFailure.Failure.OccurredAt
+		}
+		mapped, err := recordmap.MapCADRuntimeFailure(mappingInput)
+		if err != nil {
+			return nil, nil, fmt.Errorf("recordemit: map CAD runtime failure: %w", err)
+		}
+		failureRecord = &mapped
+	}
+	return records, failureRecord, nil
+}
+
+func evidenceDigest(content []byte) string {
+	if len(content) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(content))
 }
 
 func mapReferenceTraversal(evidence *ReferenceTraversalRunEvidence, planHash string, provenance recordcontract.Provenance) (recordmap.ReferenceTraversalMappingOutput, recordpackage.RawEvidenceFile, error) {
