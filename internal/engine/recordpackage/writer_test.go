@@ -868,6 +868,11 @@ func expectedRecordManifestEntries(t *testing.T) []struct {
 			t.Fatalf("RecordContractPath(%q) ok = false, want true", def.Family)
 		}
 		record := recordsByFamily[def.Family]
+		if def.Family == recordcontract.FamilyArtifact {
+			// Artifact records are addressed by record identity, not by the
+			// family's singleton path.
+			path = artifactIdentityPath(t, record.identityID)
+		}
 		out = append(out, struct {
 			Family       string `json:"family"`
 			ContractPath string `json:"contractPath"`
