@@ -497,6 +497,8 @@ func cloneMutationCollection(in *planner.ExportManifestMutationCollection) *plan
 	out := &planner.ExportManifestMutationCollection{
 		Parameters:  append([]planner.ExportManifestParameterMutation(nil), in.Parameters...),
 		Suppression: append([]planner.ExportManifestSuppressionMutation(nil), in.Suppression...),
+		Visibility:  append([]planner.ExportManifestVisibilityMutation(nil), in.Visibility...),
+		Deletion:    append([]planner.ExportManifestDeletionMutation(nil), in.Deletion...),
 	}
 	if in.Properties != nil {
 		out.Properties = make([]planner.ExportManifestPropertyMutation, len(in.Properties))

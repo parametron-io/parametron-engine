@@ -285,8 +285,14 @@ func TestCLIProjectRun_TargetStateMaterialFlowsThroughExistingRecordFamilies(t *
 	for _, entry := range decoded.Observation.TargetState.Suppression {
 		wantFacts[entry.Destination+"/"+entry.Object+"/suppression"] = `{"status":"observed","value":true}`
 	}
-	if len(wantFacts) != 4 {
-		t.Fatalf("fixture must request four suppression targets, got %v", wantFacts)
+	for _, entry := range decoded.Observation.TargetState.Visibility {
+		wantFacts[entry.Destination+"/"+entry.Object+"/visibility"] = `{"status":"observed","value":false}`
+	}
+	for _, entry := range decoded.Observation.TargetState.Existence {
+		wantFacts[entry.Destination+"/"+entry.Object+"/existence"] = `{"status":"absent"}`
+	}
+	if len(wantFacts) != 8 {
+		t.Fatalf("fixture must request four suppression, two visibility and two existence targets, got %v", wantFacts)
 	}
 	for key, want := range wantFacts {
 		if facts[key] != want {

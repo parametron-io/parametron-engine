@@ -2897,6 +2897,35 @@ with open(manifest_path, "r", encoding="utf-8") as handle:
 with open(request_path, "r", encoding="utf-8") as handle:
     contract = json.load(handle)
 
+def file_sha256(path):
+    with open(path, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+invocation_log = os.environ.get("PARAMETRON_TASK13_RUNTIME_INVOCATION_LOG", "")
+if invocation_log:
+    # As a contract participant, refuse non-canonical request files, then
+    # record exactly what this process received for the test to inspect.
+    canonical_names = {"--manifest": "prm.export-manifest.json", "--result": "prm.result.json", "--observation-request": "prm.verification.json"}
+    for flag, name in canonical_names.items():
+        if os.path.basename(arg(flag)) != name:
+            sys.stderr.write("non-canonical " + flag + " filename: " + arg(flag) + "\n")
+            sys.exit(64)
+    if manifest.get("schemaVersion") != "1.0":
+        sys.stderr.write("unsupported manifest schemaVersion\n")
+        sys.exit(64)
+    staged = manifest["sourceDocument"]
+    staged_path = staged if os.path.isabs(staged) else os.path.join(working, staged)
+    record = {
+        "argv": sys.argv[1:],
+        "manifestSHA256": file_sha256(manifest_path),
+        "observationRequestSHA256": file_sha256(request_path),
+        "sourceDocumentPath": os.path.abspath(staged_path),
+        "sourceDocumentSHA256": file_sha256(staged_path),
+    }
+    with open(invocation_log, "a", encoding="utf-8") as handle:
+        json.dump(record, handle, sort_keys=True)
+        handle.write("\n")
+
 if mode == "blocking":
     import signal
     signal.pause()
@@ -2981,7 +3010,14 @@ observed = {
     }
 }
 requested_target_state = contract.get("observationContext", {}).get("targetState")
-if requested_target_state:
+scripted_target_state = os.environ.get("PARAMETRON_TASK13_RUNTIME_TARGET_STATE_JSON")
+if scripted_target_state is not None:
+    # Scenario-scripted native evidence, written verbatim and never derived
+    # from the request or the manifest mutations; "null" omits targetState.
+    scripted = json.loads(scripted_target_state)
+    if scripted is not None:
+        observed["observation"]["targetState"] = scripted
+elif requested_target_state:
     # Report the states the Engine-derived target-state intents expect:
     # suppress -> suppressed, hide -> not visible, delete -> absent.
     def boolean_evidence(items, value):
