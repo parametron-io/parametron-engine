@@ -16,6 +16,9 @@ record packaging.
 - **Controlled simulation**: Complex process lifecycles (retries, timeouts,
   process failures, and signal handling) are validated using deterministic fake
   runtimes without external CAD dependencies.
+- **Complete Engine-owned contract-package proof**: Permanent tests start from
+  supported CLI/project input and traverse the normal production path through an
+  actual external runtime process, Engine verification, and package emission.
 - **Opt-in live integration**: Real FreeCAD tests are opt-in and gated behind
   environment flags to keep default testing fast and dependency-free.
 
@@ -145,6 +148,23 @@ record packaging.
   the runtime boundary as Engine verification outcomes rather than CAD-native
   runtime failures. This suite does not exercise real FreeCAD target-state
   mutation or observation.
+- **Engine-owned FreeCAD Runtime Contract Package
+  (`cmd/parametron/freecad_runtime_contract_package_test.go`)**: Starts above
+  the runtime-contract layer with supported CLI/project input, then exercises
+  planning, handoff, attempt preparation, the actual external `runtimecap`
+  process boundary, canonical controlled raw evidence, Engine evidence intake
+  and expected-versus-observed verification, outcome consumption, and normal
+  package emission. The active mutation and observation contracts remain schema
+  `1.0`, with canonical `prm.export-manifest.json`, `prm.verification.json`,
+  `prm.result.json`, and `prm.observed.json` files exercised at the process
+  boundary. The repository-controlled runtime participant supplies independent
+  observations; it does not perform Engine verification or normalization.
+  Coverage includes all supported target actions, typed verification and
+  evidence failures, runtime-native failure separation, normalized record and
+  raw-evidence emission, and repeatable Engine-owned identity and serialization
+  surfaces. This permanent proof covers the normal CLI path, not HTTP API
+  target-mutation submission, and does not claim real FreeCAD-native mutation or
+  observation.
 - **Opt-in Real FreeCAD Integration (`scripts/cad_runtime_integration_proof.py --mode real`)**:
   Executes live CAD mutation, recompute, export, and verification against
   `parametron-freecad` and FreeCAD binaries.
@@ -165,6 +185,7 @@ go test ./internal/engine/observed/...
 go test ./internal/engine/cadruntime/...
 go test ./internal/engine/recordcontract/...
 go test ./internal/engine/recordmap/...
+go test ./cmd/parametron/... -run 'TestContractPackage_'
 
 # Run with race detector
 go test -race ./internal/engine/cache/... ./internal/engine/api/...
