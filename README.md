@@ -197,6 +197,12 @@ when the corresponding evidence is requested and available. No separate
 target-state record family exists, raw `prm.observed.json` remains separate
 evidence, and requested values are never substituted for observations.
 
+Permanent repository tests prove the normal CLI path from target-action intent
+through schema `1.0` canonical runtime requests, a controlled external runtime
+process, Engine verification, and normalized/raw record-package emission. This
+proof does not exercise real FreeCAD-native mutation or observation, and it does
+not cover target-mutation submission through the HTTP API.
+
 See the canonical
 [Target-action contract](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/reference/target-action-contract.md).
 
