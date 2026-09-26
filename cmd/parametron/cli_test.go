@@ -1498,23 +1498,23 @@ func TestCLIProjectRun_EmitsRecordPackageFromNormalRun(t *testing.T) {
 }
 
 // validReferenceTraversalJSONFixture is a deliberately non-canonically
-// formatted schema-2 traversal payload with a single resolved internal
+// formatted canonical traversal payload with a single resolved internal
 // reference edge, used to drive the controlled aligned runtime's optional
 // reference-traversal output.
 func validReferenceTraversalJSONFixture() []byte {
 	return []byte(`{
-  "schemaVersion":  "2.0",
+  "schemaVersion":  "1.0",
   "kind": "reference-traversal",
   "boundary": "internal",
   "operation": "resolve",
   "status": "succeeded",
   "sourceDocument": "Widget.FCStd",
   "nodes": [
-    {"sequence": 0, "id": "n1", "kind": "document", "state": "resolved", "documentPath": "Widget.FCStd"},
-    {"sequence": 1, "id": "n2", "kind": "object", "state": "resolved", "documentPath": "Widget.FCStd", "objectName": "Body"}
+    {"sequence": 0, "id": "n1", "kind": "document", "state": "resolved", "documentPath": "Widget.FCStd", "objectName": null, "objectType": null, "label": null, "diagnostic": null},
+    {"sequence": 1, "id": "n2", "kind": "object", "state": "resolved", "documentPath": "Widget.FCStd", "objectName": "Body", "objectType": "PartDesign::Body", "label": "Body", "diagnostic": null}
   ],
   "edges": [
-    {"sequence": 0, "source": "n1", "target": "n2", "kind": "document_internal_reference", "state": "resolved"}
+    {"sequence": 0, "source": "n1", "target": "n2", "kind": "document_internal_reference", "sourceProperty": "Group", "referenceMechanism": "App::PropertyLinkList", "state": "resolved", "diagnostic": null}
   ],
   "diagnostics": []
 }
@@ -1803,7 +1803,7 @@ func TestCLIProjectRun_InvalidReferenceTraversalFailsPackageEmissionAndCache(t *
 	installControlledAlignedRuntime(t, "success")
 	// Unsupported schema version: syntactically valid, strictly-decodable
 	// JSON that nonetheless violates the mapper contract.
-	invalidTraversal := []byte(`{"schemaVersion":"1.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
+	invalidTraversal := []byte(`{"schemaVersion":"9.9","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
 	t.Setenv("PARAMETRON_TASK13_RUNTIME_TRAVERSAL_JSON", string(invalidTraversal))
 
 	resetGlobals()
@@ -2166,7 +2166,7 @@ func TestReferenceTraversalRunEvidence_ZeroEligibleCandidates(t *testing.T) {
 }
 
 func TestReferenceTraversalRunEvidence_ExactlyOneEligibleCandidate(t *testing.T) {
-	traversal := []byte(`{"schemaVersion":"2.0"}`)
+	traversal := []byte(`{"schemaVersion":"1.0"}`)
 	original := append([]byte(nil), traversal...)
 	outcome := eligibleCADRuntimeOutcome("job-1", "widget", "2", traversal)
 	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}
@@ -2890,12 +2890,15 @@ manifest_path = arg("--manifest")
 result_path = arg("--result")
 output_dir = arg("--output-dir")
 request_path = arg("--observation-request")
+traversal_request_path = arg("--reference-traversal-request")
 mode = os.environ.get("PARAMETRON_TASK13_RUNTIME_MODE", "success")
 
 with open(manifest_path, "r", encoding="utf-8") as handle:
     manifest = json.load(handle)
 with open(request_path, "r", encoding="utf-8") as handle:
     contract = json.load(handle)
+with open(traversal_request_path, "r", encoding="utf-8") as handle:
+    traversal_request = json.load(handle)
 
 def file_sha256(path):
     with open(path, "rb") as handle:
@@ -2905,7 +2908,7 @@ invocation_log = os.environ.get("PARAMETRON_TASK13_RUNTIME_INVOCATION_LOG", "")
 if invocation_log:
     # As a contract participant, refuse non-canonical request files, then
     # record exactly what this process received for the test to inspect.
-    canonical_names = {"--manifest": "prm.export-manifest.json", "--result": "prm.result.json", "--observation-request": "prm.verification.json"}
+    canonical_names = {"--manifest": "prm.export-manifest.json", "--result": "prm.result.json", "--observation-request": "prm.verification.json", "--reference-traversal-request": "prm.reference-traversal-request.json"}
     for flag, name in canonical_names.items():
         if os.path.basename(arg(flag)) != name:
             sys.stderr.write("non-canonical " + flag + " filename: " + arg(flag) + "\n")
@@ -2913,12 +2916,16 @@ if invocation_log:
     if manifest.get("schemaVersion") != "1.0":
         sys.stderr.write("unsupported manifest schemaVersion\n")
         sys.exit(64)
+    if traversal_request != {"schemaVersion": "1.0", "externalTargets": []}:
+        sys.stderr.write("unexpected traversal request\n")
+        sys.exit(64)
     staged = manifest["sourceDocument"]
     staged_path = staged if os.path.isabs(staged) else os.path.join(working, staged)
     record = {
         "argv": sys.argv[1:],
         "manifestSHA256": file_sha256(manifest_path),
         "observationRequestSHA256": file_sha256(request_path),
+        "traversalRequestSHA256": file_sha256(traversal_request_path),
         "sourceDocumentPath": os.path.abspath(staged_path),
         "sourceDocumentSHA256": file_sha256(staged_path),
     }

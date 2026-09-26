@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	referenceTraversalSchemaVersion = "2.0"
+	referenceTraversalSchemaVersion = "1.0"
 	referenceTraversalEvidenceKind  = "reference-traversal"
 )
 
 var referenceTraversalEvidenceRef = recordpackage.RawRuntimeReferenceTraversalContractPath()
 
-// ReferenceTraversalRuntimeEvidence carries supplied FreeCAD schema-2 traversal evidence.
+// ReferenceTraversalRuntimeEvidence carries supplied FreeCAD traversal evidence.
 type ReferenceTraversalRuntimeEvidence struct {
 	SchemaVersion  string                                `json:"schemaVersion"`
 	Kind           string                                `json:"kind"`
@@ -91,7 +91,7 @@ type referenceTraversalMappingContext struct {
 	evidence   recordcontract.ReferenceEvidence
 }
 
-// MapReferenceTraversal converts supplied schema-2 traversal evidence into an optional reference record.
+// MapReferenceTraversal converts supplied traversal evidence into an optional reference record.
 func MapReferenceTraversal(input ReferenceTraversalMappingInput) (ReferenceTraversalMappingOutput, error) {
 	record, err := MapReferenceTraversalToReferenceRecord(input)
 	if err != nil {

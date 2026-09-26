@@ -712,7 +712,7 @@ func TestInvokeAndValidateFreeCADRuntime_ReferenceTraversalPathIsAuthoritative(t
 	layout := task10Layout(t, req)
 	fake := &task10Capability{fn: func(_ context.Context, got runtimecap.Request) (*runtimecap.Result, error) {
 		result, err := task10Success(t, got, false)
-		task10WriteReferenceTraversal(t, got, []byte(`{"schemaVersion":"2.0"}`))
+		task10WriteReferenceTraversal(t, got, []byte(`{"schemaVersion":"1.0"}`))
 		return result, err
 	}}
 	run, err := InvokeAndValidateFreeCADRuntime(context.Background(), fake, req)
@@ -797,7 +797,7 @@ func TestInvokeAndValidateFreeCADRuntime_StaleReferenceTraversalReplacedByFreshO
 		t.Fatal(err)
 	}
 
-	fresh := []byte(`{"schemaVersion":"2.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
+	fresh := []byte(`{"schemaVersion":"1.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
 	fake := &task10Capability{fn: func(_ context.Context, got runtimecap.Request) (*runtimecap.Result, error) {
 		result, err := task10Success(t, got, false)
 		task10WriteReferenceTraversal(t, got, fresh)
@@ -868,7 +868,7 @@ func TestInvokeAndValidateFreeCADRuntime_RejectsUnreadableReferenceTraversalOutp
 		if err != nil {
 			return result, err
 		}
-		if writeErr := os.WriteFile(traversalPath, []byte(`{"schemaVersion":"2.0"}`), 0o600); writeErr != nil {
+		if writeErr := os.WriteFile(traversalPath, []byte(`{"schemaVersion":"1.0"}`), 0o600); writeErr != nil {
 			t.Fatal(writeErr)
 		}
 		if chmodErr := os.Chmod(traversalPath, 0o000); chmodErr != nil {
@@ -883,7 +883,7 @@ func TestInvokeAndValidateFreeCADRuntime_RejectsUnreadableReferenceTraversalOutp
 
 func TestInvokeAndValidateFreeCADRuntime_PreservesExactReferenceTraversalBytes(t *testing.T) {
 	req := validFreeCADRuntimeExecutionRequest(t)
-	raw := []byte("{\n  \"schemaVersion\": \"2.0\",\n  \"status\":   \"succeeded\",\n  \"nodes\": [],\n  \"edges\": []\n}\n")
+	raw := []byte("{\n  \"schemaVersion\": \"1.0\",\n  \"status\":   \"succeeded\",\n  \"nodes\": [],\n  \"edges\": []\n}\n")
 	fake := &task10Capability{fn: func(_ context.Context, got runtimecap.Request) (*runtimecap.Result, error) {
 		result, err := task10Success(t, got, false)
 		task10WriteReferenceTraversal(t, got, raw)

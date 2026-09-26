@@ -230,12 +230,12 @@ func syntheticMetadata(planHash string) *metadata.Metadata {
 }
 
 // referenceTraversalJSON builds a deliberately non-canonically-formatted
-// schema-2 traversal payload with the supplied edges body, so tests can
+// canonical traversal payload with the supplied edges body, so tests can
 // prove recordemit hashes/preserves the exact raw bytes rather than a
 // re-marshalled form.
 func referenceTraversalJSON(edges string) []byte {
 	return []byte(fmt.Sprintf(`{
-  "schemaVersion":   "2.0",
+  "schemaVersion":   "1.0",
   "kind": "reference-traversal",
   "boundary": "internal",
   "operation":    "resolve",
@@ -401,7 +401,7 @@ func TestEmitRunPackage_ReferenceTraversal_MalformedJSONFailsClosed(t *testing.T
 func TestEmitRunPackage_ReferenceTraversal_UnknownFieldRejected(t *testing.T) {
 	runRoot := t.TempDir()
 	planHash := "traversal-unknown-field"
-	raw := []byte(`{"schemaVersion":"2.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[],"unexpectedField":true}`)
+	raw := []byte(`{"schemaVersion":"1.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[],"unexpectedField":true}`)
 
 	err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
 		RunRoot:  runRoot,
@@ -419,7 +419,7 @@ func TestEmitRunPackage_ReferenceTraversal_UnknownFieldRejected(t *testing.T) {
 func TestEmitRunPackage_ReferenceTraversal_TrailingJSONRejected(t *testing.T) {
 	runRoot := t.TempDir()
 	planHash := "traversal-trailing"
-	valid := `{"schemaVersion":"2.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`
+	valid := `{"schemaVersion":"1.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`
 	raw := []byte(valid + "\ntrue\n")
 
 	err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
@@ -440,7 +440,7 @@ func TestEmitRunPackage_ReferenceTraversal_MapperInvalidPayloadFailsClosed(t *te
 	planHash := "traversal-mapper-invalid"
 	// A syntactically valid, strictly-decodable payload with an unsupported
 	// schema version violates the mapper contract, not the JSON decoder.
-	raw := []byte(`{"schemaVersion":"1.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
+	raw := []byte(`{"schemaVersion":"9.9","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
 
 	err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
 		RunRoot:  runRoot,

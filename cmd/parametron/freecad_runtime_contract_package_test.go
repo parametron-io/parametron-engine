@@ -28,8 +28,9 @@ import (
 //
 //	project + DSL target actions -> semantic lowering -> planner -> scheduler
 //	-> executor -> attempt working copy -> prm.export-manifest.json +
-//	prm.verification.json -> runtimecap external process -> prm.result.json +
-//	prm.observed.json -> evidence intake -> Engine verification -> outcome
+//	prm.verification.json + prm.reference-traversal-request.json -> runtimecap
+//	external process -> prm.result.json + prm.observed.json + optional
+//	prm.reference-traversal.json -> evidence intake -> Engine verification -> outcome
 //	consumption -> recordemit/recordpackage
 //
 // The external participant is the controlled aligned runtime installed by
@@ -215,6 +216,7 @@ type contractRuntimeInvocation struct {
 	Argv                     []string `json:"argv"`
 	ManifestSHA256           string   `json:"manifestSHA256"`
 	ObservationRequestSHA256 string   `json:"observationRequestSHA256"`
+	TraversalRequestSHA256   string   `json:"traversalRequestSHA256"`
 	SourceDocumentPath       string   `json:"sourceDocumentPath"`
 	SourceDocumentSHA256     string   `json:"sourceDocumentSHA256"`
 }
@@ -393,8 +395,14 @@ func assertContractRequest(t *testing.T, projectDir string, run contractPackageR
 
 	manifest, manifestBytes := decodeJSONFile(t, inv.flag(t, "--manifest"))
 	request, requestBytes := decodeJSONFile(t, inv.flag(t, "--observation-request"))
-	if sha256HexOf(manifestBytes) != inv.ManifestSHA256 || sha256HexOf(requestBytes) != inv.ObservationRequestSHA256 {
+	traversal, traversalBytes := decodeJSONFile(t, inv.flag(t, "--reference-traversal-request"))
+	if sha256HexOf(manifestBytes) != inv.ManifestSHA256 || sha256HexOf(requestBytes) != inv.ObservationRequestSHA256 ||
+		sha256HexOf(traversalBytes) != inv.TraversalRequestSHA256 {
 		t.Fatal("request files on disk differ from the bytes the runtime read")
+	}
+	canonicalTraversal, err := cadruntime.DecodeFreeCADReferenceTraversalRequest(traversalBytes)
+	if err != nil || traversal["schemaVersion"] != "1.0" || canonicalTraversal.ExternalTargets == nil || len(canonicalTraversal.ExternalTargets) != 0 {
+		t.Fatalf("traversal request = %s; decoded = %+v; err = %v", traversalBytes, canonicalTraversal, err)
 	}
 
 	// prm.export-manifest.json: canonical schema 1.0 and projected mutations.
@@ -427,9 +435,6 @@ func assertContractRequest(t *testing.T, projectDir string, run contractPackageR
 	}
 	if _, ok := expected["targetState"]; ok {
 		t.Fatalf("observation request discloses expected target state: %s", requestBytes)
-	}
-	if strings.Contains(string(manifestBytes), `"2.0"`) || strings.Contains(string(requestBytes), `"2.0"`) {
-		t.Fatal("request files carry a schema 2.0 marker")
 	}
 	return contractAttempt{workingCopy: working}
 }
@@ -730,6 +735,75 @@ func TestContractPackage_OrdinaryExecutionWithoutTargetMutations(t *testing.T) {
 	}
 	attempt := assertContractRequest(t, projectDir, run, run.invocations[0], contractRequestExpectation{})
 	assertContractSuccessPackage(t, run, attempt, "", nil)
+}
+
+func TestContractPackage_TraversalEvidenceUsesCanonicalSchema(t *testing.T) {
+	contractPackageEnv(t)
+	projectDir := writeContractPackageFixture(t, nil)
+	traversalBytes := validReferenceTraversalJSONFixture()
+	t.Setenv("PARAMETRON_TASK13_RUNTIME_TRAVERSAL_JSON", string(traversalBytes))
+	run := runContractPackage(t, projectDir, filepath.Join(t.TempDir(), "out"), "success", nil)
+	if run.err != nil || len(run.invocations) != 1 {
+		t.Fatalf("normal runtime result = %v; invocations = %d", run.err, len(run.invocations))
+	}
+	attempt := assertContractRequest(t, projectDir, run, run.invocations[0], contractRequestExpectation{})
+	wantFiles := append(append([]string(nil), contractAttemptSuccessFiles...), "outputs/prm.reference-traversal.json")
+	assertActiveAttemptFiles(t, attempt.workingCopy, wantFiles...)
+
+	outcome := singleCADRuntimeOutcome(t, run.result.Execution)
+	result, resultBytes := decodeJSONFile(t, outcome.ResultPath)
+	observed, observedBytes := decodeJSONFile(t, outcome.ObservedPath)
+	traversal, actualTraversalBytes := decodeJSONFile(t, outcome.ReferenceTraversalPath)
+	for name, contract := range map[string]map[string]any{
+		"result": result, "observed": observed, "reference traversal": traversal,
+	} {
+		if contract["schemaVersion"] != "1.0" {
+			t.Fatalf("%s schemaVersion = %v", name, contract["schemaVersion"])
+		}
+	}
+	if !bytes.Equal(actualTraversalBytes, traversalBytes) || !bytes.Equal(outcome.ReferenceTraversalJSON, traversalBytes) {
+		t.Fatal("Engine did not consume the exact runtime traversal bytes")
+	}
+	nodes, ok := traversal["nodes"].([]any)
+	if !ok || len(nodes) != 2 {
+		t.Fatalf("traversal nodes = %v", traversal["nodes"])
+	}
+	object, ok := nodes[1].(map[string]any)
+	if !ok || object["objectType"] != "PartDesign::Body" {
+		t.Fatalf("rich traversal object node = %v", nodes[1])
+	}
+	edges, ok := traversal["edges"].([]any)
+	if !ok || len(edges) != 1 {
+		t.Fatalf("traversal edges = %v", traversal["edges"])
+	}
+	edge, ok := edges[0].(map[string]any)
+	if !ok || edge["sourceProperty"] != "Group" || edge["referenceMechanism"] != "App::PropertyLinkList" {
+		t.Fatalf("rich traversal edge = %v", edges[0])
+	}
+
+	packageRoot := recordPackageRoot(run.result.RunRoot)
+	files := readRecordPackageFiles(t, packageRoot)
+	rawPath := recordpackage.RawRuntimeReferenceTraversalContractPath()
+	if !bytes.Equal(files[rawPath], traversalBytes) ||
+		!bytes.Equal(files[recordpackage.RawRuntimeResultContractPath()], resultBytes) ||
+		!bytes.Equal(files[recordpackage.RawObservedContractPath()], observedBytes) {
+		t.Fatal("package did not preserve the returned runtime contract bytes")
+	}
+	manifest := readCLIRecordPackageManifest(t, packageRoot)
+	assertManifestHasRecord(t, manifest, "reference", recordpackage.MustRecordContractPath("reference"), manifest.PackageKey+":reference")
+	assertManifestRawEvidencePaths(t, manifest, []string{
+		recordpackage.RawReportContractPath(), recordpackage.RawMetadataContractPath(),
+		recordpackage.RawArtifactStoreManifestContractPath(), recordpackage.RawObservedContractPath(),
+		recordpackage.RawVerificationContractPath(), recordpackage.RawRuntimeResultContractPath(), rawPath,
+	})
+	var reference recordcontract.ReferenceRecord
+	decodePackageRecord(t, files, recordpackage.MustRecordContractPath("reference"), &reference)
+	if err := recordcontract.ValidateReferenceRecord(reference); err != nil || len(reference.Reference.Edges) != 1 {
+		t.Fatalf("normalized reference record = %+v; err = %v", reference, err)
+	}
+	if got := reference.Reference.Edges[0].Evidence.DigestSHA256; got != sha256HexOf(traversalBytes) {
+		t.Fatalf("raw traversal digest = %q, want %q", got, sha256HexOf(traversalBytes))
+	}
 }
 
 func TestContractPackage_SingleFamilySuccess(t *testing.T) {

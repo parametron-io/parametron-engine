@@ -80,7 +80,7 @@ def build_fixture(root, *, attempt_name="attempt-1", source_bytes=b"prepared-sou
     }))
 
     traversal_request_path = working / "parametron.reference-traversal-request.json"
-    traversal_request_path.write_text(json.dumps({"schemaVersion": "2.0", "externalTargets": []}))
+    traversal_request_path.write_text(json.dumps({"schemaVersion": "1.0", "externalTargets": []}))
 
     result_path = working / "result.json"
     output_dir = working / "outputs"
