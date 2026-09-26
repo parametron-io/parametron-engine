@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -530,6 +531,172 @@ def build_binaries(ctx):
             cwd=ctx.engine_repo, timeout=ctx.timeout)
 
 
+CANONICAL_LIFECYCLE_HASH = "9376277c131ac3f361f05412b3a6b455f8574eabf99f1e02d1fa75d3fca82250"
+TARGET_SCENARIOS = {
+    "hidden-baseline-setup": {
+        "actions": (("Pad002", "hide"),),
+        "mutations": {"visibility": [{"object": "Pad002", "visible": False}]},
+        "observations": {"suppression": [], "visibility": ["Pad002"], "existence": []},
+    },
+    "combined-success": {
+        "actions": (("Fillet", "suppress"), ("Pocket001", "unsuppress"),
+                    ("Body003", "hide"), ("Pad002", "unhide"), ("Body002", "delete")),
+        "mutations": {
+            "suppression": [{"object": "Fillet", "suppressed": True},
+                            {"object": "Pocket001", "suppressed": False}],
+            "visibility": [{"object": "Body003", "visible": False},
+                           {"object": "Pad002", "visible": True}],
+            "deletion": [{"object": "Body002"}],
+        },
+        "observations": {"suppression": ["Fillet", "Pocket001"],
+                         "visibility": ["Body003", "Pad002"], "existence": ["Body002"]},
+    },
+}
+
+
+def target_foundation_proof(ctx):
+    fixture_relative = Path("tests/fixtures/canonical_lifecycle")
+    fixture = ctx.freecad_repo / fixture_relative
+    require(ctx.freecad_repo.is_dir(), f"FreeCAD repository missing: {ctx.freecad_repo}")
+    require(fixture.is_dir(), f"canonical lifecycle fixture missing: {fixture}")
+    required = ("input/cube.FCStd", "parametron.project.json", "parametron.cad.json",
+                "parametron.semantic-map.json", "cube.project.dsl")
+    for name in required:
+        require((fixture / name).is_file(), f"canonical lifecycle file missing: {fixture / name}")
+    source = fixture / "input/cube.FCStd"
+    source_hash = digest(source)
+    require(source_hash == CANONICAL_LIFECYCLE_HASH,
+            f"canonical lifecycle fixture hash mismatch: {source_hash}")
+    project = json_file(fixture / "parametron.project.json")
+    capture = json_file(fixture / "parametron.cad.json")
+    require(project.get("dsl") == "cube.project.dsl" and
+            project.get("resources", {}).get("models", {}).get(
+                "cube_canonical_lifecycle_model") == "input/cube.FCStd",
+            "canonical lifecycle project model/DSL mapping changed")
+    require(capture.get("sourceDocument") == {
+        "logicalId": "cube_canonical_lifecycle_model", "path": "input/cube.FCStd",
+        "fingerprint": "sha256:" + source_hash}, "capture source fingerprint mismatch")
+    components = capture.get("entities", {}).get("components", [])
+    features = capture.get("entities", {}).get("features", [])
+    for name, kind, capabilities in (
+        ("Fillet", "feature", (True, True, False, False, False)),
+        ("Pocket001", "feature", (True, True, False, False, False)),
+        ("Body003", "part", (False, False, True, True, False)),
+        ("Pad002", "feature", (False, False, True, True, False)),
+        ("Body002", "part", (False, False, True, True, True)),
+    ):
+        entities = features if kind == "feature" else components
+        matches = [entry for entry in entities if entry.get("name") == name and
+                   entry.get("identitySource", {}).get("nativeRef") == name and
+                   entry.get("kind", kind) == kind]
+        require(len(matches) == 1, f"capture native identity missing or ambiguous: {name}")
+        want = dict(zip(("suppress", "unsuppress", "hide", "unhide", "delete"),
+                        capabilities))
+        require(matches[0].get("targetability") == want,
+                f"capture capability mismatch: {name}")
+
+    runtime = ctx.workspace / "reject-runtime"
+    invocation = ctx.workspace / "runtime-invocation"
+    runtime.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" >> " + shlex.quote(str(invocation)) +
+                       "\nexit 23\n", encoding="utf-8")
+    runtime.chmod(0o700)
+    revision = lambda repo: run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+    result = {"engineRevision": revision(ctx.engine_repo),
+              "freecadRevision": revision(ctx.freecad_repo),
+              "fixture": str(fixture_relative / "input/cube.FCStd"),
+              "fixtureSHA256": source_hash, "scenarios": []}
+    for name, scenario in TARGET_SCENARIOS.items():
+        root = ctx.workspace / name
+        staged = root / "project"
+        shutil.copytree(fixture, staged)
+        require(digest(staged / "input/cube.FCStd") == source_hash, "staged source drifted")
+        staged_project = json_file(staged / "parametron.project.json")
+        staged_project["projectId"] = "cube-target-" + name
+        staged_project.pop("tables", None)
+        (staged / "parametron.project.json").write_text(
+            json.dumps(staged_project, indent=2) + "\n", encoding="utf-8")
+        shutil.rmtree(staged / "tables")
+        dsl = ('dsl v1.0\n\nproduct CubeBox {\n'
+               '  adapter = "freecad"\n'
+               '  source_model = "cube_canonical_lifecycle_model"\n'
+               '  outputs = ["none"]\n' +
+               ''.join(f'  target {target}: action = {action}\n'
+                       for target, action in scenario["actions"]) + '}\n')
+        (staged / "cube.project.dsl").write_text(dsl, encoding="utf-8")
+        cwd = root / "cwd"
+        cwd.mkdir()
+        output = root / "out"
+        command = [str(ctx.parametron), "--project", str(staged), "--out", str(output)]
+        before_calls = invocation.read_text() if invocation.exists() else ""
+        cli = run(command, cwd=cwd, env={**os.environ,
+                  "PARAMETRON_FREECAD_RUNTIME": str(runtime)}, timeout=ctx.timeout,
+                  check=False)
+        require(cli.returncode != 0, f"{name}: rejecting runtime unexpectedly succeeded")
+        require(invocation.exists() and invocation.read_text() != before_calls,
+                f"{name}: rejecting runtime was never invoked\n{cli.stdout}\n{cli.stderr}")
+        actual_out = output
+        manifests = sorted(path for path in actual_out.rglob("prm.export-manifest.json")
+                           if "_working" in path.parts)
+        requests = sorted(path for path in actual_out.rglob("prm.verification.json")
+                          if "_working" in path.parts)
+        require(len(manifests) == len(requests) == 1,
+                f"{name}: expected one attempt-local manifest and request")
+        manifest_path, request_path = manifests[0], requests[0]
+        attempt = manifest_path.parent
+        require(request_path.parent == attempt and attempt.parent.name == "_working",
+                f"{name}: requests are not attempt-local")
+        arguments = invocation.read_text()[len(before_calls):].splitlines()
+        require("--working-copy" in arguments and
+                arguments[arguments.index("--working-copy") + 1] == str(attempt) and
+                "--manifest" in arguments and
+                arguments[arguments.index("--manifest") + 1] == str(manifest_path) and
+                "--observation-request" in arguments and
+                arguments[arguments.index("--observation-request") + 1] == str(request_path),
+                f"{name}: rejected runtime was not passed the Engine attempt inputs: {arguments}")
+        staged_source = attempt / "source/cube.FCStd"
+        require(staged_source.is_file() and digest(staged_source) == source_hash,
+                f"{name}: Engine working-copy source missing or changed")
+        require(staged_source.resolve() != source.resolve() and
+                staged_source.resolve() != (staged / "input/cube.FCStd").resolve(),
+                f"{name}: runtime source is not an independent working copy")
+        manifest, request = json_file(manifest_path), json_file(request_path)
+        require(manifest.get("schemaVersion") == request.get("schemaVersion") == "1.0",
+                f"{name}: mutation/observation schema changed")
+        require(manifest.get("partMutations") == scenario["mutations"],
+                f"{name}: Part mutation projection mismatch: {manifest.get('partMutations')}")
+        require("assemblyMutations" not in manifest and
+                not manifest.get("parameterAssignments") and not manifest.get("outputs"),
+                f"{name}: unexpected assembly, parameter, or output intent")
+        require(manifest.get("sourceDocument") == "source/cube.FCStd",
+                f"{name}: runtime source is not the working-copy source")
+        target_state = request.get("observationContext", {}).get("targetState", {})
+        expected = {family: [{"destination": "part", "object": target}
+                             for target in sorted(names)]
+                    for family, names in scenario["observations"].items()}
+        require(target_state == expected and request.get("observe", {}).get("targetState") is True,
+                f"{name}: target-state observation mismatch: {target_state}")
+        require("targetState" not in request.get("expected", {}),
+                f"{name}: expected target state leaked into serialized request")
+        require(not list(actual_out.rglob("prm.result.json")) and
+                not list(actual_out.rglob("prm.observed.json")),
+                f"{name}: rejecting runtime produced CAD evidence")
+        require(digest(source) == source_hash, f"{name}: authoritative fixture changed")
+        report_path = sorted(actual_out.rglob("prm.report.json"))
+        report = json_file(report_path[-1]) if report_path else {}
+        result["scenarios"].append({
+            "name": name, "status": "passed", "stagedProject": str(staged),
+            "cliInvocation": command, "cliExit": cli.returncode,
+            "planHash": report.get("planHash"),
+            "jobIDs": [job.get("jobId") for job in report.get("jobs", [])],
+            "manifestPath": str(manifest_path), "manifestSHA256": digest(manifest_path),
+            "verificationPath": str(request_path), "verificationSHA256": digest(request_path),
+            "workingCopySource": str(staged_source),
+            "stoppingPoint": "intentional Stage 1A external runtime rejection (exit 23)",
+        })
+    require(digest(source) == source_hash, "authoritative fixture changed after proof")
+    return result
+
+
 def concurrent_isolation_proof(ctx, runtime):
     ctx.concurrent_server = ctx.workspace / "bin" / "concurrent-api.test"
     run(["nix", "develop", "--command", "go", "test", "-c", "-o",
@@ -844,11 +1011,13 @@ def main():
     parser.add_argument("--engine-repo", type=Path, default=script_repo)
     parser.add_argument("--freecad-repo", type=Path, default=script_repo.parent / "parametron-freecad")
     parser.add_argument("--workspace", type=Path)
-    parser.add_argument("--mode", choices=("fake", "real", "all", "timeout"), default="all")
+    parser.add_argument("--mode", choices=("fake", "real", "all", "timeout", "target-foundation"), default="all")
     parser.add_argument("--report", type=Path)
     parser.add_argument("--keep-workspace", action="store_true")
     parser.add_argument("--timeout", type=int, default=240)
     args = parser.parse_args()
+    if args.mode == "target-foundation" and "--freecad-repo" not in sys.argv:
+        parser.error("target-foundation requires explicit --freecad-repo")
 
     owned_temp = args.workspace is None
     workspace = args.workspace.resolve() if args.workspace else Path(tempfile.mkdtemp(prefix="parametron-task14-"))
@@ -864,7 +1033,16 @@ def main():
     controlled = ctx.engine_repo / "scripts/cad_runtime_proof_runtime.py"
     summary = {"schemaVersion": "1.0", "status": "passed", "scenarios": []}
     try:
-        if args.mode == "timeout":
+        if args.mode == "target-foundation":
+            bindir = ctx.workspace / "bin"
+            bindir.mkdir(parents=True, exist_ok=True)
+            ctx.parametron = bindir / "parametron"
+            run(["nix", "develop", "--command", "go", "build", "-o",
+                 ctx.parametron, "./cmd/parametron"], cwd=ctx.engine_repo, timeout=ctx.timeout)
+            foundation = target_foundation_proof(ctx)
+            summary["scenarios"] = foundation.pop("scenarios")
+            summary["targetFoundation"] = foundation
+        elif args.mode == "timeout":
             timeout_proof(ctx, controlled)
             summary["scenarios"] = [{"name": "timeout_block", "status": "unexpected_success"}]
         else:
