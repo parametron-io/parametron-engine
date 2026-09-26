@@ -532,6 +532,7 @@ def build_binaries(ctx):
 
 
 CANONICAL_LIFECYCLE_HASH = "9376277c131ac3f361f05412b3a6b455f8574eabf99f1e02d1fa75d3fca82250"
+PARTDESIGN_MUTATIONS_HASH = "7187abe907ca6240bdc7cd07fb5ce7a52cf9192e3ba6d6153c581f18b328057a"
 TARGET_SCENARIOS = {
     "hidden-baseline-setup": {
         "actions": (("Pad002", "hide"),),
@@ -695,6 +696,171 @@ def target_foundation_proof(ctx):
         })
     require(digest(source) == source_hash, "authoritative fixture changed after proof")
     return result
+
+
+def unsafe_delete_foundation_proof(ctx):
+    """Author deletion of a supported native target; FreeCAD retains the live safety decision.
+
+    BaseSketch is a real Sketcher object in the pinned PartDesign document.
+    FreeCAD's deletion consumer supports exact object deletion in principle,
+    then rejects this concrete object because its live InList has dependents.
+    The capture grants authoring of that operation, not preclearance of safety.
+    """
+    fixture_relative = Path("tests/fixtures/partdesign_mutations/partdesign-mutations.FCStd")
+    source = ctx.freecad_repo / fixture_relative
+    require(ctx.freecad_repo.is_dir() and source.is_file(),
+            f"FreeCAD PartDesign fixture missing: {source}")
+    source_hash = digest(source)
+    require(source_hash == PARTDESIGN_MUTATIONS_HASH,
+            f"PartDesign fixture provenance mismatch: {source_hash}")
+    semantic_map_source = (ctx.freecad_repo /
+                           "tests/fixtures/canonical_lifecycle/parametron.semantic-map.json")
+    require(semantic_map_source.is_file(), "FreeCAD semantic map foundation missing")
+
+    staged = ctx.workspace / "unsafe-delete-foundation" / "project"
+    (staged / "input").mkdir(parents=True)
+    shutil.copyfile(source, staged / "input/partdesign-mutations.FCStd")
+    shutil.copyfile(semantic_map_source, staged / "parametron.semantic-map.json")
+    require(digest(staged / "input/partdesign-mutations.FCStd") == source_hash,
+            "staged PartDesign source drifted")
+    project = {
+        "version": "1.0", "projectId": "partdesign-unsafe-delete-foundation",
+        "dsl": "unsafe-delete.project.dsl",
+        "resources": {"models": {"partdesign_mutations_model":
+                                 "input/partdesign-mutations.FCStd"}},
+    }
+    (staged / "parametron.project.json").write_text(
+        json.dumps(project, indent=2) + "\n", encoding="utf-8")
+    (staged / "unsafe-delete.project.dsl").write_text(
+        'dsl v1.0\n\nproduct PartDesign {\n'
+        '  adapter = "freecad"\n'
+        '  source_model = "partdesign_mutations_model"\n'
+        '  outputs = ["none"]\n'
+        '  target BaseSketch: action = delete\n}\n', encoding="utf-8")
+
+    no_actions = dict.fromkeys(("suppress", "unsuppress", "hide", "unhide", "delete"), False)
+    annotations = {"description": "", "comment": "", "purpose": ""}
+    root = {
+        "id": "cmp.root", "kind": "assembly", "name": "partdesign_mutations",
+        "displayName": "partdesign-mutations", "cadType": "App::Document",
+        "quantity": 1, "material": "", "identitySource": {
+            "kind": "parent_scoped_path", "path": "cmp.root",
+            "nativeRef": "partdesign_mutations"},
+        "stabilityClass": "stable", "targetability": no_actions,
+        "annotations": annotations,
+    }
+    body = {
+        "id": "cmp.mutationBody", "kind": "part", "name": "MutationBody",
+        "displayName": "MutationBody", "cadType": "PartDesign::Body",
+        "quantity": 1, "material": "", "identitySource": {
+            "kind": "parent_scoped_path", "path": "cmp.root/MutationBody",
+            "nativeRef": "MutationBody"},
+        "stabilityClass": "stable", "targetability": no_actions,
+        "annotations": annotations,
+    }
+    sketch = {
+        "id": "fea.mutationBody.baseSketch", "componentId": "cmp.mutationBody",
+        "name": "BaseSketch", "displayName": "BaseSketch",
+        "cadType": "Sketcher::SketchObject", "identitySource": {
+            "kind": "owner_scoped_key", "ownerScopedKey": "BaseSketch",
+            "nativeRef": "BaseSketch"},
+        "stabilityClass": "conditionally_stable",
+        "targetability": {**no_actions, "delete": True},
+        "annotations": {
+            "description": "Native BaseSketch owned by MutationBody",
+            "comment": "IntermediatePad depends on this sketch; FreeCAD must reject deletion in this source state",
+            "purpose": "Author supported delete intent and defer live dependency safety to FreeCAD",
+        },
+    }
+    capture = {
+        "schemaVersion": "1.0", "captureId": "cap.freecad.partdesign-unsafe-delete.v1",
+        "adapter": {"name": "freecad", "version": ""},
+        "cadSystem": {"name": "FreeCAD", "version": "1.1.1"},
+        "sourceDocument": {"logicalId": "partdesign_mutations_model",
+                           "path": "input/partdesign-mutations.FCStd",
+                           "fingerprint": "sha256:" + source_hash},
+        "rootProduct": {"id": "cmp.root"},
+        "annotations": {"description": "Focused PartDesign deletion authoring surface",
+                        "comment": "Pinned to the FreeCAD-owned native fixture and its proven BaseSketch dependency",
+                        "purpose": "Rehearse Engine delete authoring before native safety rejection"},
+        "entities": {"components": [root, body], "features": [sketch],
+                     "relationships": [], "parameterGroups": [], "parameters": [],
+                     "metadata": []},
+        "structure": {"rootComponentId": "cmp.root", "nodes": [
+            {"componentId": "cmp.root", "parentComponentId": "",
+             "children": ["cmp.mutationBody"]},
+            {"componentId": "cmp.mutationBody", "parentComponentId": "cmp.root",
+             "children": []}]},
+    }
+    (staged / "parametron.cad.json").write_text(
+        json.dumps(capture, indent=2) + "\n", encoding="utf-8")
+
+    runtime = ctx.workspace / "unsafe-delete-reject-runtime"
+    invocation = ctx.workspace / "unsafe-delete-runtime-invocation"
+    runtime.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > " +
+                       shlex.quote(str(invocation)) + "\nexit 23\n", encoding="utf-8")
+    runtime.chmod(0o700)
+    output = ctx.workspace / "unsafe-delete-foundation" / "out"
+    command = [str(ctx.parametron), "--project", str(staged), "--out", str(output)]
+    cli = run(command, cwd=staged.parent,
+              env={**os.environ, "PARAMETRON_FREECAD_RUNTIME": str(runtime)},
+              timeout=ctx.timeout, check=False)
+    require(cli.returncode != 0 and invocation.is_file(),
+            f"unsafe-delete: normal CLI did not reach rejecting runtime\n{cli.stdout}\n{cli.stderr}")
+    manifests = sorted(path for path in output.rglob("prm.export-manifest.json")
+                       if "_working" in path.parts)
+    requests = sorted(path for path in output.rglob("prm.verification.json")
+                      if "_working" in path.parts)
+    require(len(manifests) == len(requests) == 1,
+            "unsafe-delete: expected one Engine attempt manifest and request")
+    manifest_path, request_path = manifests[0], requests[0]
+    attempt = manifest_path.parent
+    require(attempt.parent.name == "_working" and request_path.parent == attempt,
+            "unsafe-delete: request paths are not attempt-local")
+    args = invocation.read_text().splitlines()
+    for flag, value in (("--working-copy", attempt), ("--manifest", manifest_path),
+                        ("--observation-request", request_path)):
+        require(flag in args and args[args.index(flag) + 1] == str(value),
+                f"unsafe-delete: runtime was not passed Engine's {flag} path")
+    working_source = attempt / "source/partdesign-mutations.FCStd"
+    require(working_source.is_file() and digest(working_source) == source_hash and
+            working_source.resolve() != source.resolve() and
+            working_source.resolve() != (staged / "input/partdesign-mutations.FCStd").resolve(),
+            "unsafe-delete: Engine working-copy source is missing or not isolated")
+    manifest, request = json_file(manifest_path), json_file(request_path)
+    require(manifest.get("schemaVersion") == request.get("schemaVersion") == "1.0",
+            "unsafe-delete: request schema is not 1.0")
+    require(manifest.get("sourceDocument") == "source/partdesign-mutations.FCStd" and
+            manifest.get("partMutations") == {"deletion": [{"object": "BaseSketch"}]} and
+            "assemblyMutations" not in manifest and
+            not manifest.get("parameterAssignments") and not manifest.get("outputs"),
+            f"unsafe-delete: unexpected manifest projection: {manifest}")
+    require(request.get("observe", {}).get("targetState") is True and
+            request.get("observationContext", {}).get("targetState") == {
+                "suppression": [], "visibility": [], "existence": [
+                    {"destination": "part", "object": "BaseSketch"}]} and
+            "targetState" not in request.get("expected", {}),
+            f"unsafe-delete: unexpected observation request: {request}")
+    require(not list(output.rglob("prm.result.json")) and
+            not list(output.rglob("prm.observed.json")),
+            "unsafe-delete: rejecting runtime fabricated CAD evidence")
+    require(digest(source) == source_hash, "FreeCAD PartDesign fixture changed")
+    reports = sorted(output.rglob("prm.report.json"))
+    report = json_file(reports[-1]) if reports else {}
+    revision = lambda repo: run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+    return {"engineRevision": revision(ctx.engine_repo),
+            "freecadRevision": revision(ctx.freecad_repo),
+            "fixture": str(fixture_relative), "fixtureSHA256": source_hash,
+            "scenario": {"name": "unsafe-delete-foundation", "status": "passed",
+                         "stagedProject": str(staged), "cliInvocation": command,
+                         "cliExit": cli.returncode, "planHash": report.get("planHash"),
+                         "jobIDs": [job.get("jobId") for job in report.get("jobs", [])],
+                         "manifestPath": str(manifest_path),
+                         "manifestSHA256": digest(manifest_path),
+                         "verificationPath": str(request_path),
+                         "verificationSHA256": digest(request_path),
+                         "workingCopySource": str(working_source),
+                         "stoppingPoint": "intentional Stage 1B external runtime rejection (exit 23)"}}
 
 
 def concurrent_isolation_proof(ctx, runtime):
@@ -1011,13 +1177,14 @@ def main():
     parser.add_argument("--engine-repo", type=Path, default=script_repo)
     parser.add_argument("--freecad-repo", type=Path, default=script_repo.parent / "parametron-freecad")
     parser.add_argument("--workspace", type=Path)
-    parser.add_argument("--mode", choices=("fake", "real", "all", "timeout", "target-foundation"), default="all")
+    parser.add_argument("--mode", choices=("fake", "real", "all", "timeout", "target-foundation",
+                                           "unsafe-delete-foundation"), default="all")
     parser.add_argument("--report", type=Path)
     parser.add_argument("--keep-workspace", action="store_true")
     parser.add_argument("--timeout", type=int, default=240)
     args = parser.parse_args()
-    if args.mode == "target-foundation" and "--freecad-repo" not in sys.argv:
-        parser.error("target-foundation requires explicit --freecad-repo")
+    if args.mode in ("target-foundation", "unsafe-delete-foundation") and "--freecad-repo" not in sys.argv:
+        parser.error(f"{args.mode} requires explicit --freecad-repo")
 
     owned_temp = args.workspace is None
     workspace = args.workspace.resolve() if args.workspace else Path(tempfile.mkdtemp(prefix="parametron-task14-"))
@@ -1033,15 +1200,20 @@ def main():
     controlled = ctx.engine_repo / "scripts/cad_runtime_proof_runtime.py"
     summary = {"schemaVersion": "1.0", "status": "passed", "scenarios": []}
     try:
-        if args.mode == "target-foundation":
+        if args.mode in ("target-foundation", "unsafe-delete-foundation"):
             bindir = ctx.workspace / "bin"
             bindir.mkdir(parents=True, exist_ok=True)
             ctx.parametron = bindir / "parametron"
             run(["nix", "develop", "--command", "go", "build", "-o",
                  ctx.parametron, "./cmd/parametron"], cwd=ctx.engine_repo, timeout=ctx.timeout)
-            foundation = target_foundation_proof(ctx)
-            summary["scenarios"] = foundation.pop("scenarios")
-            summary["targetFoundation"] = foundation
+            if args.mode == "target-foundation":
+                foundation = target_foundation_proof(ctx)
+                summary["scenarios"] = foundation.pop("scenarios")
+                summary["targetFoundation"] = foundation
+            else:
+                foundation = unsafe_delete_foundation_proof(ctx)
+                summary["scenarios"] = [foundation.pop("scenario")]
+                summary["unsafeDeleteFoundation"] = foundation
         elif args.mode == "timeout":
             timeout_proof(ctx, controlled)
             summary["scenarios"] = [{"name": "timeout_block", "status": "unexpected_success"}]
