@@ -411,6 +411,102 @@ def normalize_step_export_metadata(data):
     )
 
 
+def compare_repeated_real_step_artifacts(first, second, step_bytes):
+    """Allow only the two checksum-derived records for a timestamp-varying STEP."""
+    step_digests = [sha256_hex(content) for content in step_bytes]
+    snapshots = [record_package_snapshot(item) for item in (first, second)]
+    for snapshot in snapshots:
+        validate_record_package_snapshot(snapshot)
+    artifact_manifests = [json_file(find_one_outside_record_package(item["out"], "manifest.json"))
+                          for item in (first, second)]
+    step_entries = []
+    for index, (item, snapshot, artifact_manifest) in enumerate(
+            zip((first, second), snapshots, artifact_manifests)):
+        step_path = find_one(item["out"], "*.step")
+        require(step_path.read_bytes() == step_bytes[index], "STEP bytes changed during comparison")
+        artifacts = artifact_manifest["artifacts"]
+        selected = [entry for entry in artifacts if entry["type"] == "step"]
+        require(len(selected) == 2 and
+                {entry["class"] for entry in selected} ==
+                {"execution_output", "verified_artifact"},
+                "expected exactly the accepted and verified STEP artifacts")
+        for entry in selected:
+            require(entry["checksumSHA256"] == step_digests[index] and
+                    item["reportPath"].parent / entry["path"] == step_path,
+                    "STEP artifact checksum or path does not identify the exact export")
+            material = (f"job={entry['jobId']}|product={entry['productId']}|"
+                        f"step={entry['stepId']}|class={entry['class']}|"
+                        f"type={entry['type']}|value={step_digests[index]}")
+            require(entry["id"] == sha256_hex(material.encode()),
+                    "STEP artifact ID is not derived from its exact checksum")
+        step_records = []
+        for entry in snapshot["manifest"]["records"]:
+            if entry["family"] != "artifact":
+                continue
+            record = json.loads(snapshot["records"][entry["contractPath"]])
+            if record["artifact"]["type"] != "step":
+                continue
+            matches = [artifact for artifact in selected
+                       if record["artifact"]["class"] == artifact["class"]]
+            require(len(matches) == 1, "STEP record class has no unique artifact")
+            artifact = matches[0]
+            require(record["artifact"]["checksumSha256"] == step_digests[index] and
+                    record["recordKey"].endswith(":artifact:" + artifact["id"]) and
+                    entry["recordKey"] == record["recordKey"] and
+                    entry["identityId"] == record["identity"]["ID"] and
+                    entry["contractPath"] ==
+                    f"records/artifacts/{entry['identityId']}/parametron.artifact-record.json",
+                    "STEP record identity or checksum does not follow its accepted artifact")
+            step_records.append((entry, record))
+        require(len(step_records) == 2, "expected two STEP artifact records")
+        step_entries.append(sorted(step_records, key=lambda pair: pair[1]["artifact"]["class"]))
+
+    # The complete artifact-store inventory must differ only where those two
+    # exact STEP checksums determine IDs. Its ordinary createdAt values are
+    # operational metadata, already excluded by normalized_json_digest.
+    normalized_manifests = []
+    for manifest in artifact_manifests:
+        normalized = json.loads(json.dumps(manifest))
+        for entry in normalized["artifacts"]:
+            entry.pop("createdAt", None)
+            if entry["type"] == "step":
+                entry["id"] = "<step-content-id>"
+                entry["checksumSHA256"] = "<step-content-digest>"
+        normalized_manifests.append(normalized)
+    require(normalized_manifests[0] == normalized_manifests[1],
+            "artifact-store inventory differs beyond STEP content identities")
+
+    for left, right in zip(step_entries[0], step_entries[1]):
+        left_entry, left_record = json.loads(json.dumps(left))
+        right_entry, right_record = json.loads(json.dumps(right))
+        require(left_record["artifact"]["class"] == right_record["artifact"]["class"],
+                "STEP record ordering or class differs")
+        for record in (left_record, right_record):
+            record["recordKey"] = "<step-content-record-key>"
+            record["identity"]["ID"] = "<step-content-record-id>"
+            record["artifact"]["checksumSha256"] = "<step-content-digest>"
+        require(left_record == right_record,
+                "STEP artifact records differ beyond content-derived identity and checksum")
+        for entry in (left_entry, right_entry):
+            entry["recordKey"] = "<step-content-record-key>"
+            entry["identityId"] = "<step-content-record-id>"
+            entry["contractPath"] = "<step-content-record-path>"
+        require(left_entry == right_entry,
+                "STEP package entries differ beyond content-derived identity")
+
+    # Keep the established strict package comparison for every other record,
+    # including all non-STEP artifacts and exact raw-evidence provenance.
+    for index, snapshot in enumerate(snapshots):
+        step_paths = {entry["contractPath"] for entry, _ in step_entries[index]}
+        snapshot["manifest"]["records"] = [entry for entry in snapshot["manifest"]["records"]
+                                            if entry["contractPath"] not in step_paths]
+        for path in step_paths:
+            del snapshot["records"][path]
+    return compare_repeated_record_packages(
+        snapshots[0], snapshots[1],
+        required_families=("execution", "artifact", "observation", "verification"))
+
+
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -1573,12 +1669,30 @@ def real_proof(ctx):
     a, b = runs[0][1], runs[1][1]
     stable_keys = (
         "planHash", "jobID", "manifestHash", "requestHash", "resultHash",
-        "recordPackageStableHash", "stepCount",
+        "stepCount",
     )
     require(all(a[key] == b[key] for key in stable_keys), "real repeated Engine identity differs")
-    package_variance = compare_repeated_record_packages(
-        record_package_snapshot(runs[0][0]), record_package_snapshot(runs[1][0]),
-        required_families=("execution", "artifact", "observation", "verification"))
+    steps = [find_one(item["out"], "*.step") for item, _ in runs]
+    step_bytes = [path.read_bytes() for path in steps]
+    step_equal = step_bytes[0] == step_bytes[1]
+    if not step_equal:
+        timestamp = re.compile(
+            br"FILE_NAME\('Open CASCADE Shape Model','(?P<value>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})'")
+        for content in step_bytes:
+            matches = list(timestamp.finditer(content))
+            require(len(matches) == 1,
+                    "differing STEP bytes lack one recognizable exporter timestamp per file")
+            start, end = matches[0].span("value")
+            require(normalize_step_export_metadata(content) ==
+                    content[:start] + b"<export-timestamp>" + content[end:],
+                    "STEP normalization changed bytes beyond the exporter timestamp")
+    metadata_only = step_equal or (
+        normalize_step_export_metadata(step_bytes[0]) ==
+        normalize_step_export_metadata(step_bytes[1])
+    )
+    require(metadata_only, "real STEP semantic/geometric bytes differ beyond exporter metadata")
+    package_variance = compare_repeated_real_step_artifacts(
+        runs[0][0], runs[1][0], step_bytes)
     observed_a = find_one_outside_record_package(runs[0][0]["out"], "prm.observed.json")
     observed_b = find_one_outside_record_package(runs[1][0]["out"], "prm.observed.json")
     require(normalized_observed_semantics(observed_a) == normalized_observed_semantics(observed_b),
@@ -1586,14 +1700,6 @@ def real_proof(ctx):
     require(normalized_report_outcome(runs[0][0]["report"]) ==
             normalized_report_outcome(runs[1][0]["report"]),
             "real repeated structured report outcome differs")
-    steps = [find_one(item["out"], "*.step") for item, _ in runs]
-    step_bytes = [path.read_bytes() for path in steps]
-    step_equal = step_bytes[0] == step_bytes[1]
-    metadata_only = step_equal or (
-        normalize_step_export_metadata(step_bytes[0]) ==
-        normalize_step_export_metadata(step_bytes[1])
-    )
-    require(metadata_only, "real STEP semantic/geometric bytes differ beyond exporter metadata")
     artifact_types = [item.get("type") for item in runs[0][0]["report"].get("artifacts", [])]
     require(artifact_types.count("step") == 2 and artifact_types.count("json") == 2,
             f"real accepted artifact inventory is incomplete: {artifact_types}")
