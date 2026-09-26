@@ -24,7 +24,7 @@ func TestComposeFreeCADReferenceTraversalRequest_EmptyAndByteStable(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "{\"schemaVersion\":\"2.0\",\"externalTargets\":[]}\n"
+	want := "{\"schemaVersion\":\"1.0\",\"externalTargets\":[]}\n"
 	if string(first.JSON) != want || !bytes.Equal(first.JSON, second.JSON) {
 		t.Fatalf("bytes=%q second=%q want=%q", first.JSON, second.JSON, want)
 	}
@@ -126,20 +126,20 @@ func TestComposeFreeCADReferenceTraversalRequest_ListAllowsDistinctTargets(t *te
 	}
 }
 
-func TestDecodeFreeCADReferenceTraversalRequest_VersionedStrictness(t *testing.T) {
-	for _, raw := range []string{`{"schemaVersion":"2.0","externalTargets":[],"extra":true}`, `{"schemaVersion":"2.0"}`, `{"schemaVersion":"2.0","externalTargets":[]} {}`} {
+func TestDecodeFreeCADReferenceTraversalRequest_CanonicalStrictness(t *testing.T) {
+	for _, raw := range []string{`{"schemaVersion":"1.0","externalTargets":[],"extra":true}`, `{"schemaVersion":"1.0"}`, `{"schemaVersion":"1.0","externalTargets":[]} {}`} {
 		if _, err := DecodeFreeCADReferenceTraversalRequest([]byte(raw)); err == nil {
 			t.Fatalf("accepted %s", raw)
 		}
 	}
-	v2, err := DecodeFreeCADReferenceTraversalRequest([]byte(`{"schemaVersion":"2.0","externalTargets":[]}`))
-	if err != nil || v2.SchemaVersion != "2.0" || !reflect.DeepEqual(v2.ExternalTargets, []FreeCADReferenceTraversalExternalTarget{}) {
-		t.Fatalf("v2=%#v err=%v", v2, err)
+	canonical, err := DecodeFreeCADReferenceTraversalRequest([]byte(`{"schemaVersion":"1.0","externalTargets":[]}`))
+	if err != nil || canonical.SchemaVersion != "1.0" || !reflect.DeepEqual(canonical.ExternalTargets, []FreeCADReferenceTraversalExternalTarget{}) {
+		t.Fatalf("canonical=%#v err=%v", canonical, err)
 	}
 }
 
 func TestDecodeFreeCADReferenceTraversalRequest_RejectsUnsupportedVersions(t *testing.T) {
-	for _, raw := range []string{`{"schemaVersion":"1.0"}`, `{"schemaVersion":"1.0","externalTargets":[]}`, `{"schemaVersion":"3.0","externalTargets":[]}`, `{"externalTargets":[]}`} {
+	for _, raw := range []string{`{"schemaVersion":"2.0","externalTargets":[]}`, `{"schemaVersion":"9.9","externalTargets":[]}`, `{"schemaVersion":"3.0","externalTargets":[]}`, `{"externalTargets":[]}`} {
 		if _, err := DecodeFreeCADReferenceTraversalRequest([]byte(raw)); err == nil || !strings.Contains(err.Error(), "unsupported schemaVersion") {
 			t.Fatalf("input=%s err=%v", raw, err)
 		}

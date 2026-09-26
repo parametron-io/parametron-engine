@@ -245,7 +245,7 @@ func TestExecutorCADRuntimeConsumption_RejectsMismatchedOutcomeIdentity(t *testi
 			r.Runtime.ReferenceTraversalPath = filepath.Join(sibling, cadruntime.FreeCADRuntimeReferenceTraversalFilename)
 		},
 		"reference-traversal-bytes-without-path": func(_ *adapter.CADRuntimeOrchestrationRequest, r *cadruntime.FreeCADRuntimeVerifiedRun) {
-			r.Runtime.ReferenceTraversalJSON = []byte(`{"schemaVersion":"2.0"}`)
+			r.Runtime.ReferenceTraversalJSON = []byte(`{"schemaVersion":"1.0"}`)
 		},
 	}
 	for name, mutate := range cases {
@@ -262,7 +262,7 @@ func TestExecutorCADRuntimeConsumption_RejectsMismatchedOutcomeIdentity(t *testi
 
 func TestExecutorCADRuntimeConsumption_ConsumesReferenceTraversalWithAuthoritativePath(t *testing.T) {
 	var wantPath string
-	traversal := []byte(`{"schemaVersion":"2.0"}`)
+	traversal := []byte(`{"schemaVersion":"1.0"}`)
 	e, err := consumeTask12(t, func(_ *adapter.CADRuntimeOrchestrationRequest, r *cadruntime.FreeCADRuntimeVerifiedRun) {
 		outputDir := r.Runtime.ObservationRequest.Manifest.Attempt.Layout.OutputDir
 		wantPath = filepath.Join(outputDir, cadruntime.FreeCADRuntimeReferenceTraversalFilename)

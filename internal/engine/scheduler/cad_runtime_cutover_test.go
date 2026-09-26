@@ -208,7 +208,7 @@ func TestScheduler_LegacyJobUsesExecute(t *testing.T) {
 
 func TestScheduler_TransportsTerminalCADRuntimeOutcome(t *testing.T) {
 	plan := alignedProductPlan(t, "Box")
-	fakeAdp := &schedulerFakeCADAdapter{traversal: []byte(`{"schemaVersion":"2.0"}`)}
+	fakeAdp := &schedulerFakeCADAdapter{traversal: []byte(`{"schemaVersion":"1.0"}`)}
 	rt := executor.NewWithCADRuntimeConsumption(fakeAdp, schedulerFakeResolver{}, t.TempDir())
 	s := New(rt)
 

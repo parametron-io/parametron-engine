@@ -534,7 +534,7 @@ func TestFreeCADRuntimeAdapter_RepeatedProviderReadsAreIndependent(t *testing.T)
 func TestFreeCADRuntimeAdapter_ProviderCopiesReferenceTraversalDefensively(t *testing.T) {
 	req := validFreeCADRuntimeExecutionRequest(t)
 	layout := task10Layout(t, req)
-	traversal := []byte(`{"schemaVersion":"2.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
+	traversal := []byte(`{"schemaVersion":"1.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
 	fake := &task10Capability{fn: func(_ context.Context, got runtimecap.Request) (*runtimecap.Result, error) {
 		artifacts := task10ManifestArtifacts(t, got)
 		task10WriteArtifactFiles(t, got, artifacts, "artifact")

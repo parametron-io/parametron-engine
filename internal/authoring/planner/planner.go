@@ -32,16 +32,13 @@ const (
 
 	// FreeCADRuntimeExportManifestFilename is the canonical FreeCAD runtime-facing filename.
 	// ExportManifestFilename is the active Engine runtime-facing manifest filename.
-	ExportManifestFilename      = FreeCADRuntimeExportManifestFilename
-	ExportManifestSchemaVersion = "1.0"
-	// FreeCADRuntimeMutationManifestSchemaVersion is retained temporarily for
-	// test-stage migration. Production planning and projection do not use it.
-	FreeCADRuntimeMutationManifestSchemaVersion = "2.0"
-	FreeCADRuntimeResultFilename                = "prm.result.json"
-	FreeCADRuntimeOutputDirectory               = "outputs"
-	freeCADExportObjectName                     = "Body"
-	defaultOutputFormat                         = artifact.ExportOutputTypeSTEP
-	freeCADRuntimeAdapterID                     = "freecad"
+	ExportManifestFilename        = FreeCADRuntimeExportManifestFilename
+	ExportManifestSchemaVersion   = "1.0"
+	FreeCADRuntimeResultFilename  = "prm.result.json"
+	FreeCADRuntimeOutputDirectory = "outputs"
+	freeCADExportObjectName       = "Body"
+	defaultOutputFormat           = artifact.ExportOutputTypeSTEP
+	freeCADRuntimeAdapterID       = "freecad"
 )
 
 // StepPayload defines the interface for step configuration payloads.

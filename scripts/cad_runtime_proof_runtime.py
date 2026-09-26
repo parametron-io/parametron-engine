@@ -157,7 +157,7 @@ def main():
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     request = json.loads(request_path.read_text(encoding="utf-8"))
     traversal_request = json.loads(traversal_request_path.read_text(encoding="utf-8"))
-    if traversal_request != {"schemaVersion": "2.0", "externalTargets": []}:
+    if traversal_request != {"schemaVersion": "1.0", "externalTargets": []}:
         fail("unexpected traversal request")
     mode = os.environ.get("PARAMETRON_CAD_PROOF_MODE", "success")
     state_dir = canonical(os.environ.get("PARAMETRON_CAD_PROOF_STATE_DIR", working / ".proof-state"))

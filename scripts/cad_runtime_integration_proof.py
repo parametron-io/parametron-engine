@@ -823,7 +823,7 @@ def timeout_proof(ctx, runtime):
     request_path = working / "parametron.verification.json"
     request_path.write_text("{}")
     traversal_request_path = working / "parametron.reference-traversal-request.json"
-    traversal_request_path.write_text(json.dumps({"schemaVersion": "2.0", "externalTargets": []}))
+    traversal_request_path.write_text(json.dumps({"schemaVersion": "1.0", "externalTargets": []}))
     env = dict(os.environ)
     env["PARAMETRON_CAD_PROOF_MODE"] = "block"
     run(

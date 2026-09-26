@@ -17,7 +17,7 @@ import (
 
 const (
 	FreeCADReferenceTraversalRequestFilename      = "prm.reference-traversal-request.json"
-	FreeCADReferenceTraversalRequestSchemaVersion = "2.0"
+	FreeCADReferenceTraversalRequestSchemaVersion = "1.0"
 )
 
 var supportedReferenceMechanisms = map[string]bool{

@@ -80,13 +80,13 @@ func referenceTraversalEdge(source, target, kind, state string) recordmap.Refere
 	}
 }
 
-// validReferenceTraversalInput returns a base valid schema-2 mapping input with
+// validReferenceTraversalInput returns a base valid canonical mapping input with
 // one document_internal_reference edge between two object nodes.
 func validReferenceTraversalInput() recordmap.ReferenceTraversalMappingInput {
 	return recordmap.ReferenceTraversalMappingInput{
 		RecordKey: referenceTraversalRecordKey,
 		Traversal: recordmap.ReferenceTraversalRuntimeEvidence{
-			SchemaVersion:  "2.0",
+			SchemaVersion:  "1.0",
 			Kind:           "raw_reference_traversal",
 			Boundary:       "engine_invocation",
 			Operation:      "reference_traversal",
@@ -150,7 +150,7 @@ func countReferenceTraversalEvidence(evidence []recordcontract.EvidenceReference
 	return count
 }
 
-// --- 1: valid schema-2 internal reference mapping ------------------------
+// --- 1: valid canonical internal reference mapping ------------------------
 
 func TestMapReferenceTraversalInternalReferenceMapsToComponent(t *testing.T) {
 	input := validReferenceTraversalInput()
@@ -424,12 +424,13 @@ func TestMapReferenceTraversalSchemaVersionBehavior(t *testing.T) {
 		version string
 		wantErr bool
 	}{
-		{name: "two zero accepted", version: "2.0"},
+		{name: "one zero accepted", version: "1.0"},
 		{name: "empty rejected", version: "", wantErr: true},
-		{name: "one zero rejected", version: "1.0", wantErr: true},
+		{name: "retired two zero rejected", version: "2.0", wantErr: true},
+		{name: "unsupported rejected", version: "9.9", wantErr: true},
 		{name: "three zero rejected", version: "3.0", wantErr: true},
-		{name: "leading whitespace rejected", version: " 2.0", wantErr: true},
-		{name: "trailing whitespace rejected", version: "2.0 ", wantErr: true},
+		{name: "leading whitespace rejected", version: " 1.0", wantErr: true},
+		{name: "trailing whitespace rejected", version: "1.0 ", wantErr: true},
 	}
 
 	for _, tt := range tests {
@@ -1001,7 +1002,7 @@ func TestMapReferenceTraversalSentinelErrorWrapping(t *testing.T) {
 		mutate func(*recordmap.ReferenceTraversalMappingInput)
 	}{
 		{"missing record key", func(input *recordmap.ReferenceTraversalMappingInput) { input.RecordKey = "  " }},
-		{"unsupported schema version", func(input *recordmap.ReferenceTraversalMappingInput) { input.Traversal.SchemaVersion = "1.0" }},
+		{"unsupported schema version", func(input *recordmap.ReferenceTraversalMappingInput) { input.Traversal.SchemaVersion = "9.9" }},
 		{"nil nodes", func(input *recordmap.ReferenceTraversalMappingInput) { input.Traversal.Nodes = nil }},
 		{"nil edges", func(input *recordmap.ReferenceTraversalMappingInput) { input.Traversal.Edges = nil }},
 		{"malformed digest", func(input *recordmap.ReferenceTraversalMappingInput) { input.EvidenceDigestSHA256 = "not-hex" }},
