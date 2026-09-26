@@ -716,13 +716,14 @@ def target_foundation_proof(ctx):
     return result
 
 
-def stage_unsafe_delete_project(ctx):
-    """Author deletion of a supported native target; FreeCAD retains the live safety decision.
+def stage_unsafe_delete_project(ctx, source_override=None, action="delete"):
+    """Stage the PartDesign target through normal Engine authoring.
 
     BaseSketch is a real Sketcher object in the pinned PartDesign document.
     FreeCAD's deletion consumer supports exact object deletion in principle,
     then rejects this concrete object because its live InList has dependents.
     The capture grants authoring of that operation, not preclearance of safety.
+    The unhide variant uses a real FreeCAD-prepared derivative and its own fingerprint.
     """
     fixture_relative = Path("tests/fixtures/partdesign_mutations/partdesign-mutations.FCStd")
     source = ctx.freecad_repo / fixture_relative
@@ -735,26 +736,31 @@ def stage_unsafe_delete_project(ctx):
                            "tests/fixtures/canonical_lifecycle/parametron.semantic-map.json")
     require(semantic_map_source.is_file(), "FreeCAD semantic map foundation missing")
 
-    staged = ctx.workspace / "unsafe-delete-foundation" / "project"
+    require(action in ("delete", "unhide"), f"unsupported PartDesign rehearsal action: {action}")
+    staged = ctx.workspace / ("native-validity-foundation" if action == "unhide"
+                              else "unsafe-delete-foundation") / "project"
     (staged / "input").mkdir(parents=True)
-    shutil.copyfile(source, staged / "input/partdesign-mutations.FCStd")
+    shutil.copyfile(source_override or source, staged / "input/partdesign-mutations.FCStd")
+    staged_hash = digest(staged / "input/partdesign-mutations.FCStd")
     shutil.copyfile(semantic_map_source, staged / "parametron.semantic-map.json")
-    require(digest(staged / "input/partdesign-mutations.FCStd") == source_hash,
+    require(staged_hash == digest(source_override or source),
             "staged PartDesign source drifted")
+    dsl_name = "native-validity.project.dsl" if action == "unhide" else "unsafe-delete.project.dsl"
     project = {
-        "version": "1.0", "projectId": "partdesign-unsafe-delete-foundation",
-        "dsl": "unsafe-delete.project.dsl",
+        "version": "1.0", "projectId": "partdesign-" + ("native-validity" if action == "unhide"
+                                                        else "unsafe-delete") + "-foundation",
+        "dsl": dsl_name,
         "resources": {"models": {"partdesign_mutations_model":
                                  "input/partdesign-mutations.FCStd"}},
     }
     (staged / "parametron.project.json").write_text(
         json.dumps(project, indent=2) + "\n", encoding="utf-8")
-    (staged / "unsafe-delete.project.dsl").write_text(
+    (staged / dsl_name).write_text(
         'dsl v1.0\n\nproduct PartDesign {\n'
         '  adapter = "freecad"\n'
         '  source_model = "partdesign_mutations_model"\n'
         '  outputs = ["none"]\n'
-        '  target BaseSketch: action = delete\n}\n', encoding="utf-8")
+        f'  target BaseSketch: action = {action}\n}}\n', encoding="utf-8")
 
     no_actions = dict.fromkeys(("suppress", "unsuppress", "hide", "unhide", "delete"), False)
     annotations = {"description": "", "comment": "", "purpose": ""}
@@ -783,24 +789,35 @@ def stage_unsafe_delete_project(ctx):
             "kind": "owner_scoped_key", "ownerScopedKey": "BaseSketch",
             "nativeRef": "BaseSketch"},
         "stabilityClass": "conditionally_stable",
-        "targetability": {**no_actions, "delete": True},
+        "targetability": {**no_actions, "delete": True,
+                          "hide": action == "unhide", "unhide": action == "unhide"},
         "annotations": {
             "description": "Native BaseSketch owned by MutationBody",
-            "comment": "IntermediatePad depends on this sketch; FreeCAD must reject deletion in this source state",
-            "purpose": "Author supported delete intent and defer live dependency safety to FreeCAD",
+            "comment": ("Temporary EmptyBody makes post-mutation native validity fail"
+                        if action == "unhide" else
+                        "IntermediatePad depends on this sketch; FreeCAD must reject deletion in this source state"),
+            "purpose": ("Author supported visibility intent before native validity inspection"
+                        if action == "unhide" else
+                        "Author supported delete intent and defer live dependency safety to FreeCAD"),
         },
     }
     capture = {
-        "schemaVersion": "1.0", "captureId": "cap.freecad.partdesign-unsafe-delete.v1",
+        "schemaVersion": "1.0", "captureId": "cap.freecad.partdesign-" +
+        ("unsafe-delete" if action == "delete" else "native-validity") + ".v1",
         "adapter": {"name": "freecad", "version": ""},
         "cadSystem": {"name": "FreeCAD", "version": "1.1.1"},
         "sourceDocument": {"logicalId": "partdesign_mutations_model",
                            "path": "input/partdesign-mutations.FCStd",
-                           "fingerprint": "sha256:" + source_hash},
+                           "fingerprint": "sha256:" + staged_hash},
         "rootProduct": {"id": "cmp.root"},
-        "annotations": {"description": "Focused PartDesign deletion authoring surface",
-                        "comment": "Pinned to the FreeCAD-owned native fixture and its proven BaseSketch dependency",
-                        "purpose": "Rehearse Engine delete authoring before native safety rejection"},
+        "annotations": {
+            "description": ("Focused PartDesign visibility authoring surface" if action == "unhide"
+                            else "Focused PartDesign deletion authoring surface"),
+            "comment": ("Pinned to a temporary FreeCAD-prepared derivative" if action == "unhide"
+                        else "Pinned to the FreeCAD-owned native fixture and its proven BaseSketch dependency"),
+            "purpose": ("Rehearse Engine visibility authoring before native validity inspection"
+                        if action == "unhide" else
+                        "Rehearse Engine delete authoring before native safety rejection")},
         "entities": {"components": [root, body], "features": [sketch],
                      "relationships": [], "parameterGroups": [], "parameters": [],
                      "metadata": []},
@@ -812,7 +829,7 @@ def stage_unsafe_delete_project(ctx):
     }
     (staged / "parametron.cad.json").write_text(
         json.dumps(capture, indent=2) + "\n", encoding="utf-8")
-    return staged, source, source_hash
+    return staged, source_override or source, staged_hash
 
 
 def unsafe_delete_foundation_proof(ctx):
@@ -895,17 +912,20 @@ def inspect_persisted_native(ctx, source, name):
 import sys
 from pathlib import Path
 import FreeCAD
+from parametron_freecad.execution.post_mutation_validity import (
+    PostMutationValidityError, inspect_document_post_mutation_validity)
 
 request = json.loads(Path(next(a[7:] for a in sys.argv if a.startswith("--pass="))).read_text())
 document = FreeCAD.openDocument(request["source"])
 try:
     facts = {}
-    for name in ("Fillet", "Pocket001", "Body003", "Pad002", "Body002", "BaseSketch", "IntermediatePad", "MutationBody"):
+    for name in ("Fillet", "Pocket001", "Body003", "Pad002", "Body002", "BaseSketch", "IntermediatePad", "MutationBody", "EmptyBody"):
         item = document.getObject(name)
         facts[name] = None if item is None else {
             "name": item.Name, "typeId": item.TypeId,
             "suppressed": item.Suppressed if "Suppressed" in item.PropertiesList else None,
             "visible": item.Visibility if "Visibility" in item.PropertiesList else None,
+            "visibilityType": item.getTypeIdOfProperty("Visibility") if "Visibility" in item.PropertiesList else None,
             "dependents": sorted(obj.Name for obj in item.InList),
         }
     facts["bodyValidity"] = {
@@ -913,6 +933,11 @@ try:
                    "valid": not obj.Shape.isNull() and obj.Shape.isValid()}
         for obj in document.Objects if obj.TypeId == "PartDesign::Body"
     }
+    try:
+        inspect_document_post_mutation_validity(document)
+        facts["validityError"] = None
+    except PostMutationValidityError as exc:
+        facts["validityError"] = {"type": type(exc).__name__, "message": str(exc)}
     Path(request["output"]).write_text(json.dumps(facts, sort_keys=True))
 finally:
     FreeCAD.closeDocument(document.Name)
@@ -951,7 +976,8 @@ def real_target_run(ctx, name, staged, runtime, *, expect_success):
     request = attempt / "prm.verification.json"
     result = attempt / "prm.result.json"
     observed = attempt / "outputs/prm.observed.json"
-    source = attempt / "source" / ("partdesign-mutations.FCStd" if name == "unsafe-delete-real" else "cube.FCStd")
+    source = attempt / "source" / ("partdesign-mutations.FCStd" if name in
+                                   ("unsafe-delete-real", "native-validity-real") else "cube.FCStd")
     require(all(path.is_file() for path in (manifest, request, result, source)),
             f"{name}: Engine request or real runtime result missing")
     require(json_file(manifest)["schemaVersion"] == json_file(request)["schemaVersion"] ==
@@ -1185,6 +1211,133 @@ def target_mutations_real_proof(ctx):
                               "nativeReopenSemanticsStable": True,
                               "recordPackageEvidenceIdentityVariance": package_variance},
             "unsafeFailure": native_failure}
+
+
+def prepare_native_validity_derivative(ctx, source):
+    """Use real FreeCAD to add only the invalid precondition to a temporary copy."""
+    root = ctx.workspace / "native-validity-precondition"
+    root.mkdir(parents=True)
+    derivative = root / source.name
+    shutil.copyfile(source, derivative)
+    helper = root / "prepare-empty-body.py"
+    helper.write_text('''import json
+import sys
+from pathlib import Path
+import FreeCAD
+
+request = json.loads(Path(next(a[7:] for a in sys.argv if a.startswith("--pass="))).read_text())
+document = FreeCAD.openDocument(request["source"])
+try:
+    assert document.getObject("EmptyBody") is None
+    document.addObject("PartDesign::Body", "EmptyBody")
+    document.recompute()
+    document.save()
+    Path(request["output"]).write_text(json.dumps({"freecadVersion": FreeCAD.Version()}))
+finally:
+    FreeCAD.closeDocument(document.Name)
+''', encoding="utf-8")
+    request = root / "preparation-request.json"
+    output = root / "preparation-result.json"
+    request.write_text(json.dumps({"source": str(derivative), "output": str(output)}), encoding="utf-8")
+    command = ["nix", "develop", "--command", "freecadcmd", "-P", ctx.freecad_repo,
+               helper, "--pass=" + str(request)]
+    run(command, cwd=ctx.engine_repo, timeout=ctx.timeout)
+    require(output.is_file(), "real FreeCAD derivative preparation produced no result")
+    return derivative, command, json_file(output)
+
+
+def native_validity_real_proof(ctx):
+    source = ctx.freecad_repo / "tests/fixtures/partdesign_mutations/partdesign-mutations.FCStd"
+    require(source.is_file() and digest(source) == PARTDESIGN_MUTATIONS_HASH,
+            "authoritative PartDesign fixture provenance mismatch")
+    built = run(["nix", "build", "--no-link", "--print-out-paths",
+                 str(ctx.freecad_repo) + "#parametron-freecad"],
+                cwd=ctx.engine_repo, timeout=ctx.timeout)
+    runtime = Path(built.stdout.strip().splitlines()[-1]) / "bin/parametron-freecad"
+    require(runtime.is_file() and os.access(runtime, os.X_OK), "real FreeCAD wrapper unavailable")
+    smoke = json.loads(run([runtime, "smoke"], cwd=ctx.workspace, timeout=ctx.timeout).stdout)
+    require(smoke.get("status") == "ok" and smoke.get("host") == "freecadcmd",
+            f"real FreeCAD smoke failed: {smoke}")
+    derivative, preparation_command, preparation = prepare_native_validity_derivative(ctx, source)
+    derivative_hash = digest(derivative)
+    before = inspect_persisted_native(ctx, derivative, "native-validity-before")
+    require(before["EmptyBody"] is not None and
+            before["EmptyBody"]["typeId"] == "PartDesign::Body" and
+            before["bodyValidity"]["EmptyBody"]["null"] is True and
+            before["validityError"]["type"] == "InvalidNativeCadStateError" and
+            "EmptyBody" in before["validityError"]["message"] and
+            before["BaseSketch"] is not None and
+            before["BaseSketch"]["visible"] is False and
+            before["BaseSketch"]["visibilityType"] == "App::PropertyBool",
+            f"native validity precondition differs from permanent fixture proof: {before}")
+    staged, staged_source, staged_hash = stage_unsafe_delete_project(
+        ctx, source_override=derivative, action="unhide")
+    require(staged_hash == derivative_hash and
+            json_file(staged / "parametron.cad.json")["sourceDocument"]["fingerprint"] ==
+            "sha256:" + derivative_hash, "derived capture fingerprint mismatch")
+    failed = real_target_run(ctx, "native-validity-real", staged, runtime, expect_success=False)
+    manifest = json_file(failed["manifest"])
+    verification = json_file(failed["request"])
+    require(manifest.get("partMutations") ==
+            {"visibility": [{"object": "BaseSketch", "visible": True}]} and
+            "assemblyMutations" not in manifest and
+            not manifest.get("parameterAssignments") and
+            not manifest.get("outputs") and
+            verification["observationContext"]["targetState"] == {
+                "suppression": [], "visibility": [{"destination": "part", "object": "BaseSketch"}],
+                "existence": []}, "Engine-authored native validity request drifted")
+    result = json_file(failed["result"])
+    failure = result["failure"]
+    require(failure["boundary"] == "execution_entrypoint" and
+            failure["category"] == "execution" and
+            failure["code"] == "runtime_failure" and
+            failure["stage"] == "post_mutation_validity" and
+            "EmptyBody" in failure["message"] and
+            failed["report"]["error"]["classification"] == "runtime_failure" and
+            failed["report"]["error"]["stage"] == "post_mutation_validity",
+            f"real native validity failure was not preserved: {failure}")
+    after = inspect_persisted_native(ctx, failed["source"], "native-validity-after")
+    require(after["EmptyBody"] is not None and
+            after["BaseSketch"] is not None and
+            after["BaseSketch"]["visible"] == before["BaseSketch"]["visible"] and
+            after["validityError"]["type"] == "InvalidNativeCadStateError" and
+            "EmptyBody" in after["validityError"]["message"],
+            "failed visibility mutation was persisted or native precondition disappeared")
+    package = failed["package"].parent
+    package_manifest = json_file(failed["package"])
+    families = [item["family"] for item in package_manifest["records"]]
+    raw = package / "raw/runtime/prm.result.json"
+    record = package / "records/parametron.failure-record.json"
+    require("failure" in families and "observation" not in families and
+            "verification" not in families and raw.is_file() and record.is_file() and
+            raw.read_bytes() == failed["result"].read_bytes() and
+            any(item["contractPath"] == "raw/runtime/prm.result.json"
+                for item in package_manifest["rawEvidence"]),
+            "Engine failed-run package lacks exact raw validity evidence")
+    normalized = json_file(record)["failure"]
+    require(normalized["class"] == "runtime" and normalized["code"] == "runtime_failure" and
+            any(item["sourceRef"] == "raw/runtime/prm.result.json" and
+                item["digestSha256"] == digest(raw) for item in normalized["evidence"]),
+            "Engine normalized failure lost its raw-result provenance")
+    require(digest(source) == PARTDESIGN_MUTATIONS_HASH and digest(staged_source) == derivative_hash,
+            "authoritative or derived source drifted during real rehearsal")
+    revision = lambda repo: run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+    return {"engineRevision": revision(ctx.engine_repo),
+            "freecadRevision": revision(ctx.freecad_repo), "runtime": str(runtime),
+            "freecadVersion": smoke["freecadVersion"], "smoke": smoke,
+            "authoritativeSource": str(source), "authoritativeSHA256": digest(source),
+            "derivedSource": str(derivative), "derivedSHA256": derivative_hash,
+            "preparationCommand": list(map(str, preparation_command)),
+            "preparationFreeCADVersion": preparation["freecadVersion"],
+            "stagedProject": str(staged), "stagedSHA256": staged_hash,
+            "scenario": real_target_facts(failed, after),
+            "requestMutation": manifest["partMutations"],
+            "observationIdentity": verification["observationContext"]["targetState"],
+            "nativeFailure": failure, "normalizedFailure": normalized,
+            "failureRecord": str(record), "rawResultEvidence": str(raw),
+            "rawResultSHA256": digest(raw), "before": before, "after": after,
+            "workingCopyBytesUnchanged": digest(failed["source"]) == derivative_hash,
+            "distinctFromUnsafeDeletionStage": True}
 
 
 def concurrent_isolation_proof(ctx, runtime):
@@ -1502,12 +1655,14 @@ def main():
     parser.add_argument("--freecad-repo", type=Path, default=script_repo.parent / "parametron-freecad")
     parser.add_argument("--workspace", type=Path)
     parser.add_argument("--mode", choices=("fake", "real", "all", "timeout", "target-foundation",
-                                           "unsafe-delete-foundation", "target-mutations-real"), default="all")
+                                           "unsafe-delete-foundation", "target-mutations-real",
+                                           "native-validity-real"), default="all")
     parser.add_argument("--report", type=Path)
     parser.add_argument("--keep-workspace", action="store_true")
     parser.add_argument("--timeout", type=int, default=240)
     args = parser.parse_args()
-    if args.mode in ("target-foundation", "unsafe-delete-foundation", "target-mutations-real") and "--freecad-repo" not in sys.argv:
+    if args.mode in ("target-foundation", "unsafe-delete-foundation", "target-mutations-real",
+                     "native-validity-real") and "--freecad-repo" not in sys.argv:
         parser.error(f"{args.mode} requires explicit --freecad-repo")
 
     owned_temp = args.workspace is None
@@ -1524,7 +1679,8 @@ def main():
     controlled = ctx.engine_repo / "scripts/cad_runtime_proof_runtime.py"
     summary = {"schemaVersion": "1.0", "status": "passed", "scenarios": []}
     try:
-        if args.mode in ("target-foundation", "unsafe-delete-foundation", "target-mutations-real"):
+        if args.mode in ("target-foundation", "unsafe-delete-foundation", "target-mutations-real",
+                         "native-validity-real"):
             bindir = ctx.workspace / "bin"
             bindir.mkdir(parents=True, exist_ok=True)
             ctx.parametron = bindir / "parametron"
@@ -1538,6 +1694,10 @@ def main():
                 foundation = unsafe_delete_foundation_proof(ctx)
                 summary["scenarios"] = [foundation.pop("scenario")]
                 summary["unsafeDeleteFoundation"] = foundation
+            elif args.mode == "native-validity-real":
+                validity = native_validity_real_proof(ctx)
+                summary["scenarios"] = [validity.pop("scenario")]
+                summary["nativeValidityReal"] = validity
             else:
                 real = target_mutations_real_proof(ctx)
                 summary["scenarios"] = real.pop("scenarios")
