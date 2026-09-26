@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import signal
 import socket
@@ -410,6 +411,102 @@ def normalize_step_export_metadata(data):
     )
 
 
+def compare_repeated_real_step_artifacts(first, second, step_bytes):
+    """Allow only the two checksum-derived records for a timestamp-varying STEP."""
+    step_digests = [sha256_hex(content) for content in step_bytes]
+    snapshots = [record_package_snapshot(item) for item in (first, second)]
+    for snapshot in snapshots:
+        validate_record_package_snapshot(snapshot)
+    artifact_manifests = [json_file(find_one_outside_record_package(item["out"], "manifest.json"))
+                          for item in (first, second)]
+    step_entries = []
+    for index, (item, snapshot, artifact_manifest) in enumerate(
+            zip((first, second), snapshots, artifact_manifests)):
+        step_path = find_one(item["out"], "*.step")
+        require(step_path.read_bytes() == step_bytes[index], "STEP bytes changed during comparison")
+        artifacts = artifact_manifest["artifacts"]
+        selected = [entry for entry in artifacts if entry["type"] == "step"]
+        require(len(selected) == 2 and
+                {entry["class"] for entry in selected} ==
+                {"execution_output", "verified_artifact"},
+                "expected exactly the accepted and verified STEP artifacts")
+        for entry in selected:
+            require(entry["checksumSHA256"] == step_digests[index] and
+                    item["reportPath"].parent / entry["path"] == step_path,
+                    "STEP artifact checksum or path does not identify the exact export")
+            material = (f"job={entry['jobId']}|product={entry['productId']}|"
+                        f"step={entry['stepId']}|class={entry['class']}|"
+                        f"type={entry['type']}|value={step_digests[index]}")
+            require(entry["id"] == sha256_hex(material.encode()),
+                    "STEP artifact ID is not derived from its exact checksum")
+        step_records = []
+        for entry in snapshot["manifest"]["records"]:
+            if entry["family"] != "artifact":
+                continue
+            record = json.loads(snapshot["records"][entry["contractPath"]])
+            if record["artifact"]["type"] != "step":
+                continue
+            matches = [artifact for artifact in selected
+                       if record["artifact"]["class"] == artifact["class"]]
+            require(len(matches) == 1, "STEP record class has no unique artifact")
+            artifact = matches[0]
+            require(record["artifact"]["checksumSha256"] == step_digests[index] and
+                    record["recordKey"].endswith(":artifact:" + artifact["id"]) and
+                    entry["recordKey"] == record["recordKey"] and
+                    entry["identityId"] == record["identity"]["ID"] and
+                    entry["contractPath"] ==
+                    f"records/artifacts/{entry['identityId']}/parametron.artifact-record.json",
+                    "STEP record identity or checksum does not follow its accepted artifact")
+            step_records.append((entry, record))
+        require(len(step_records) == 2, "expected two STEP artifact records")
+        step_entries.append(sorted(step_records, key=lambda pair: pair[1]["artifact"]["class"]))
+
+    # The complete artifact-store inventory must differ only where those two
+    # exact STEP checksums determine IDs. Its ordinary createdAt values are
+    # operational metadata, already excluded by normalized_json_digest.
+    normalized_manifests = []
+    for manifest in artifact_manifests:
+        normalized = json.loads(json.dumps(manifest))
+        for entry in normalized["artifacts"]:
+            entry.pop("createdAt", None)
+            if entry["type"] == "step":
+                entry["id"] = "<step-content-id>"
+                entry["checksumSHA256"] = "<step-content-digest>"
+        normalized_manifests.append(normalized)
+    require(normalized_manifests[0] == normalized_manifests[1],
+            "artifact-store inventory differs beyond STEP content identities")
+
+    for left, right in zip(step_entries[0], step_entries[1]):
+        left_entry, left_record = json.loads(json.dumps(left))
+        right_entry, right_record = json.loads(json.dumps(right))
+        require(left_record["artifact"]["class"] == right_record["artifact"]["class"],
+                "STEP record ordering or class differs")
+        for record in (left_record, right_record):
+            record["recordKey"] = "<step-content-record-key>"
+            record["identity"]["ID"] = "<step-content-record-id>"
+            record["artifact"]["checksumSha256"] = "<step-content-digest>"
+        require(left_record == right_record,
+                "STEP artifact records differ beyond content-derived identity and checksum")
+        for entry in (left_entry, right_entry):
+            entry["recordKey"] = "<step-content-record-key>"
+            entry["identityId"] = "<step-content-record-id>"
+            entry["contractPath"] = "<step-content-record-path>"
+        require(left_entry == right_entry,
+                "STEP package entries differ beyond content-derived identity")
+
+    # Keep the established strict package comparison for every other record,
+    # including all non-STEP artifacts and exact raw-evidence provenance.
+    for index, snapshot in enumerate(snapshots):
+        step_paths = {entry["contractPath"] for entry, _ in step_entries[index]}
+        snapshot["manifest"]["records"] = [entry for entry in snapshot["manifest"]["records"]
+                                            if entry["contractPath"] not in step_paths]
+        for path in step_paths:
+            del snapshot["records"][path]
+    return compare_repeated_record_packages(
+        snapshots[0], snapshots[1],
+        required_families=("execution", "artifact", "observation", "verification"))
+
+
 def free_port():
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
@@ -528,6 +625,815 @@ def build_binaries(ctx):
     ):
         run(["nix", "develop", "--command", "go", "build", "-o", output, package],
             cwd=ctx.engine_repo, timeout=ctx.timeout)
+
+
+CANONICAL_LIFECYCLE_HASH = "9376277c131ac3f361f05412b3a6b455f8574eabf99f1e02d1fa75d3fca82250"
+PARTDESIGN_MUTATIONS_HASH = "7187abe907ca6240bdc7cd07fb5ce7a52cf9192e3ba6d6153c581f18b328057a"
+TARGET_SCENARIOS = {
+    "hidden-baseline-setup": {
+        "actions": (("Pad002", "hide"),),
+        "mutations": {"visibility": [{"object": "Pad002", "visible": False}]},
+        "observations": {"suppression": [], "visibility": ["Pad002"], "existence": []},
+    },
+    "combined-success": {
+        "actions": (("Fillet", "suppress"), ("Pocket001", "unsuppress"),
+                    ("Body003", "hide"), ("Pad002", "unhide"), ("Body002", "delete")),
+        "mutations": {
+            "suppression": [{"object": "Fillet", "suppressed": True},
+                            {"object": "Pocket001", "suppressed": False}],
+            "visibility": [{"object": "Body003", "visible": False},
+                           {"object": "Pad002", "visible": True}],
+            "deletion": [{"object": "Body002"}],
+        },
+        "observations": {"suppression": ["Fillet", "Pocket001"],
+                         "visibility": ["Body003", "Pad002"], "existence": ["Body002"]},
+    },
+}
+
+
+def stage_canonical_target_project(ctx, staged, name, source_override=None):
+    fixture = ctx.freecad_repo / "tests/fixtures/canonical_lifecycle"
+    shutil.copytree(fixture, staged)
+    source = staged / "input/cube.FCStd"
+    capture = json_file(staged / "parametron.cad.json")
+    require(capture["sourceDocument"]["fingerprint"] == "sha256:" + digest(source),
+            "canonical fixture capture fingerprint mismatch")
+    if source_override is not None:
+        shutil.copyfile(source_override, source)
+    source_hash = digest(source)
+    project = json_file(staged / "parametron.project.json")
+    project["projectId"] = "cube-target-" + name
+    project.pop("tables", None)
+    (staged / "parametron.project.json").write_text(
+        json.dumps(project, indent=2) + "\n", encoding="utf-8")
+    shutil.rmtree(staged / "tables")
+    if source_override is not None:
+        capture["sourceDocument"]["fingerprint"] = "sha256:" + source_hash
+        (staged / "parametron.cad.json").write_text(
+            json.dumps(capture, indent=2) + "\n", encoding="utf-8")
+    scenario = TARGET_SCENARIOS[name]
+    dsl = ('dsl v1.0\n\nproduct CubeBox {\n'
+           '  adapter = "freecad"\n'
+           '  source_model = "cube_canonical_lifecycle_model"\n'
+           '  outputs = ["none"]\n' +
+           ''.join(f'  target {target}: action = {action}\n'
+                   for target, action in scenario["actions"]) + '}\n')
+    (staged / "cube.project.dsl").write_text(dsl, encoding="utf-8")
+    return source_hash
+
+
+def target_foundation_proof(ctx):
+    fixture_relative = Path("tests/fixtures/canonical_lifecycle")
+    fixture = ctx.freecad_repo / fixture_relative
+    require(ctx.freecad_repo.is_dir(), f"FreeCAD repository missing: {ctx.freecad_repo}")
+    require(fixture.is_dir(), f"canonical lifecycle fixture missing: {fixture}")
+    required = ("input/cube.FCStd", "parametron.project.json", "parametron.cad.json",
+                "parametron.semantic-map.json", "cube.project.dsl")
+    for name in required:
+        require((fixture / name).is_file(), f"canonical lifecycle file missing: {fixture / name}")
+    source = fixture / "input/cube.FCStd"
+    source_hash = digest(source)
+    require(source_hash == CANONICAL_LIFECYCLE_HASH,
+            f"canonical lifecycle fixture hash mismatch: {source_hash}")
+    project = json_file(fixture / "parametron.project.json")
+    capture = json_file(fixture / "parametron.cad.json")
+    require(project.get("dsl") == "cube.project.dsl" and
+            project.get("resources", {}).get("models", {}).get(
+                "cube_canonical_lifecycle_model") == "input/cube.FCStd",
+            "canonical lifecycle project model/DSL mapping changed")
+    require(capture.get("sourceDocument") == {
+        "logicalId": "cube_canonical_lifecycle_model", "path": "input/cube.FCStd",
+        "fingerprint": "sha256:" + source_hash}, "capture source fingerprint mismatch")
+    components = capture.get("entities", {}).get("components", [])
+    features = capture.get("entities", {}).get("features", [])
+    for name, kind, capabilities in (
+        ("Fillet", "feature", (True, True, False, False, False)),
+        ("Pocket001", "feature", (True, True, False, False, False)),
+        ("Body003", "part", (False, False, True, True, False)),
+        ("Pad002", "feature", (False, False, True, True, False)),
+        ("Body002", "part", (False, False, True, True, True)),
+    ):
+        entities = features if kind == "feature" else components
+        matches = [entry for entry in entities if entry.get("name") == name and
+                   entry.get("identitySource", {}).get("nativeRef") == name and
+                   entry.get("kind", kind) == kind]
+        require(len(matches) == 1, f"capture native identity missing or ambiguous: {name}")
+        want = dict(zip(("suppress", "unsuppress", "hide", "unhide", "delete"),
+                        capabilities))
+        require(matches[0].get("targetability") == want,
+                f"capture capability mismatch: {name}")
+
+    runtime = ctx.workspace / "reject-runtime"
+    invocation = ctx.workspace / "runtime-invocation"
+    runtime.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" >> " + shlex.quote(str(invocation)) +
+                       "\nexit 23\n", encoding="utf-8")
+    runtime.chmod(0o700)
+    revision = lambda repo: run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+    result = {"engineRevision": revision(ctx.engine_repo),
+              "freecadRevision": revision(ctx.freecad_repo),
+              "fixture": str(fixture_relative / "input/cube.FCStd"),
+              "fixtureSHA256": source_hash, "scenarios": []}
+    for name, scenario in TARGET_SCENARIOS.items():
+        root = ctx.workspace / name
+        staged = root / "project"
+        require(stage_canonical_target_project(ctx, staged, name) == source_hash,
+                "staged source drifted")
+        cwd = root / "cwd"
+        cwd.mkdir()
+        output = root / "out"
+        command = [str(ctx.parametron), "--project", str(staged), "--out", str(output)]
+        before_calls = invocation.read_text() if invocation.exists() else ""
+        cli = run(command, cwd=cwd, env={**os.environ,
+                  "PARAMETRON_FREECAD_RUNTIME": str(runtime)}, timeout=ctx.timeout,
+                  check=False)
+        require(cli.returncode != 0, f"{name}: rejecting runtime unexpectedly succeeded")
+        require(invocation.exists() and invocation.read_text() != before_calls,
+                f"{name}: rejecting runtime was never invoked\n{cli.stdout}\n{cli.stderr}")
+        actual_out = output
+        manifests = sorted(path for path in actual_out.rglob("prm.export-manifest.json")
+                           if "_working" in path.parts)
+        requests = sorted(path for path in actual_out.rglob("prm.verification.json")
+                          if "_working" in path.parts)
+        require(len(manifests) == len(requests) == 1,
+                f"{name}: expected one attempt-local manifest and request")
+        manifest_path, request_path = manifests[0], requests[0]
+        attempt = manifest_path.parent
+        require(request_path.parent == attempt and attempt.parent.name == "_working",
+                f"{name}: requests are not attempt-local")
+        arguments = invocation.read_text()[len(before_calls):].splitlines()
+        require("--working-copy" in arguments and
+                arguments[arguments.index("--working-copy") + 1] == str(attempt) and
+                "--manifest" in arguments and
+                arguments[arguments.index("--manifest") + 1] == str(manifest_path) and
+                "--observation-request" in arguments and
+                arguments[arguments.index("--observation-request") + 1] == str(request_path),
+                f"{name}: rejected runtime was not passed the Engine attempt inputs: {arguments}")
+        staged_source = attempt / "source/cube.FCStd"
+        require(staged_source.is_file() and digest(staged_source) == source_hash,
+                f"{name}: Engine working-copy source missing or changed")
+        require(staged_source.resolve() != source.resolve() and
+                staged_source.resolve() != (staged / "input/cube.FCStd").resolve(),
+                f"{name}: runtime source is not an independent working copy")
+        manifest, request = json_file(manifest_path), json_file(request_path)
+        require(manifest.get("schemaVersion") == request.get("schemaVersion") == "1.0",
+                f"{name}: mutation/observation schema changed")
+        require(manifest.get("partMutations") == scenario["mutations"],
+                f"{name}: Part mutation projection mismatch: {manifest.get('partMutations')}")
+        require("assemblyMutations" not in manifest and
+                not manifest.get("parameterAssignments") and not manifest.get("outputs"),
+                f"{name}: unexpected assembly, parameter, or output intent")
+        require(manifest.get("sourceDocument") == "source/cube.FCStd",
+                f"{name}: runtime source is not the working-copy source")
+        target_state = request.get("observationContext", {}).get("targetState", {})
+        expected = {family: [{"destination": "part", "object": target}
+                             for target in sorted(names)]
+                    for family, names in scenario["observations"].items()}
+        require(target_state == expected and request.get("observe", {}).get("targetState") is True,
+                f"{name}: target-state observation mismatch: {target_state}")
+        require("targetState" not in request.get("expected", {}),
+                f"{name}: expected target state leaked into serialized request")
+        require(not list(actual_out.rglob("prm.result.json")) and
+                not list(actual_out.rglob("prm.observed.json")),
+                f"{name}: rejecting runtime produced CAD evidence")
+        require(digest(source) == source_hash, f"{name}: authoritative fixture changed")
+        report_path = sorted(actual_out.rglob("prm.report.json"))
+        report = json_file(report_path[-1]) if report_path else {}
+        result["scenarios"].append({
+            "name": name, "status": "passed", "stagedProject": str(staged),
+            "cliInvocation": command, "cliExit": cli.returncode,
+            "planHash": report.get("planHash"),
+            "jobIDs": [job.get("jobId") for job in report.get("jobs", [])],
+            "manifestPath": str(manifest_path), "manifestSHA256": digest(manifest_path),
+            "verificationPath": str(request_path), "verificationSHA256": digest(request_path),
+            "workingCopySource": str(staged_source),
+            "stoppingPoint": "intentional Stage 1A external runtime rejection (exit 23)",
+        })
+    require(digest(source) == source_hash, "authoritative fixture changed after proof")
+    return result
+
+
+def stage_unsafe_delete_project(ctx, source_override=None, action="delete"):
+    """Stage the PartDesign target through normal Engine authoring.
+
+    BaseSketch is a real Sketcher object in the pinned PartDesign document.
+    FreeCAD's deletion consumer supports exact object deletion in principle,
+    then rejects this concrete object because its live InList has dependents.
+    The capture grants authoring of that operation, not preclearance of safety.
+    The unhide variant uses a real FreeCAD-prepared derivative and its own fingerprint.
+    """
+    fixture_relative = Path("tests/fixtures/partdesign_mutations/partdesign-mutations.FCStd")
+    source = ctx.freecad_repo / fixture_relative
+    require(ctx.freecad_repo.is_dir() and source.is_file(),
+            f"FreeCAD PartDesign fixture missing: {source}")
+    source_hash = digest(source)
+    require(source_hash == PARTDESIGN_MUTATIONS_HASH,
+            f"PartDesign fixture provenance mismatch: {source_hash}")
+    semantic_map_source = (ctx.freecad_repo /
+                           "tests/fixtures/canonical_lifecycle/parametron.semantic-map.json")
+    require(semantic_map_source.is_file(), "FreeCAD semantic map foundation missing")
+
+    require(action in ("delete", "unhide"), f"unsupported PartDesign rehearsal action: {action}")
+    staged = ctx.workspace / ("native-validity-foundation" if action == "unhide"
+                              else "unsafe-delete-foundation") / "project"
+    (staged / "input").mkdir(parents=True)
+    shutil.copyfile(source_override or source, staged / "input/partdesign-mutations.FCStd")
+    staged_hash = digest(staged / "input/partdesign-mutations.FCStd")
+    shutil.copyfile(semantic_map_source, staged / "parametron.semantic-map.json")
+    require(staged_hash == digest(source_override or source),
+            "staged PartDesign source drifted")
+    dsl_name = "native-validity.project.dsl" if action == "unhide" else "unsafe-delete.project.dsl"
+    project = {
+        "version": "1.0", "projectId": "partdesign-" + ("native-validity" if action == "unhide"
+                                                        else "unsafe-delete") + "-foundation",
+        "dsl": dsl_name,
+        "resources": {"models": {"partdesign_mutations_model":
+                                 "input/partdesign-mutations.FCStd"}},
+    }
+    (staged / "parametron.project.json").write_text(
+        json.dumps(project, indent=2) + "\n", encoding="utf-8")
+    (staged / dsl_name).write_text(
+        'dsl v1.0\n\nproduct PartDesign {\n'
+        '  adapter = "freecad"\n'
+        '  source_model = "partdesign_mutations_model"\n'
+        '  outputs = ["none"]\n'
+        f'  target BaseSketch: action = {action}\n}}\n', encoding="utf-8")
+
+    no_actions = dict.fromkeys(("suppress", "unsuppress", "hide", "unhide", "delete"), False)
+    annotations = {"description": "", "comment": "", "purpose": ""}
+    root = {
+        "id": "cmp.root", "kind": "assembly", "name": "partdesign_mutations",
+        "displayName": "partdesign-mutations", "cadType": "App::Document",
+        "quantity": 1, "material": "", "identitySource": {
+            "kind": "parent_scoped_path", "path": "cmp.root",
+            "nativeRef": "partdesign_mutations"},
+        "stabilityClass": "stable", "targetability": no_actions,
+        "annotations": annotations,
+    }
+    body = {
+        "id": "cmp.mutationBody", "kind": "part", "name": "MutationBody",
+        "displayName": "MutationBody", "cadType": "PartDesign::Body",
+        "quantity": 1, "material": "", "identitySource": {
+            "kind": "parent_scoped_path", "path": "cmp.root/MutationBody",
+            "nativeRef": "MutationBody"},
+        "stabilityClass": "stable", "targetability": no_actions,
+        "annotations": annotations,
+    }
+    sketch = {
+        "id": "fea.mutationBody.baseSketch", "componentId": "cmp.mutationBody",
+        "name": "BaseSketch", "displayName": "BaseSketch",
+        "cadType": "Sketcher::SketchObject", "identitySource": {
+            "kind": "owner_scoped_key", "ownerScopedKey": "BaseSketch",
+            "nativeRef": "BaseSketch"},
+        "stabilityClass": "conditionally_stable",
+        "targetability": {**no_actions, "delete": True,
+                          "hide": action == "unhide", "unhide": action == "unhide"},
+        "annotations": {
+            "description": "Native BaseSketch owned by MutationBody",
+            "comment": ("Temporary EmptyBody makes post-mutation native validity fail"
+                        if action == "unhide" else
+                        "IntermediatePad depends on this sketch; FreeCAD must reject deletion in this source state"),
+            "purpose": ("Author supported visibility intent before native validity inspection"
+                        if action == "unhide" else
+                        "Author supported delete intent and defer live dependency safety to FreeCAD"),
+        },
+    }
+    capture = {
+        "schemaVersion": "1.0", "captureId": "cap.freecad.partdesign-" +
+        ("unsafe-delete" if action == "delete" else "native-validity") + ".v1",
+        "adapter": {"name": "freecad", "version": ""},
+        "cadSystem": {"name": "FreeCAD", "version": "1.1.1"},
+        "sourceDocument": {"logicalId": "partdesign_mutations_model",
+                           "path": "input/partdesign-mutations.FCStd",
+                           "fingerprint": "sha256:" + staged_hash},
+        "rootProduct": {"id": "cmp.root"},
+        "annotations": {
+            "description": ("Focused PartDesign visibility authoring surface" if action == "unhide"
+                            else "Focused PartDesign deletion authoring surface"),
+            "comment": ("Pinned to a temporary FreeCAD-prepared derivative" if action == "unhide"
+                        else "Pinned to the FreeCAD-owned native fixture and its proven BaseSketch dependency"),
+            "purpose": ("Rehearse Engine visibility authoring before native validity inspection"
+                        if action == "unhide" else
+                        "Rehearse Engine delete authoring before native safety rejection")},
+        "entities": {"components": [root, body], "features": [sketch],
+                     "relationships": [], "parameterGroups": [], "parameters": [],
+                     "metadata": []},
+        "structure": {"rootComponentId": "cmp.root", "nodes": [
+            {"componentId": "cmp.root", "parentComponentId": "",
+             "children": ["cmp.mutationBody"]},
+            {"componentId": "cmp.mutationBody", "parentComponentId": "cmp.root",
+             "children": []}]},
+    }
+    (staged / "parametron.cad.json").write_text(
+        json.dumps(capture, indent=2) + "\n", encoding="utf-8")
+    return staged, source_override or source, staged_hash
+
+
+def unsafe_delete_foundation_proof(ctx):
+    staged, source, source_hash = stage_unsafe_delete_project(ctx)
+    fixture_relative = Path("tests/fixtures/partdesign_mutations/partdesign-mutations.FCStd")
+
+    runtime = ctx.workspace / "unsafe-delete-reject-runtime"
+    invocation = ctx.workspace / "unsafe-delete-runtime-invocation"
+    runtime.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > " +
+                       shlex.quote(str(invocation)) + "\nexit 23\n", encoding="utf-8")
+    runtime.chmod(0o700)
+    output = ctx.workspace / "unsafe-delete-foundation" / "out"
+    command = [str(ctx.parametron), "--project", str(staged), "--out", str(output)]
+    cli = run(command, cwd=staged.parent,
+              env={**os.environ, "PARAMETRON_FREECAD_RUNTIME": str(runtime)},
+              timeout=ctx.timeout, check=False)
+    require(cli.returncode != 0 and invocation.is_file(),
+            f"unsafe-delete: normal CLI did not reach rejecting runtime\n{cli.stdout}\n{cli.stderr}")
+    manifests = sorted(path for path in output.rglob("prm.export-manifest.json")
+                       if "_working" in path.parts)
+    requests = sorted(path for path in output.rglob("prm.verification.json")
+                      if "_working" in path.parts)
+    require(len(manifests) == len(requests) == 1,
+            "unsafe-delete: expected one Engine attempt manifest and request")
+    manifest_path, request_path = manifests[0], requests[0]
+    attempt = manifest_path.parent
+    require(attempt.parent.name == "_working" and request_path.parent == attempt,
+            "unsafe-delete: request paths are not attempt-local")
+    args = invocation.read_text().splitlines()
+    for flag, value in (("--working-copy", attempt), ("--manifest", manifest_path),
+                        ("--observation-request", request_path)):
+        require(flag in args and args[args.index(flag) + 1] == str(value),
+                f"unsafe-delete: runtime was not passed Engine's {flag} path")
+    working_source = attempt / "source/partdesign-mutations.FCStd"
+    require(working_source.is_file() and digest(working_source) == source_hash and
+            working_source.resolve() != source.resolve() and
+            working_source.resolve() != (staged / "input/partdesign-mutations.FCStd").resolve(),
+            "unsafe-delete: Engine working-copy source is missing or not isolated")
+    manifest, request = json_file(manifest_path), json_file(request_path)
+    require(manifest.get("schemaVersion") == request.get("schemaVersion") == "1.0",
+            "unsafe-delete: request schema is not 1.0")
+    require(manifest.get("sourceDocument") == "source/partdesign-mutations.FCStd" and
+            manifest.get("partMutations") == {"deletion": [{"object": "BaseSketch"}]} and
+            "assemblyMutations" not in manifest and
+            not manifest.get("parameterAssignments") and not manifest.get("outputs"),
+            f"unsafe-delete: unexpected manifest projection: {manifest}")
+    require(request.get("observe", {}).get("targetState") is True and
+            request.get("observationContext", {}).get("targetState") == {
+                "suppression": [], "visibility": [], "existence": [
+                    {"destination": "part", "object": "BaseSketch"}]} and
+            "targetState" not in request.get("expected", {}),
+            f"unsafe-delete: unexpected observation request: {request}")
+    require(not list(output.rglob("prm.result.json")) and
+            not list(output.rglob("prm.observed.json")),
+            "unsafe-delete: rejecting runtime fabricated CAD evidence")
+    require(digest(source) == source_hash, "FreeCAD PartDesign fixture changed")
+    reports = sorted(output.rglob("prm.report.json"))
+    report = json_file(reports[-1]) if reports else {}
+    revision = lambda repo: run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+    return {"engineRevision": revision(ctx.engine_repo),
+            "freecadRevision": revision(ctx.freecad_repo),
+            "fixture": str(fixture_relative), "fixtureSHA256": source_hash,
+            "scenario": {"name": "unsafe-delete-foundation", "status": "passed",
+                         "stagedProject": str(staged), "cliInvocation": command,
+                         "cliExit": cli.returncode, "planHash": report.get("planHash"),
+                         "jobIDs": [job.get("jobId") for job in report.get("jobs", [])],
+                         "manifestPath": str(manifest_path),
+                         "manifestSHA256": digest(manifest_path),
+                         "verificationPath": str(request_path),
+                         "verificationSHA256": digest(request_path),
+                         "workingCopySource": str(working_source),
+                         "stoppingPoint": "intentional Stage 1B external runtime rejection (exit 23)"}}
+
+
+def inspect_persisted_native(ctx, source, name):
+    """Reopen an attempt document with real FreeCAD, without saving it."""
+    script = ctx.workspace / "inspect-persisted-native.py"
+    if not script.exists():
+        script.write_text('''import json
+import sys
+from pathlib import Path
+import FreeCAD
+from parametron_freecad.execution.post_mutation_validity import (
+    PostMutationValidityError, inspect_document_post_mutation_validity)
+
+request = json.loads(Path(next(a[7:] for a in sys.argv if a.startswith("--pass="))).read_text())
+document = FreeCAD.openDocument(request["source"])
+try:
+    facts = {}
+    for name in ("Fillet", "Pocket001", "Body003", "Pad002", "Body002", "BaseSketch", "IntermediatePad", "MutationBody", "EmptyBody"):
+        item = document.getObject(name)
+        facts[name] = None if item is None else {
+            "name": item.Name, "typeId": item.TypeId,
+            "suppressed": item.Suppressed if "Suppressed" in item.PropertiesList else None,
+            "visible": item.Visibility if "Visibility" in item.PropertiesList else None,
+            "visibilityType": item.getTypeIdOfProperty("Visibility") if "Visibility" in item.PropertiesList else None,
+            "dependents": sorted(obj.Name for obj in item.InList),
+        }
+    facts["bodyValidity"] = {
+        obj.Name: {"null": obj.Shape.isNull(),
+                   "valid": not obj.Shape.isNull() and obj.Shape.isValid()}
+        for obj in document.Objects if obj.TypeId == "PartDesign::Body"
+    }
+    try:
+        inspect_document_post_mutation_validity(document)
+        facts["validityError"] = None
+    except PostMutationValidityError as exc:
+        facts["validityError"] = {"type": type(exc).__name__, "message": str(exc)}
+    Path(request["output"]).write_text(json.dumps(facts, sort_keys=True))
+finally:
+    FreeCAD.closeDocument(document.Name)
+''', encoding="utf-8")
+    request = ctx.workspace / (name + "-native-inspection-request.json")
+    output = ctx.workspace / (name + "-native-inspection.json")
+    request.write_text(json.dumps({"source": str(source), "output": str(output)}), encoding="utf-8")
+    run(["nix", "develop", "--command", "freecadcmd", "-P", ctx.freecad_repo,
+         script, "--pass=" + str(request)], cwd=ctx.engine_repo, timeout=ctx.timeout)
+    require(output.is_file(), f"read-only FreeCAD inspection did not return: {name}")
+    return json_file(output)
+
+
+def real_target_run(ctx, name, staged, runtime, *, expect_success):
+    root = ctx.workspace / name
+    root.mkdir(exist_ok=True)
+    output = root / "out"
+    command = [str(ctx.parametron), "--project", str(staged), "--out", str(output)]
+    cli = run(command, cwd=root, env={**os.environ, "PARAMETRON_FREECAD_RUNTIME": str(runtime)},
+              timeout=ctx.timeout, check=False)
+    require((cli.returncode == 0) == expect_success,
+            f"{name}: unexpected real CLI exit {cli.returncode}\n{cli.stdout}\n{cli.stderr}")
+    report_path = find_one_outside_record_package(output, "prm.report.json")
+    report = json_file(report_path)
+    require(report["status"] == ("success" if expect_success else "failed"),
+            f"{name}: unexpected Engine report status: {report['status']}")
+    attempts = sorted((path.parent for path in output.rglob("prm.export-manifest.json")
+                       if "_working" in path.parts),
+                      key=lambda path: int(path.name.rsplit("-attempt-", 1)[1]))
+    require(len(attempts) == report["jobs"][0]["steps"][-1]["attempts"],
+            f"{name}: missing Engine attempt working copies")
+    attempt = attempts[-1]
+    require(attempt.parent.name == "_working" and attempt.is_dir(),
+            f"{name}: working copy is not Engine-owned")
+    manifest = attempt / "prm.export-manifest.json"
+    request = attempt / "prm.verification.json"
+    result = attempt / "prm.result.json"
+    observed = attempt / "outputs/prm.observed.json"
+    source = attempt / "source" / ("partdesign-mutations.FCStd" if name in
+                                   ("unsafe-delete-real", "native-validity-real") else "cube.FCStd")
+    require(all(path.is_file() for path in (manifest, request, result, source)),
+            f"{name}: Engine request or real runtime result missing")
+    require(json_file(manifest)["schemaVersion"] == json_file(request)["schemaVersion"] ==
+            json_file(result)["schemaVersion"] == "1.0", f"{name}: schema mismatch")
+    require(json_file(manifest)["sourceDocument"] == "source/" + source.name,
+            f"{name}: runtime did not use attempt source")
+    require(digest(staged / "input" / source.name) == json_file(request)["expected"]["metadata"][0]["value"],
+            f"{name}: request source fingerprint disagrees with staged source")
+    require(json_file(result)["status"] == ("succeeded" if expect_success else "failed"),
+            f"{name}: real result status mismatch")
+    if expect_success:
+        require(json_file(result).get("artifacts") == [],
+                f"{name}: native-only runtime returned derived artifacts")
+        require(observed.is_file() and json_file(observed)["schemaVersion"] == "1.0",
+                f"{name}: real observation missing")
+        require(json_file(observed)["workingCopy"]["path"] == str(attempt),
+                f"{name}: real observation attempt mismatch")
+    else:
+        require(not observed.exists(), f"{name}: failed native execution emitted observation")
+    package_path = find_one(output, "parametron.record-package.json")
+    return {"name": name, "root": root, "out": output, "stagedProject": staged,
+            "command": command, "report": report, "reportPath": report_path,
+            "attempt": attempt, "attempts": attempts, "manifest": manifest,
+            "request": request, "result": result, "observed": observed,
+            "source": source, "package": package_path}
+
+
+def real_target_facts(run_item, native):
+    package = json_file(run_item["package"])
+    verification = run_item["package"].parent / "records/parametron.verification-record.json"
+    return {"name": run_item["name"], "cliInvocation": run_item["command"],
+            "stagedProject": str(run_item["stagedProject"]),
+            "planHash": run_item["report"]["planHash"],
+            "jobID": run_item["report"]["jobs"][0]["jobId"],
+            "attemptIDs": [path.name for path in run_item["attempts"]],
+            "attemptPath": str(run_item["attempt"]),
+            "manifestPath": str(run_item["manifest"]), "manifestSHA256": digest(run_item["manifest"]),
+            "verificationPath": str(run_item["request"]), "verificationSHA256": digest(run_item["request"]),
+            "resultPath": str(run_item["result"]), "resultSHA256": digest(run_item["result"]),
+            "observedPath": str(run_item["observed"]) if run_item["observed"].exists() else None,
+            "observedSHA256": digest(run_item["observed"]) if run_item["observed"].exists() else None,
+            "engineStatus": run_item["report"]["status"],
+            "recordPackage": str(run_item["package"].parent),
+            "recordFamilies": [entry["family"] for entry in package["records"]],
+            "rawEvidencePaths": [entry["contractPath"] for entry in package["rawEvidence"]],
+            "verificationStatus": json_file(verification)["verification"]["outcome"]
+                                  if verification.exists() else None,
+            "persistedSource": str(run_item["source"]),
+            "persistedSHA256": digest(run_item["source"]),
+            "reopenedNativeState": native}
+
+
+def target_mutations_real_proof(ctx):
+    canonical = ctx.freecad_repo / "tests/fixtures/canonical_lifecycle/input/cube.FCStd"
+    unsafe = ctx.freecad_repo / "tests/fixtures/partdesign_mutations/partdesign-mutations.FCStd"
+    require(canonical.is_file() and digest(canonical) == CANONICAL_LIFECYCLE_HASH,
+            "canonical fixture provenance mismatch")
+    require(unsafe.is_file() and digest(unsafe) == PARTDESIGN_MUTATIONS_HASH,
+            "PartDesign fixture provenance mismatch")
+    built = run(["nix", "build", "--no-link", "--print-out-paths",
+                 str(ctx.freecad_repo) + "#parametron-freecad"],
+                cwd=ctx.engine_repo, timeout=ctx.timeout)
+    runtime = Path(built.stdout.strip().splitlines()[-1]) / "bin/parametron-freecad"
+    require(runtime.is_file() and os.access(runtime, os.X_OK), "real FreeCAD wrapper unavailable")
+    smoke = json.loads(run([runtime, "smoke"], cwd=ctx.workspace, timeout=ctx.timeout).stdout)
+    require(smoke.get("status") == "ok" and smoke.get("host") == "freecadcmd" and
+            smoke.get("freecadVersion", [])[:3] == ["1", "1", "1"],
+            f"real FreeCAD smoke failed: {smoke}")
+    revision = lambda repo: run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+    provenance = {"engineRevision": revision(ctx.engine_repo),
+                  "freecadRevision": revision(ctx.freecad_repo),
+                  "runtime": str(runtime), "freecadVersion": smoke["freecadVersion"],
+                  "canonicalFixture": str(canonical), "canonicalSHA256": digest(canonical),
+                  "unsafeFixture": str(unsafe), "unsafeSHA256": digest(unsafe)}
+
+    setup_project = ctx.workspace / "hidden-setup-project"
+    require(stage_canonical_target_project(ctx, setup_project, "hidden-baseline-setup") ==
+            CANONICAL_LIFECYCLE_HASH, "setup staged source drifted")
+    setup = real_target_run(ctx, "hidden-baseline-real", setup_project, runtime, expect_success=True)
+    require(json_file(setup["manifest"]).get("partMutations") ==
+            TARGET_SCENARIOS["hidden-baseline-setup"]["mutations"] and
+            json_file(setup["request"])["observationContext"]["targetState"] == {
+                "suppression": [], "visibility": [{"destination": "part", "object": "Pad002"}],
+                "existence": []}, "real hidden-baseline request drifted")
+    setup_state = json_file(setup["observed"])["observation"]["targetState"]
+    require(setup_state == {"suppression": [], "visibility": [
+        {"destination": "part", "object": "Pad002", "status": "observed", "value": False}],
+        "existence": []}, f"real hide observation mismatch: {setup_state}")
+    setup_native = inspect_persisted_native(ctx, setup["source"], "hidden-setup")
+    require(setup_native["Pad002"]["visible"] is False and
+            setup_native["Body002"] is not None and
+            all(fact["valid"] for fact in setup_native["bodyValidity"].values()),
+            "persisted hidden baseline did not reopen as healthy hidden source")
+    setup_package = record_package_snapshot(setup)
+    setup_facts = validate_record_package_snapshot(setup_package)
+    require(setup_facts["verification"]["record"]["verification"]["outcome"] == "pass",
+            "Engine did not verify real hidden-baseline evidence")
+    hidden_hash = digest(setup["source"])
+    require(hidden_hash != CANONICAL_LIFECYCLE_HASH,
+            "real setup did not persist a distinct hidden native document")
+
+    # Two independent copies of the exact hidden bytes enter the same project
+    # path sequentially, preserving Engine plan identity while keeping each
+    # CLI execution and attempt working copy independent.
+    combined = []
+    for index in (1, 2):
+        copy_project = ctx.workspace / f"combined-copy-{index}"
+        require(stage_canonical_target_project(ctx, copy_project, "combined-success",
+                                               setup["source"]) == hidden_hash,
+                "combined source is not the proven hidden derivative")
+        active = ctx.workspace / "combined-active-project"
+        if active.exists():
+            shutil.rmtree(active)
+        shutil.copytree(copy_project, active)
+        require(digest(active / "input/cube.FCStd") == hidden_hash and
+                json_file(active / "parametron.cad.json")["sourceDocument"]["fingerprint"] ==
+                "sha256:" + hidden_hash, "derived capture provenance mismatch")
+        item = real_target_run(ctx, f"combined-real-{index}", active, runtime,
+                               expect_success=True)
+        require(json_file(item["manifest"]).get("partMutations") ==
+                TARGET_SCENARIOS["combined-success"]["mutations"] and
+                "assemblyMutations" not in json_file(item["manifest"]) and
+                not json_file(item["manifest"]).get("parameterAssignments") and
+                not json_file(item["manifest"]).get("outputs") and
+                not list(item["out"].rglob("*.step")),
+                "combined real mutation manifest drifted")
+        requested = {family: [{"destination": "part", "object": target}
+                              for target in sorted(names)]
+                     for family, names in TARGET_SCENARIOS["combined-success"]["observations"].items()}
+        require(json_file(item["request"])["observationContext"]["targetState"] == requested,
+                "combined real observation request identities drifted")
+        observed = json_file(item["observed"])["observation"]["targetState"]
+        expected = {"suppression": [
+            {"destination": "part", "object": "Fillet", "status": "observed", "value": True},
+            {"destination": "part", "object": "Pocket001", "status": "observed", "value": False}],
+            "visibility": [
+                {"destination": "part", "object": "Body003", "status": "observed", "value": False},
+                {"destination": "part", "object": "Pad002", "status": "observed", "value": True}],
+            "existence": [{"destination": "part", "object": "Body002", "status": "absent"}]}
+        require(observed == expected, f"combined real observation mismatch: {observed}")
+        native = inspect_persisted_native(ctx, item["source"], f"combined-{index}")
+        require(native["Fillet"]["suppressed"] is True and
+                native["Pocket001"]["suppressed"] is False and
+                native["Body003"]["visible"] is False and
+                native["Pad002"]["visible"] is True and
+                native["Body002"] is None and
+                all(fact["valid"] for fact in native["bodyValidity"].values()),
+                f"combined persisted native state mismatch: {native}")
+        snapshot = record_package_snapshot(item)
+        facts = validate_record_package_snapshot(snapshot)
+        families = {entry["family"] for entry in snapshot["manifest"]["records"]}
+        require({"execution", "observation", "reference", "verification"} <= families and
+                "failure" not in families and
+                facts["verification"]["record"]["verification"]["outcome"] == "pass" and
+                next(category for category in facts["verification"]["record"]["verification"]["categories"]
+                     if category["category"] == "target_state")["outcome"] == "pass",
+                "Engine did not verify or normalize the real combined state")
+        observed_facts = [fact for fact in facts["observation"]["record"]["observation"]["facts"]
+                          if fact["kind"] == "target_state"]
+        require(len(observed_facts) == 5, "normalized observation lost target states")
+        for raw_path in (OBSERVED_RAW, VERIFICATION_RAW, "raw/runtime/prm.result.json"):
+            require(raw_path in snapshot["raw"], f"combined package missing {raw_path}")
+        combined.append((item, native, snapshot))
+    first, second = combined[0][0], combined[1][0]
+    require(first["report"]["planHash"] == second["report"]["planHash"] and
+            first["report"]["jobs"][0]["jobId"] == second["report"]["jobs"][0]["jobId"] and
+            digest(first["manifest"]) == digest(second["manifest"]) and
+            digest(first["result"]) == digest(second["result"]) and
+            normalized_json_digest(first["request"]) == normalized_json_digest(second["request"]) and
+            normalized_observed_semantics(first["observed"]) ==
+            normalized_observed_semantics(second["observed"]) and
+            combined[0][1] == combined[1][1], "combined real repeatability mismatch")
+    package_variance = compare_repeated_record_packages(
+        combined[0][2], combined[1][2],
+        required_families=("execution", "observation", "reference", "verification"))
+
+    unsafe_project, unsafe_source, unsafe_hash = stage_unsafe_delete_project(ctx)
+    failed = real_target_run(ctx, "unsafe-delete-real", unsafe_project, runtime,
+                             expect_success=False)
+    native_failure = json_file(failed["result"])["failure"]
+    require(json_file(failed["manifest"]).get("partMutations") ==
+            {"deletion": [{"object": "BaseSketch"}]} and
+            json_file(failed["request"])["observationContext"]["targetState"] == {
+                "suppression": [], "visibility": [], "existence": [
+                    {"destination": "part", "object": "BaseSketch"}]} and
+            failed["report"]["error"]["classification"] == "runtime_failure" and
+            failed["report"]["error"]["stage"] == "deletion",
+            "Engine unsafe-delete request or failure classification drifted")
+    require(native_failure["boundary"] == "execution_entrypoint" and
+            native_failure["category"] == "execution" and
+            native_failure["code"] == "runtime_failure" and
+            native_failure["stage"] == "deletion" and
+            "BaseSketch" in native_failure["message"] and
+            "IntermediatePad" in native_failure["message"],
+            f"real native deletion rejection changed: {native_failure}")
+    failed_native = inspect_persisted_native(ctx, failed["source"], "unsafe-delete")
+    require(failed_native["BaseSketch"] is not None and
+            "IntermediatePad" in failed_native["BaseSketch"]["dependents"] and
+            all(fact["valid"] for fact in failed_native["bodyValidity"].values()) and
+            digest(failed["source"]) == unsafe_hash == digest(unsafe_source),
+            "unsafe deletion altered the native working copy")
+    failed_package = failed["package"].parent
+    failed_manifest = json_file(failed["package"])
+    failed_families = [entry["family"] for entry in failed_manifest["records"]]
+    require("failure" in failed_families and
+            "observation" not in failed_families and "verification" not in failed_families and
+            any(entry["contractPath"] == "raw/runtime/prm.result.json"
+                for entry in failed_manifest["rawEvidence"]),
+            f"Engine failed-run package missing native failure: {failed_families}")
+    failure_record = json_file(failed_package / "records/parametron.failure-record.json")
+    packaged_result = failed_package / "raw/runtime/prm.result.json"
+    require(packaged_result.read_bytes() == failed["result"].read_bytes() and
+            failure_record["failure"]["class"] == "runtime" and
+            failure_record["failure"]["code"] == "runtime_failure" and
+            any(e["sourceRef"] == "raw/runtime/prm.result.json" and
+                e["digestSha256"] == digest(packaged_result)
+                for e in failure_record["failure"]["evidence"]),
+            "Engine did not normalize/provenance-link real native failure")
+    require(digest(canonical) == CANONICAL_LIFECYCLE_HASH and
+            digest(unsafe) == PARTDESIGN_MUTATIONS_HASH,
+            "authoritative FreeCAD fixtures changed during real proof")
+    return {**provenance, "hiddenBaselineSHA256": hidden_hash,
+            "hiddenBaselineSourceAttempt": str(setup["attempt"]),
+            "combinedStagedCopies": [str(ctx.workspace / f"combined-copy-{index}")
+                                     for index in (1, 2)],
+            "scenarios": [real_target_facts(setup, setup_native)] +
+                         [real_target_facts(item, native) for item, native, _ in combined] +
+                         [real_target_facts(failed, failed_native)],
+            "repeatability": {"planAndJobStable": True, "manifestAndResultBytesStable": True,
+                              "requestAndObservationSemanticsStable": True,
+                              "nativeReopenSemanticsStable": True,
+                              "recordPackageEvidenceIdentityVariance": package_variance},
+            "unsafeFailure": native_failure}
+
+
+def prepare_native_validity_derivative(ctx, source):
+    """Use real FreeCAD to add only the invalid precondition to a temporary copy."""
+    root = ctx.workspace / "native-validity-precondition"
+    root.mkdir(parents=True)
+    derivative = root / source.name
+    shutil.copyfile(source, derivative)
+    helper = root / "prepare-empty-body.py"
+    helper.write_text('''import json
+import sys
+from pathlib import Path
+import FreeCAD
+
+request = json.loads(Path(next(a[7:] for a in sys.argv if a.startswith("--pass="))).read_text())
+document = FreeCAD.openDocument(request["source"])
+try:
+    assert document.getObject("EmptyBody") is None
+    document.addObject("PartDesign::Body", "EmptyBody")
+    document.recompute()
+    document.save()
+    Path(request["output"]).write_text(json.dumps({"freecadVersion": FreeCAD.Version()}))
+finally:
+    FreeCAD.closeDocument(document.Name)
+''', encoding="utf-8")
+    request = root / "preparation-request.json"
+    output = root / "preparation-result.json"
+    request.write_text(json.dumps({"source": str(derivative), "output": str(output)}), encoding="utf-8")
+    command = ["nix", "develop", "--command", "freecadcmd", "-P", ctx.freecad_repo,
+               helper, "--pass=" + str(request)]
+    run(command, cwd=ctx.engine_repo, timeout=ctx.timeout)
+    require(output.is_file(), "real FreeCAD derivative preparation produced no result")
+    return derivative, command, json_file(output)
+
+
+def native_validity_real_proof(ctx):
+    source = ctx.freecad_repo / "tests/fixtures/partdesign_mutations/partdesign-mutations.FCStd"
+    require(source.is_file() and digest(source) == PARTDESIGN_MUTATIONS_HASH,
+            "authoritative PartDesign fixture provenance mismatch")
+    built = run(["nix", "build", "--no-link", "--print-out-paths",
+                 str(ctx.freecad_repo) + "#parametron-freecad"],
+                cwd=ctx.engine_repo, timeout=ctx.timeout)
+    runtime = Path(built.stdout.strip().splitlines()[-1]) / "bin/parametron-freecad"
+    require(runtime.is_file() and os.access(runtime, os.X_OK), "real FreeCAD wrapper unavailable")
+    smoke = json.loads(run([runtime, "smoke"], cwd=ctx.workspace, timeout=ctx.timeout).stdout)
+    require(smoke.get("status") == "ok" and smoke.get("host") == "freecadcmd",
+            f"real FreeCAD smoke failed: {smoke}")
+    derivative, preparation_command, preparation = prepare_native_validity_derivative(ctx, source)
+    derivative_hash = digest(derivative)
+    before = inspect_persisted_native(ctx, derivative, "native-validity-before")
+    require(before["EmptyBody"] is not None and
+            before["EmptyBody"]["typeId"] == "PartDesign::Body" and
+            before["bodyValidity"]["EmptyBody"]["null"] is True and
+            before["validityError"]["type"] == "InvalidNativeCadStateError" and
+            "EmptyBody" in before["validityError"]["message"] and
+            before["BaseSketch"] is not None and
+            before["BaseSketch"]["visible"] is False and
+            before["BaseSketch"]["visibilityType"] == "App::PropertyBool",
+            f"native validity precondition differs from permanent fixture proof: {before}")
+    staged, staged_source, staged_hash = stage_unsafe_delete_project(
+        ctx, source_override=derivative, action="unhide")
+    require(staged_hash == derivative_hash and
+            json_file(staged / "parametron.cad.json")["sourceDocument"]["fingerprint"] ==
+            "sha256:" + derivative_hash, "derived capture fingerprint mismatch")
+    failed = real_target_run(ctx, "native-validity-real", staged, runtime, expect_success=False)
+    manifest = json_file(failed["manifest"])
+    verification = json_file(failed["request"])
+    require(manifest.get("partMutations") ==
+            {"visibility": [{"object": "BaseSketch", "visible": True}]} and
+            "assemblyMutations" not in manifest and
+            not manifest.get("parameterAssignments") and
+            not manifest.get("outputs") and
+            verification["observationContext"]["targetState"] == {
+                "suppression": [], "visibility": [{"destination": "part", "object": "BaseSketch"}],
+                "existence": []}, "Engine-authored native validity request drifted")
+    result = json_file(failed["result"])
+    failure = result["failure"]
+    require(failure["boundary"] == "execution_entrypoint" and
+            failure["category"] == "execution" and
+            failure["code"] == "runtime_failure" and
+            failure["stage"] == "post_mutation_validity" and
+            "EmptyBody" in failure["message"] and
+            failed["report"]["error"]["classification"] == "runtime_failure" and
+            failed["report"]["error"]["stage"] == "post_mutation_validity",
+            f"real native validity failure was not preserved: {failure}")
+    after = inspect_persisted_native(ctx, failed["source"], "native-validity-after")
+    require(after["EmptyBody"] is not None and
+            after["BaseSketch"] is not None and
+            after["BaseSketch"]["visible"] == before["BaseSketch"]["visible"] and
+            after["validityError"]["type"] == "InvalidNativeCadStateError" and
+            "EmptyBody" in after["validityError"]["message"],
+            "failed visibility mutation was persisted or native precondition disappeared")
+    package = failed["package"].parent
+    package_manifest = json_file(failed["package"])
+    families = [item["family"] for item in package_manifest["records"]]
+    raw = package / "raw/runtime/prm.result.json"
+    record = package / "records/parametron.failure-record.json"
+    require("failure" in families and "observation" not in families and
+            "verification" not in families and raw.is_file() and record.is_file() and
+            raw.read_bytes() == failed["result"].read_bytes() and
+            any(item["contractPath"] == "raw/runtime/prm.result.json"
+                for item in package_manifest["rawEvidence"]),
+            "Engine failed-run package lacks exact raw validity evidence")
+    normalized = json_file(record)["failure"]
+    require(normalized["class"] == "runtime" and normalized["code"] == "runtime_failure" and
+            any(item["sourceRef"] == "raw/runtime/prm.result.json" and
+                item["digestSha256"] == digest(raw) for item in normalized["evidence"]),
+            "Engine normalized failure lost its raw-result provenance")
+    require(digest(source) == PARTDESIGN_MUTATIONS_HASH and digest(staged_source) == derivative_hash,
+            "authoritative or derived source drifted during real rehearsal")
+    revision = lambda repo: run(["git", "rev-parse", "HEAD"], cwd=repo).stdout.strip()
+    return {"engineRevision": revision(ctx.engine_repo),
+            "freecadRevision": revision(ctx.freecad_repo), "runtime": str(runtime),
+            "freecadVersion": smoke["freecadVersion"], "smoke": smoke,
+            "authoritativeSource": str(source), "authoritativeSHA256": digest(source),
+            "derivedSource": str(derivative), "derivedSHA256": derivative_hash,
+            "preparationCommand": list(map(str, preparation_command)),
+            "preparationFreeCADVersion": preparation["freecadVersion"],
+            "stagedProject": str(staged), "stagedSHA256": staged_hash,
+            "scenario": real_target_facts(failed, after),
+            "requestMutation": manifest["partMutations"],
+            "observationIdentity": verification["observationContext"]["targetState"],
+            "nativeFailure": failure, "normalizedFailure": normalized,
+            "failureRecord": str(record), "rawResultEvidence": str(raw),
+            "rawResultSHA256": digest(raw), "before": before, "after": after,
+            "workingCopyBytesUnchanged": digest(failed["source"]) == derivative_hash,
+            "distinctFromUnsafeDeletionStage": True}
 
 
 def concurrent_isolation_proof(ctx, runtime):
@@ -763,12 +1669,30 @@ def real_proof(ctx):
     a, b = runs[0][1], runs[1][1]
     stable_keys = (
         "planHash", "jobID", "manifestHash", "requestHash", "resultHash",
-        "recordPackageStableHash", "stepCount",
+        "stepCount",
     )
     require(all(a[key] == b[key] for key in stable_keys), "real repeated Engine identity differs")
-    package_variance = compare_repeated_record_packages(
-        record_package_snapshot(runs[0][0]), record_package_snapshot(runs[1][0]),
-        required_families=("execution", "artifact", "observation", "verification"))
+    steps = [find_one(item["out"], "*.step") for item, _ in runs]
+    step_bytes = [path.read_bytes() for path in steps]
+    step_equal = step_bytes[0] == step_bytes[1]
+    if not step_equal:
+        timestamp = re.compile(
+            br"FILE_NAME\('Open CASCADE Shape Model','(?P<value>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})'")
+        for content in step_bytes:
+            matches = list(timestamp.finditer(content))
+            require(len(matches) == 1,
+                    "differing STEP bytes lack one recognizable exporter timestamp per file")
+            start, end = matches[0].span("value")
+            require(normalize_step_export_metadata(content) ==
+                    content[:start] + b"<export-timestamp>" + content[end:],
+                    "STEP normalization changed bytes beyond the exporter timestamp")
+    metadata_only = step_equal or (
+        normalize_step_export_metadata(step_bytes[0]) ==
+        normalize_step_export_metadata(step_bytes[1])
+    )
+    require(metadata_only, "real STEP semantic/geometric bytes differ beyond exporter metadata")
+    package_variance = compare_repeated_real_step_artifacts(
+        runs[0][0], runs[1][0], step_bytes)
     observed_a = find_one_outside_record_package(runs[0][0]["out"], "prm.observed.json")
     observed_b = find_one_outside_record_package(runs[1][0]["out"], "prm.observed.json")
     require(normalized_observed_semantics(observed_a) == normalized_observed_semantics(observed_b),
@@ -776,14 +1700,6 @@ def real_proof(ctx):
     require(normalized_report_outcome(runs[0][0]["report"]) ==
             normalized_report_outcome(runs[1][0]["report"]),
             "real repeated structured report outcome differs")
-    steps = [find_one(item["out"], "*.step") for item, _ in runs]
-    step_bytes = [path.read_bytes() for path in steps]
-    step_equal = step_bytes[0] == step_bytes[1]
-    metadata_only = step_equal or (
-        normalize_step_export_metadata(step_bytes[0]) ==
-        normalize_step_export_metadata(step_bytes[1])
-    )
-    require(metadata_only, "real STEP semantic/geometric bytes differ beyond exporter metadata")
     artifact_types = [item.get("type") for item in runs[0][0]["report"].get("artifacts", [])]
     require(artifact_types.count("step") == 2 and artifact_types.count("json") == 2,
             f"real accepted artifact inventory is incomplete: {artifact_types}")
@@ -844,11 +1760,16 @@ def main():
     parser.add_argument("--engine-repo", type=Path, default=script_repo)
     parser.add_argument("--freecad-repo", type=Path, default=script_repo.parent / "parametron-freecad")
     parser.add_argument("--workspace", type=Path)
-    parser.add_argument("--mode", choices=("fake", "real", "all", "timeout"), default="all")
+    parser.add_argument("--mode", choices=("fake", "real", "all", "timeout", "target-foundation",
+                                           "unsafe-delete-foundation", "target-mutations-real",
+                                           "native-validity-real"), default="all")
     parser.add_argument("--report", type=Path)
     parser.add_argument("--keep-workspace", action="store_true")
     parser.add_argument("--timeout", type=int, default=240)
     args = parser.parse_args()
+    if args.mode in ("target-foundation", "unsafe-delete-foundation", "target-mutations-real",
+                     "native-validity-real") and "--freecad-repo" not in sys.argv:
+        parser.error(f"{args.mode} requires explicit --freecad-repo")
 
     owned_temp = args.workspace is None
     workspace = args.workspace.resolve() if args.workspace else Path(tempfile.mkdtemp(prefix="parametron-task14-"))
@@ -864,7 +1785,30 @@ def main():
     controlled = ctx.engine_repo / "scripts/cad_runtime_proof_runtime.py"
     summary = {"schemaVersion": "1.0", "status": "passed", "scenarios": []}
     try:
-        if args.mode == "timeout":
+        if args.mode in ("target-foundation", "unsafe-delete-foundation", "target-mutations-real",
+                         "native-validity-real"):
+            bindir = ctx.workspace / "bin"
+            bindir.mkdir(parents=True, exist_ok=True)
+            ctx.parametron = bindir / "parametron"
+            run(["nix", "develop", "--command", "go", "build", "-o",
+                 ctx.parametron, "./cmd/parametron"], cwd=ctx.engine_repo, timeout=ctx.timeout)
+            if args.mode == "target-foundation":
+                foundation = target_foundation_proof(ctx)
+                summary["scenarios"] = foundation.pop("scenarios")
+                summary["targetFoundation"] = foundation
+            elif args.mode == "unsafe-delete-foundation":
+                foundation = unsafe_delete_foundation_proof(ctx)
+                summary["scenarios"] = [foundation.pop("scenario")]
+                summary["unsafeDeleteFoundation"] = foundation
+            elif args.mode == "native-validity-real":
+                validity = native_validity_real_proof(ctx)
+                summary["scenarios"] = [validity.pop("scenario")]
+                summary["nativeValidityReal"] = validity
+            else:
+                real = target_mutations_real_proof(ctx)
+                summary["scenarios"] = real.pop("scenarios")
+                summary["targetMutationsReal"] = real
+        elif args.mode == "timeout":
             timeout_proof(ctx, controlled)
             summary["scenarios"] = [{"name": "timeout_block", "status": "unexpected_success"}]
         else:
