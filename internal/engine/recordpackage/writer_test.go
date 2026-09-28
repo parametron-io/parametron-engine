@@ -192,7 +192,7 @@ func TestWritePackageMaterializesLayoutRecordsAndManifest(t *testing.T) {
 	if !reflect.DeepEqual(manifest.Records, wantEntries) {
 		t.Fatalf("manifest records = %#v, want %#v", manifest.Records, wantEntries)
 	}
-	if _, err := os.Stat(filepath.Join(root, "records", "parametron.artifact-record.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "records", "prm.artifact-record.json")); !os.IsNotExist(err) {
 		t.Fatalf("superseded singleton artifact record path exists (stat err = %v)", err)
 	}
 
@@ -544,7 +544,7 @@ func TestWritePackageRawEvidenceFiles(t *testing.T) {
 		},
 		{
 			name:         "normalized record path",
-			files:        []recordpackage.RawEvidenceFile{{ContractPath: "records/parametron.failure-record.json", Content: []byte("x")}},
+			files:        []recordpackage.RawEvidenceFile{{ContractPath: "records/prm.failure-record.json", Content: []byte("x")}},
 			wantSentinel: recordpackage.ErrInvalidLayoutPath,
 		},
 		{

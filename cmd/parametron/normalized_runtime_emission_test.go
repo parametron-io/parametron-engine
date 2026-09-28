@@ -131,7 +131,7 @@ func TestCLIProjectRun_NormalRunEmitsArtifactObservationAndVerificationRecords(t
 	for _, entry := range artifactEntries {
 		byKey[entry.RecordKey] = entry
 		identities = append(identities, entry.IdentityID)
-		if want := "records/artifacts/" + entry.IdentityID + "/parametron.artifact-record.json"; entry.ContractPath != want {
+		if want := "records/artifacts/" + entry.IdentityID + "/prm.artifact-record.json"; entry.ContractPath != want {
 			t.Fatalf("artifact entry %#v path != identity-addressed %q", entry, want)
 		}
 		assertPackageFileExists(t, recordPackageRoot(run.result.RunRoot), entry.ContractPath)
@@ -156,7 +156,7 @@ func TestCLIProjectRun_NormalRunEmitsArtifactObservationAndVerificationRecords(t
 	}
 	// The superseded singleton artifact path is never written, even though
 	// several (and, in other runs, exactly one) artifact records exist.
-	if _, ok := files["records/parametron.artifact-record.json"]; ok {
+	if _, ok := files["records/prm.artifact-record.json"]; ok {
 		t.Fatal("superseded singleton artifact record path was written")
 	}
 
@@ -395,7 +395,7 @@ func TestCLIProjectRun_NonCADRunEmitsNoObservationOrVerificationRecords(t *testi
 		t.Fatalf("manifest artifact records = %d, run registered %d", len(families["artifact"]), want)
 	}
 	for _, entry := range families["artifact"] {
-		if want := "records/artifacts/" + entry.IdentityID + "/parametron.artifact-record.json"; entry.ContractPath != want {
+		if want := "records/artifacts/" + entry.IdentityID + "/prm.artifact-record.json"; entry.ContractPath != want {
 			t.Fatalf("artifact entry %#v path != %q", entry, want)
 		}
 	}

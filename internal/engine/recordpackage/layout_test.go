@@ -21,7 +21,7 @@ func TestCanonicalConstantsAndTopLevelLayout(t *testing.T) {
 		want string
 	}{
 		{"package directory", recordpackage.PackageDirectoryName, "parametron-record-package"},
-		{"package manifest", recordpackage.PackageManifestContractPath(), "parametron.record-package.json"},
+		{"package manifest", recordpackage.PackageManifestContractPath(), "prm.record-package.json"},
 		{"records directory", recordpackage.RecordsDirectoryContractPath(), "records"},
 		{"artifacts directory", recordpackage.ArtifactsDirectoryContractPath(), "artifacts"},
 		{"artifact files directory", recordpackage.ArtifactFilesDirectoryContractPath(), "artifacts/files"},
@@ -73,7 +73,7 @@ func TestRecordContractPathsDeriveFromRegistry(t *testing.T) {
 func TestSingletonArtifactRecordPathIsNotAContractPath(t *testing.T) {
 	t.Parallel()
 
-	const singleton = "records/parametron.artifact-record.json"
+	const singleton = "records/prm.artifact-record.json"
 
 	if got, ok := recordpackage.RecordContractPath(recordcontract.FamilyArtifact); ok {
 		t.Fatalf("RecordContractPath(artifact) = %q, true; want no singleton path", got)
@@ -90,7 +90,7 @@ func TestSingletonArtifactRecordPathIsNotAContractPath(t *testing.T) {
 		t.Fatalf("EntryForContractPath(%q) = %#v, true; want false", singleton, entry)
 	}
 	identityPath, err := recordpackage.ArtifactRecordContractPath("abc123")
-	if err != nil || identityPath != "records/artifacts/abc123/parametron.artifact-record.json" ||
+	if err != nil || identityPath != "records/artifacts/abc123/prm.artifact-record.json" ||
 		!recordpackage.IsNormalizedRecordContractPath(identityPath) {
 		t.Fatalf("identity-addressed artifact path = %q, %v", identityPath, err)
 	}

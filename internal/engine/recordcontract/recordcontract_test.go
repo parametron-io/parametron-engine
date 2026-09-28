@@ -9,37 +9,37 @@ import (
 var expectedDefinitions = []Definition{
 	{
 		Family:    FamilyExecution,
-		FileName:  "parametron.execution-record.json",
+		FileName:  "prm.execution-record.json",
 		Version:   CurrentVersion,
 		Ownership: EngineProducedOwnership(),
 	},
 	{
 		Family:    FamilyArtifact,
-		FileName:  "parametron.artifact-record.json",
+		FileName:  "prm.artifact-record.json",
 		Version:   CurrentVersion,
 		Ownership: EngineProducedOwnership(),
 	},
 	{
 		Family:    FamilyObservation,
-		FileName:  "parametron.observation-record.json",
+		FileName:  "prm.observation-record.json",
 		Version:   CurrentVersion,
 		Ownership: EngineProducedOwnership(),
 	},
 	{
 		Family:    FamilyReference,
-		FileName:  "parametron.reference-record.json",
+		FileName:  "prm.reference-record.json",
 		Version:   CurrentVersion,
 		Ownership: EngineProducedOwnership(),
 	},
 	{
 		Family:    FamilyFailure,
-		FileName:  "parametron.failure-record.json",
+		FileName:  "prm.failure-record.json",
 		Version:   CurrentVersion,
 		Ownership: EngineProducedOwnership(),
 	},
 	{
 		Family:    FamilyVerification,
-		FileName:  "parametron.verification-record.json",
+		FileName:  "prm.verification-record.json",
 		Version:   CurrentVersion,
 		Ownership: EngineProducedOwnership(),
 	},

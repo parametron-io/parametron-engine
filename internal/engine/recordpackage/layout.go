@@ -14,7 +14,7 @@ const (
 	PackageDirectoryName = "parametron-record-package"
 
 	// PackageManifestFileName is the canonical package manifest filename at the package root.
-	PackageManifestFileName = "parametron.record-package.json"
+	PackageManifestFileName = "prm.record-package.json"
 
 	// RecordsDirectoryName is the canonical normalized records directory.
 	RecordsDirectoryName = "records"

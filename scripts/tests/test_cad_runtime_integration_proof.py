@@ -311,7 +311,7 @@ class FakeCLISuccessUsesNormalAlignedPathTests(unittest.TestCase):
         out = run["workspace"] / "fake-cli-success" / "cwd" / "output"
         self.assertTrue(list(out.rglob("*.step")))
         self.assertTrue(list(out.rglob("prm.result.json")))
-        self.assertTrue(list(out.rglob("parametron.record-package.json")))
+        self.assertTrue(list(out.rglob("prm.record-package.json")))
         for forbidden in ("prm.observed.json", "native_manifest.json", "prm.verification.json"):
             manifest_matches = [p for p in out.rglob("manifest.json") if "parametron-record-package" not in p.parts]
             self.assertTrue(manifest_matches)
@@ -671,11 +671,11 @@ def build_snapshot(tag, *, obs_value="10", outcome="pass", plan="plan1"):
               "digestSha256": _digest(verification)}
     key = f"engine-run:{plan}"
     records = {
-        "records/parametron.execution-record.json": _with_identity(
+        "records/prm.execution-record.json": _with_identity(
             {"family": "execution", "recordKey": key, "identity": {"ID": ""}, "run": {"plan": plan}}),
-        "records/artifacts/x/parametron.artifact-record.json": _with_identity(
+        "records/artifacts/x/prm.artifact-record.json": _with_identity(
             {"family": "artifact", "recordKey": key + ":artifact:x", "identity": {"ID": ""}, "path": "a.step"}),
-        "records/parametron.observation-record.json": _with_identity(
+        "records/prm.observation-record.json": _with_identity(
             {"family": "observation", "recordKey": key + ":observation", "identity": {"ID": ""},
              "provenance": {"Evidence": [{"Kind": "observed", "Ref": harness.OBSERVED_RAW,
                                           "DigestSHA256": obs_ev["digestSha256"]}]},
@@ -684,7 +684,7 @@ def build_snapshot(tag, *, obs_value="10", outcome="pass", plan="plan1"):
                   "value": {"kind": "string", "raw": json.dumps(obs_value)}, "evidence": obs_ev},
                  {"kind": "reference", "key": "working_copy_path", "subject": {"name": root},
                   "value": {"kind": "string", "raw": json.dumps(root)}, "evidence": obs_ev}]}}),
-        "records/parametron.verification-record.json": _with_identity(
+        "records/prm.verification-record.json": _with_identity(
             {"family": "verification", "recordKey": key + ":verification", "identity": {"ID": ""},
              "provenance": {"Evidence": [{"Kind": "verification", "Ref": harness.VERIFICATION_RAW,
                                           "DigestSHA256": ver_ev["digestSha256"]}]},
@@ -779,7 +779,7 @@ class RepeatedRecordPackageComparisonTests(unittest.TestCase):
             b = build_snapshot("run2")
             entry = next(e for e in b["manifest"]["records"] if e["family"] == "artifact")
             old = entry["contractPath"]
-            entry["contractPath"] = "records/artifacts/y/parametron.artifact-record.json"
+            entry["contractPath"] = "records/artifacts/y/prm.artifact-record.json"
             b["records"][entry["contractPath"]] = b["records"].pop(old)
             self.assertRejected(build_snapshot("run1"), b, "contractPath")
         for family in ("observation", "verification"):
@@ -841,7 +841,7 @@ class RepeatedRecordPackageComparisonTests(unittest.TestCase):
             self.assertRejected(build_snapshot("run1"), b, "not beneath this run's output root")
         with self.subTest(name="attempt root leaks into another field"):
             b = build_snapshot("run2")
-            root = next(f for f in json.loads(b["records"]["records/parametron.observation-record.json"])
+            root = next(f for f in json.loads(b["records"]["records/prm.observation-record.json"])
                         ["observation"]["facts"] if f["key"] == "working_copy_path")["subject"]["name"]
             edit(b, "observation", lambda r: r["observation"]["facts"][0].__setitem__("note", root))
             self.assertRejected(build_snapshot("run1"), b)

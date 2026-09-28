@@ -26,7 +26,7 @@ import (
 // observation and verification mappings into the standard record package.
 // These tests drive recordemit.EmitRunPackage and inspect the written package.
 
-const artifactRecordFile = "parametron.artifact-record.json"
+const artifactRecordFile = "prm.artifact-record.json"
 
 func testArtifact(id string, typ artifact.ArtifactType, filename, checksum string) artifact.Artifact {
 	return artifact.Artifact{

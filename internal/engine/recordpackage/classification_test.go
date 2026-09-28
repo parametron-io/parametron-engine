@@ -295,8 +295,8 @@ func TestRawRuntimeEvidenceContractPathClassification(t *testing.T) {
 
 	// All other paths are rejected, including near-misses and unsafe/non-canonical variants.
 	for _, path := range []string{
-		"records/parametron.failure-record.json",
-		"records/parametron.reference-record.json",
+		"records/prm.failure-record.json",
+		"records/prm.reference-record.json",
 		"artifacts/files/example.step",
 		"raw/prm.report.json",
 		"raw/prm.metadata.json",
