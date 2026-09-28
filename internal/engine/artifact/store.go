@@ -20,9 +20,10 @@ const (
 	// DefaultBaseDir is the default artifact store root.
 	DefaultBaseDir = "output/artifacts"
 
-	storeFilesDir  = "files"
-	manifestName   = "manifest.json"
-	defaultBufSize = 32 * 1024
+	storeFilesDir = "files"
+	// ManifestFileName is the artifact store index contract basename.
+	ManifestFileName = "prm.artifact-store-manifest.json"
+	defaultBufSize   = 32 * 1024
 )
 
 // Store defines artifact persistence operations.
@@ -389,7 +390,7 @@ func (s *FileSystemStore) WriteManifest() error {
 	}
 	data = append(data, '\n')
 
-	path := filepath.Join(s.baseDir, manifestName)
+	path := filepath.Join(s.baseDir, ManifestFileName)
 	tmpFile, err := os.CreateTemp(s.baseDir, ".manifest-tmp-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temporary manifest file: %w", err)

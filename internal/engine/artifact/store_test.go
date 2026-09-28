@@ -160,7 +160,7 @@ func TestWriteManifestDeterministicOrdering(t *testing.T) {
 	if err := store.WriteManifest(); err != nil {
 		t.Fatalf("WriteManifest returned error: %v", err)
 	}
-	manifestPath := filepath.Join(baseDir, "manifest.json")
+	manifestPath := filepath.Join(baseDir, "prm.artifact-store-manifest.json")
 	first, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("failed to read manifest: %v", err)
@@ -285,7 +285,7 @@ func TestFileSystemStore_CrossClassManifestDeterminism(t *testing.T) {
 	if err := store.WriteManifest(); err != nil {
 		t.Fatalf("first WriteManifest returned error: %v", err)
 	}
-	manifestPath := filepath.Join(dir, "manifest.json")
+	manifestPath := filepath.Join(dir, "prm.artifact-store-manifest.json")
 	first, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("failed to read first manifest: %v", err)
@@ -446,7 +446,7 @@ func TestManifest_Write_IsIdempotent(t *testing.T) {
 	if err := store.WriteManifest(); err != nil {
 		t.Fatal(err)
 	}
-	b1, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	b1, err := os.ReadFile(filepath.Join(dir, "prm.artifact-store-manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -454,7 +454,7 @@ func TestManifest_Write_IsIdempotent(t *testing.T) {
 	if err := store.WriteManifest(); err != nil {
 		t.Fatal(err)
 	}
-	b2, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	b2, err := os.ReadFile(filepath.Join(dir, "prm.artifact-store-manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -571,7 +571,7 @@ func TestArtifactStore_Put_PreservesExplicitArtifactClass(t *testing.T) {
 	if err := store.WriteManifest(); err != nil {
 		t.Fatal(err)
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
+	data, err := os.ReadFile(filepath.Join(dir, "prm.artifact-store-manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

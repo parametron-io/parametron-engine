@@ -283,7 +283,7 @@ func collectRawEvidence(runRoot string, input RunEmitInput) ([]recordpackage.Raw
 	sources := []rawEvidenceSource{
 		{contractPath: recordpackage.RawReportContractPath(), runPath: filepath.Join(runRoot, report.FileName)},
 		{contractPath: recordpackage.RawMetadataContractPath(), runPath: filepath.Join(runRoot, metadata.FileName)},
-		{contractPath: recordpackage.RawArtifactStoreManifestContractPath(), runPath: filepath.Join(runRoot, "manifest.json")},
+		{contractPath: recordpackage.RawArtifactStoreManifestContractPath(), runPath: filepath.Join(runRoot, artifact.ManifestFileName)},
 	}
 
 	out := make([]recordpackage.RawEvidenceFile, 0, len(sources))

@@ -355,7 +355,7 @@ func TestBuild_ArtifactsMatchManifest(t *testing.T) {
 	if err := store.WriteManifest(); err != nil {
 		t.Fatalf("failed to write manifest: %v", err)
 	}
-	manifestBytes, err := os.ReadFile(filepath.Join(runRoot, "manifest.json"))
+	manifestBytes, err := os.ReadFile(filepath.Join(runRoot, "prm.artifact-store-manifest.json"))
 	if err != nil {
 		t.Fatalf("failed to read manifest: %v", err)
 	}

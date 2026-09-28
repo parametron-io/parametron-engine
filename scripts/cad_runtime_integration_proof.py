@@ -77,7 +77,7 @@ def find_one_outside_record_package(root, name):
     # unfiltered rglob legitimately finds two matches: the original attempt
     # evidence and the package's raw evidence copy. Callers that want the
     # original attempt-produced file exclude the package copy explicitly,
-    # matching the existing manifest.json/prm.metadata.json filtering below.
+    # matching the existing prm.artifact-store-manifest.json/prm.metadata.json filtering below.
     matches = sorted(path for path in root.rglob(name)
                       if "parametron-record-package" not in path.parts)
     require(len(matches) == 1, f"expected one {name} beneath {root}, found {len(matches)}")
@@ -133,7 +133,7 @@ def stable_package_manifest_digest(path):
 
 
 def stable_cli_facts(item):
-    manifests = [path for path in item["out"].rglob("manifest.json")
+    manifests = [path for path in item["out"].rglob("prm.artifact-store-manifest.json")
                  if "parametron-record-package" not in path.parts]
     require(len(manifests) == 1, f"expected one run artifact manifest, found {len(manifests)}")
     manifest = manifests[0]
@@ -417,7 +417,7 @@ def compare_repeated_real_step_artifacts(first, second, step_bytes):
     snapshots = [record_package_snapshot(item) for item in (first, second)]
     for snapshot in snapshots:
         validate_record_package_snapshot(snapshot)
-    artifact_manifests = [json_file(find_one_outside_record_package(item["out"], "manifest.json"))
+    artifact_manifests = [json_file(find_one_outside_record_package(item["out"], "prm.artifact-store-manifest.json"))
                           for item in (first, second)]
     step_entries = []
     for index, (item, snapshot, artifact_manifest) in enumerate(

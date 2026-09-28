@@ -706,7 +706,7 @@ func TestWritePackageRawEvidenceManifestOrderingWithHandoffFiles(t *testing.T) {
 		{ContractPath: "raw/prm.metadata.json", Content: []byte("metadata")},
 		{ContractPath: "raw/observed/prm.observed.json", Content: []byte("observed")},
 		{ContractPath: "raw/verification/prm.verification.json", Content: []byte("verification")},
-		{ContractPath: "raw/artifact-store/manifest.json", Content: []byte("artifact-store")},
+		{ContractPath: "raw/artifact-store/prm.artifact-store-manifest.json", Content: []byte("artifact-store")},
 	}
 
 	if err := recordpackage.WritePackage(input); err != nil {
@@ -718,7 +718,7 @@ func TestWritePackageRawEvidenceManifestOrderingWithHandoffFiles(t *testing.T) {
 	want := []string{
 		"raw/prm.report.json",
 		"raw/prm.metadata.json",
-		"raw/artifact-store/manifest.json",
+		"raw/artifact-store/prm.artifact-store-manifest.json",
 		"raw/handoff/alpha/package.json",
 		"raw/handoff/zeta/package.json",
 		"raw/observed/prm.observed.json",

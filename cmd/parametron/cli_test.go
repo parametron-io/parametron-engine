@@ -3082,7 +3082,7 @@ func TestCLI_ProjectBasedExecution_RehearsalPass(t *testing.T) {
 
 	projectDir := writeProjectExecutionFixture(t)
 	projectFile := filepath.Join(projectDir, "prm.project.json")
-	lockPath := filepath.Join(projectDir, "parametron.lock.json")
+	lockPath := filepath.Join(projectDir, "prm.project-lock.json")
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Fatalf("expected fixture project to start without lock file, got err=%v", err)
 	}
@@ -3101,7 +3101,7 @@ func TestCLI_ProjectBasedExecution_RehearsalPass(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(dirRun.result.RunRoot, report.FileName),
 		filepath.Join(dirRun.result.RunRoot, metadata.FileName),
-		filepath.Join(dirRun.result.RunRoot, "manifest.json"),
+		filepath.Join(dirRun.result.RunRoot, "prm.artifact-store-manifest.json"),
 		filepath.Join(dirRun.result.RunRoot, "products", "Widget", planner.ExportManifestFilename),
 		filepath.Join(dirRun.result.RunRoot, "products", "Widget", "Widget.csv"),
 	} {

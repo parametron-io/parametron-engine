@@ -9,7 +9,7 @@ import (
 func newSyncCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "sync",
-		Short: "Create or refresh parametron.lock.json from a project entrypoint",
+		Short: "Create or refresh prm.project-lock.json from a project entrypoint",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			configureCommandLogging(debugMode, false)
 			entryPath, err := resolveProjectCommandEntrypoint(dslFilePath, projectPath)

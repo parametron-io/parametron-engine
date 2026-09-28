@@ -19,6 +19,8 @@ type sweepCaseSummary struct {
 	Error    string         `json:"error,omitempty"`
 }
 
+const sweepReportFileName = "prm.sweep-report.json"
+
 type sweepReport struct {
 	SchemaVersion          string             `json:"schemaVersion"`
 	Product                string             `json:"product"`
@@ -107,7 +109,7 @@ func newSweepCmd() *cobra.Command {
 			if err := os.MkdirAll(outputDir, 0755); err != nil {
 				return err
 			}
-			if err := writeJSONFile(filepath.Join(outputDir, "sweep_report.json"), summary); err != nil {
+			if err := writeJSONFile(filepath.Join(outputDir, sweepReportFileName), summary); err != nil {
 				return err
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "total generated cases: %d\npassed: %d\nfailed: %d\n", summary.TotalCases, summary.PassedCases, summary.FailedCases)

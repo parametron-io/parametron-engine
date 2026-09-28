@@ -124,7 +124,7 @@ func TestIsNormalizedRecordContractPathClassifiesIdentityAddressedArtifactRecord
 		"records/artifacts/abc123",
 		"records/artifacts",
 		"artifacts/files/abc123/prm.artifact-record.json",
-		"raw/artifact-store/manifest.json",
+		"raw/artifact-store/prm.artifact-store-manifest.json",
 	} {
 		if recordpackage.IsNormalizedRecordContractPath(path) {
 			t.Fatalf("IsNormalizedRecordContractPath(%q) = true, want false", path)

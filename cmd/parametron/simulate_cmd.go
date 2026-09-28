@@ -17,6 +17,8 @@ type simulateCaseSummary struct {
 	Error    string         `json:"error,omitempty"`
 }
 
+const simulateReportFileName = "prm.simulate-report.json"
+
 type simulateReport struct {
 	SchemaVersion string                `json:"schemaVersion"`
 	File          string                `json:"file"`
@@ -109,7 +111,7 @@ func newSimulateCmd() *cobra.Command {
 				}
 			}
 
-			if err := writeJSONFile(filepath.Join(outputDir, "simulate_report.json"), summary); err != nil {
+			if err := writeJSONFile(filepath.Join(outputDir, simulateReportFileName), summary); err != nil {
 				return err
 			}
 			_, err = fmt.Fprintf(cmd.OutOrStdout(), "total cases: %d\npassed: %d\nfailed: %d\n", summary.TotalCases, summary.PassedCases, summary.FailedCases)

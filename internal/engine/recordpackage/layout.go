@@ -34,7 +34,7 @@ const (
 	rawReportFileName                    = "prm.report.json"
 	rawMetadataFileName                  = "prm.metadata.json"
 	rawArtifactStoreDirectoryName        = "artifact-store"
-	rawArtifactStoreManifestName         = "manifest.json"
+	rawArtifactStoreManifestName         = "prm.artifact-store-manifest.json"
 	rawHandoffDirectoryName              = "handoff"
 	rawObservedDirectoryName             = "observed"
 	rawObservedFileName                  = "prm.observed.json"

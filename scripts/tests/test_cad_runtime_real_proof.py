@@ -61,7 +61,7 @@ def single_real_run():
 def find_run_report(out):
     """The run's own prm.report.json, excluding the raw evidence copy the
     record package embeds under parametron-record-package/raw/ -- the same
-    exclusion pattern stable_cli_facts uses for manifest.json/metadata.json."""
+    exclusion pattern stable_cli_facts uses for prm.artifact-store-manifest.json/prm.metadata.json."""
     matches = [p for p in out.rglob("prm.report.json") if "parametron-record-package" not in p.parts]
     assert len(matches) == 1, f"expected one run prm.report.json beneath {out}, found {len(matches)}"
     return matches[0]
