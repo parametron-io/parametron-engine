@@ -1627,7 +1627,7 @@ product Widget {
 		t.Fatalf("unexpected stdout: %q", stdout)
 	}
 
-	reportBytes, err := os.ReadFile(filepath.Join(outDir, "simulate_report.json"))
+	reportBytes, err := os.ReadFile(filepath.Join(outDir, "prm.simulate-report.json"))
 	if err != nil {
 		t.Fatalf("failed to read simulate report: %v", err)
 	}
@@ -1658,12 +1658,12 @@ product Widget {
 	if stdout != stdoutAgain {
 		t.Fatalf("expected deterministic stdout, got %q then %q", stdout, stdoutAgain)
 	}
-	reportBytesAgain, err := os.ReadFile(filepath.Join(outDir, "simulate_report.json"))
+	reportBytesAgain, err := os.ReadFile(filepath.Join(outDir, "prm.simulate-report.json"))
 	if err != nil {
 		t.Fatalf("failed to read simulate report on rerun: %v", err)
 	}
 	if !bytes.Equal(reportBytes, reportBytesAgain) {
-		t.Fatal("simulate_report.json changed between identical runs")
+		t.Fatal("prm.simulate-report.json changed between identical runs")
 	}
 }
 
@@ -1706,7 +1706,7 @@ product Widget {
 	}
 
 	var report simulateReport
-	readJSONFile(t, filepath.Join(outDir, "simulate_report.json"), &report)
+	readJSONFile(t, filepath.Join(outDir, "prm.simulate-report.json"), &report)
 	if report.PassedCases != 1 || report.FailedCases != 0 {
 		t.Fatalf("unexpected summary: %+v", report)
 	}
@@ -1738,7 +1738,7 @@ product Widget {
 		}
 
 		var report simulateReport
-		readJSONFile(t, filepath.Join(outDir, "simulate_report.json"), &report)
+		readJSONFile(t, filepath.Join(outDir, "prm.simulate-report.json"), &report)
 		if report.FailedCases != 1 || report.PassedCases != 1 {
 			t.Fatalf("unexpected fail-fast summary: %+v", report)
 		}
@@ -1765,7 +1765,7 @@ product Widget {
 		}
 
 		var report simulateReport
-		readJSONFile(t, filepath.Join(outDir, "simulate_report.json"), &report)
+		readJSONFile(t, filepath.Join(outDir, "prm.simulate-report.json"), &report)
 		if report.FailedCases != 1 || report.Cases[1].Status != "skipped" || report.Cases[2].Status != "skipped" {
 			t.Fatalf("unexpected max-errors summary: %+v", report)
 		}
@@ -1796,7 +1796,7 @@ product Widget {
 		t.Fatalf("unexpected stdout: %q", stdout)
 	}
 
-	reportPath := filepath.Join(outDir, "sweep_report.json")
+	reportPath := filepath.Join(outDir, "prm.sweep-report.json")
 	reportBytes, err := os.ReadFile(reportPath)
 	if err != nil {
 		t.Fatalf("failed to read sweep report: %v", err)
@@ -1825,7 +1825,7 @@ product Widget {
 		t.Fatalf("failed to reread sweep report: %v", err)
 	}
 	if !bytes.Equal(reportBytes, reportBytesAgain) {
-		t.Fatal("sweep_report.json changed between identical runs")
+		t.Fatal("prm.sweep-report.json changed between identical runs")
 	}
 }
 
@@ -1885,7 +1885,7 @@ product Widget {
 					t.Fatalf("unexpected command error: %v", err)
 				}
 				var report sweepReport
-				readJSONFile(t, filepath.Join(outDir, "sweep_report.json"), &report)
+				readJSONFile(t, filepath.Join(outDir, "prm.sweep-report.json"), &report)
 				if report.FailedCases != 1 || report.PassedCases != 1 {
 					t.Fatalf("unexpected sweep failure summary: %+v", report)
 				}
@@ -1921,14 +1921,14 @@ product Widget {
 		t.Fatalf("unexpected stdout: %q", stdout)
 	}
 
-	for _, name := range []string{"snapshot.json", "plan.json", "inputs.json", report.FileName, metadata.FileName, "manifest.json"} {
+	for _, name := range []string{"prm.snapshot.json", "prm.plan.json", "prm.inputs.json", report.FileName, metadata.FileName, "prm.artifact-store-manifest.json"} {
 		if _, err := os.Stat(filepath.Join(outDir, name)); err != nil {
 			t.Fatalf("expected %s to exist: %v", name, err)
 		}
 	}
 
 	var descriptor snapshotDescriptor
-	readJSONFile(t, filepath.Join(outDir, "snapshot.json"), &descriptor)
+	readJSONFile(t, filepath.Join(outDir, "prm.snapshot.json"), &descriptor)
 	if descriptor.PlanHash == "" || descriptor.DSLHash == "" {
 		t.Fatalf("expected hashes in snapshot descriptor: %+v", descriptor)
 	}
@@ -1939,7 +1939,7 @@ product Widget {
 		t.Fatalf("expected generated files to be sorted: %+v", descriptor.GeneratedFiles)
 	}
 
-	firstSnapshot, err := os.ReadFile(filepath.Join(outDir, "snapshot.json"))
+	firstSnapshot, err := os.ReadFile(filepath.Join(outDir, "prm.snapshot.json"))
 	if err != nil {
 		t.Fatalf("failed to read first snapshot: %v", err)
 	}
@@ -1957,12 +1957,12 @@ product Widget {
 	}); err != nil {
 		t.Fatalf("unexpected snapshot rerun error: %v", err)
 	}
-	secondSnapshot, err := os.ReadFile(filepath.Join(outDir, "snapshot.json"))
+	secondSnapshot, err := os.ReadFile(filepath.Join(outDir, "prm.snapshot.json"))
 	if err != nil {
 		t.Fatalf("failed to read second snapshot: %v", err)
 	}
 	if !bytes.Equal(firstSnapshot, secondSnapshot) {
-		t.Fatal("snapshot.json changed between identical runs")
+		t.Fatal("prm.snapshot.json changed between identical runs")
 	}
 }
 

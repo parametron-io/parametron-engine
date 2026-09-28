@@ -313,7 +313,7 @@ class FakeCLISuccessUsesNormalAlignedPathTests(unittest.TestCase):
         self.assertTrue(list(out.rglob("prm.result.json")))
         self.assertTrue(list(out.rglob("prm.record-package.json")))
         for forbidden in ("prm.observed.json", "native_manifest.json", "prm.verification.json"):
-            manifest_matches = [p for p in out.rglob("manifest.json") if "parametron-record-package" not in p.parts]
+            manifest_matches = [p for p in out.rglob("prm.artifact-store-manifest.json") if "parametron-record-package" not in p.parts]
             self.assertTrue(manifest_matches)
             with open(manifest_matches[0], encoding="utf-8") as handle:
                 self.assertNotIn(forbidden, handle.read())

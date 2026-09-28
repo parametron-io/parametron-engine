@@ -126,7 +126,7 @@ func TestNewWithArtifacts_RegistersCSVAndManifest(t *testing.T) {
 	if err := store.WriteManifest(); err != nil {
 		t.Fatalf("WriteManifest returned error: %v", err)
 	}
-	manifestPath := filepath.Join(runRoot, "manifest.json")
+	manifestPath := filepath.Join(runRoot, "prm.artifact-store-manifest.json")
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("failed to read manifest: %v", err)

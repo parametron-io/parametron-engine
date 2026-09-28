@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	FileName = "parametron.lock.json"
+	FileName = "prm.project-lock.json"
 	Version  = "1.0"
 )
 

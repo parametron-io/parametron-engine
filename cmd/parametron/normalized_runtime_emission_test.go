@@ -39,7 +39,7 @@ func sha256HexOf(content []byte) string { return fmt.Sprintf("%x", sha256.Sum256
 // store manifest, independently of the record package.
 func runRootArtifacts(t *testing.T, runRoot string) []artifact.Artifact {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(runRoot, "manifest.json"))
+	data, err := os.ReadFile(filepath.Join(runRoot, "prm.artifact-store-manifest.json"))
 	if err != nil {
 		t.Fatalf("read run-root artifact manifest: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestCLIProjectRun_NormalRunEmitsArtifactObservationAndVerificationRecords(t
 			t.Fatalf("raw evidence %q differs from the runtime's original bytes", source.contractPath)
 		}
 	}
-	rawArtifactManifest, err := os.ReadFile(filepath.Join(run.result.RunRoot, "manifest.json"))
+	rawArtifactManifest, err := os.ReadFile(filepath.Join(run.result.RunRoot, "prm.artifact-store-manifest.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -12,7 +12,7 @@ import (
 
 const (
 	artifactStoreManifestEvidenceKind = "artifact-store-manifest"
-	artifactStoreManifestEvidenceRef  = "raw/artifact-store/manifest.json"
+	artifactStoreManifestEvidenceRef  = "raw/artifact-store/prm.artifact-store-manifest.json"
 )
 
 // ArtifactMappingInput carries artifact-store records and caller-supplied identity material.

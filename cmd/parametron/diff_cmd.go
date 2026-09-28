@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"parametron/internal/engine/artifact"
 	"parametron/internal/engine/metadata"
 	"parametron/internal/engine/report"
 )
@@ -115,11 +116,11 @@ func diffPlanFiles(aPath, bPath string) (diffSummary, error) {
 func diffSnapshotDirs(aDir, bDir string) (diffSummary, error) {
 	differences := []string{}
 
-	aSnapshot, err := readSnapshotDescriptor(filepath.Join(aDir, "snapshot.json"))
+	aSnapshot, err := readSnapshotDescriptor(filepath.Join(aDir, snapshotDescriptorFileName))
 	if err != nil {
 		return diffSummary{}, err
 	}
-	bSnapshot, err := readSnapshotDescriptor(filepath.Join(bDir, "snapshot.json"))
+	bSnapshot, err := readSnapshotDescriptor(filepath.Join(bDir, snapshotDescriptorFileName))
 	if err != nil {
 		return diffSummary{}, err
 	}
@@ -137,7 +138,7 @@ func diffSnapshotDirs(aDir, bDir string) (diffSummary, error) {
 		differences = append(differences, "generatedFiles differ")
 	}
 
-	for _, fileName := range []string{report.FileName, metadata.FileName, "manifest.json"} {
+	for _, fileName := range []string{report.FileName, metadata.FileName, artifact.ManifestFileName} {
 		aExists := fileExists(filepath.Join(aDir, fileName))
 		bExists := fileExists(filepath.Join(bDir, fileName))
 		if aExists != bExists {

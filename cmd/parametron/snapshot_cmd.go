@@ -19,6 +19,12 @@ type snapshotDescriptor struct {
 	GeneratedFiles []string       `json:"generatedFiles"`
 }
 
+const (
+	snapshotInputsFileName     = "prm.inputs.json"
+	snapshotPlanFileName       = "prm.plan.json"
+	snapshotDescriptorFileName = "prm.snapshot.json"
+)
+
 func newSnapshotCmd() *cobra.Command {
 	var inputsPath string
 
@@ -50,10 +56,10 @@ func newSnapshotCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := writeJSONFile(filepath.Join(outputDir, "inputs.json"), inputs); err != nil {
+			if err := writeJSONFile(filepath.Join(outputDir, snapshotInputsFileName), inputs); err != nil {
 				return err
 			}
-			if err := writeJSONFile(filepath.Join(outputDir, "plan.json"), planned.Plan); err != nil {
+			if err := writeJSONFile(filepath.Join(outputDir, snapshotPlanFileName), planned.Plan); err != nil {
 				return err
 			}
 
@@ -77,7 +83,7 @@ func newSnapshotCmd() *cobra.Command {
 				RunRoot:        outputDir,
 				GeneratedFiles: files,
 			}
-			if err := writeJSONFile(filepath.Join(outputDir, "snapshot.json"), descriptor); err != nil {
+			if err := writeJSONFile(filepath.Join(outputDir, snapshotDescriptorFileName), descriptor); err != nil {
 				return err
 			}
 			if execErr != nil {
