@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	FileName      = "parametron.semantic-map.json"
+	FileName      = "prm.semantic-map.json"
 	SchemaVersion = "1.0"
 )
 

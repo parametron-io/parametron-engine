@@ -80,7 +80,7 @@ func bindPersistentFlags(rootCmd *cobra.Command) {
 
 	// Define flags
 	rootCmd.PersistentFlags().StringVarP(&dslFilePath, "file", "f", "", "Path to the .dsl file (required)")
-	rootCmd.PersistentFlags().StringVar(&projectPath, "project", "", "Path to a project directory or parametron.project.json")
+	rootCmd.PersistentFlags().StringVar(&projectPath, "project", "", "Path to a project directory or prm.project.json")
 	rootCmd.PersistentFlags().StringVarP(&outputDir, "out", "o", "./output", "Output directory for artifacts")
 	rootCmd.PersistentFlags().StringVar(&modelHash, "model-hash", "", "Optional model hash for cache signature v2")
 	rootCmd.PersistentFlags().BoolVarP(&debugMode, "debug", "d", false, "Enable debug logging")

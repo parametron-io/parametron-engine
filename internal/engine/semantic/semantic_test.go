@@ -2290,7 +2290,7 @@ func minimalModel(t *testing.T) *Model {
 func buildSemanticAuthoringFixture(t *testing.T, name string) *Model {
 	t.Helper()
 
-	path := filepath.Join("..", "cad", "testdata", "authoring", name, "parametron.cad.json")
+	path := filepath.Join("..", "cad", "testdata", "authoring", name, "prm.cad.json")
 	contract, err := cad.Load(path)
 	if err != nil {
 		t.Fatalf("cad.Load(%q) returned error: %v", path, err)
@@ -2468,7 +2468,7 @@ func assertInjectDSLIntentProducesNoMutations(t *testing.T, model *Model, ast *d
 
 func loadCaptureFixture(t *testing.T, category, name string) *cad.CADContract {
 	t.Helper()
-	path := filepath.Join("..", "cad", "testdata", category, name, "parametron.cad.json")
+	path := filepath.Join("..", "cad", "testdata", category, name, "prm.cad.json")
 	contract, err := cad.Load(path)
 	if err != nil {
 		t.Fatalf("cad.Load(%q) returned error: %v", path, err)

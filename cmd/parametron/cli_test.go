@@ -631,7 +631,7 @@ func TestCLI_RootProjectFlag_AcceptsDirectoryAndProjectFileEntrypoints(t *testin
 	setPathWithoutFreeCAD(t)
 
 	projectDir := writeProjectExecutionFixture(t)
-	projectFile := filepath.Join(projectDir, "parametron.project.json")
+	projectFile := filepath.Join(projectDir, "prm.project.json")
 
 	fromDir := runRootProjectExecution(t, projectDir, filepath.Join(t.TempDir(), "out-dir"))
 	if err := os.RemoveAll(".cache"); err != nil {
@@ -707,7 +707,7 @@ product Widget {
 	if err == nil {
 		t.Fatal("expected standalone DSL passed to --project to fail")
 	}
-	if err.Error() != "--project must reference a project directory or parametron.project.json path" {
+	if err.Error() != "--project must reference a project directory or prm.project.json path" {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -1380,7 +1380,7 @@ func TestCLIProjectRun_DirectoryAndProjectFileEntrypointsProduceSameCapture(t *t
 	setPathWithoutFreeCAD(t)
 
 	projectDir := writeProjectExecutionFixture(t)
-	projectFile := filepath.Join(projectDir, "parametron.project.json")
+	projectFile := filepath.Join(projectDir, "prm.project.json")
 
 	fromDir, err := loadPlannedRun(projectDir, map[string]string{}, nil)
 	if err != nil {
@@ -2831,7 +2831,7 @@ product Widget {
 		t.Fatalf("failed to write project DSL: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(projectDir, "parametron.project.json"), []byte(`{
+	if err := os.WriteFile(filepath.Join(projectDir, "prm.project.json"), []byte(`{
   "version": "1.0",
   "projectId": "project-run-fixture",
   "dsl": "./project.dsl",
@@ -3081,7 +3081,7 @@ func TestCLI_ProjectBasedExecution_RehearsalPass(t *testing.T) {
 	setPathWithoutFreeCAD(t)
 
 	projectDir := writeProjectExecutionFixture(t)
-	projectFile := filepath.Join(projectDir, "parametron.project.json")
+	projectFile := filepath.Join(projectDir, "prm.project.json")
 	lockPath := filepath.Join(projectDir, "parametron.lock.json")
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Fatalf("expected fixture project to start without lock file, got err=%v", err)
@@ -3473,7 +3473,7 @@ func TestLoadPlannedRun_ProjectModeCaptureProjectionFailsWithoutSemanticMap(t *t
 }
 
 func TestLoadPlannedRun_ProjectModeCaptureProjectionFailsBeforeManifestGenerationWhenContractNotReady(t *testing.T) {
-	breakMapPath := filepath.Join("..", "..", "internal", "engine", "semanticmap", "testdata", "break", "projection-review-missing-output", "parametron.semantic-map.json")
+	breakMapPath := filepath.Join("..", "..", "internal", "engine", "semanticmap", "testdata", "break", "projection-review-missing-output", "prm.semantic-map.json")
 	breakMap, err := os.ReadFile(breakMapPath)
 	if err != nil {
 		t.Fatalf("failed to read break semantic map fixture: %v", err)
@@ -3524,7 +3524,7 @@ func TestLoadPlannedRun_ProjectModeUnchangedWithoutCaptureContract(t *testing.T)
 		dslParameters: []string{`    param label: string = "box"`},
 	})
 
-	capturePath := filepath.Join(projectDir, "parametron.cad.json")
+	capturePath := filepath.Join(projectDir, "prm.cad.json")
 	if err := os.Remove(capturePath); err != nil {
 		t.Fatalf("failed to remove capture contract: %v", err)
 	}
@@ -3596,7 +3596,7 @@ product Box {
 		t.Fatalf("failed to write project DSL: %v", err)
 	}
 
-	projectMap := filepath.Join(projectDir, "parametron.project.json")
+	projectMap := filepath.Join(projectDir, "prm.project.json")
 	if err := os.WriteFile(projectMap, []byte(`{
   "version": "1.0",
   "projectId": "capture-backed-project",
@@ -3619,7 +3619,7 @@ product Box {
 		if semanticMapJSON == "" {
 			semanticMapJSON = defaultCaptureBackedSemanticMapJSON()
 		}
-		if err := os.WriteFile(filepath.Join(projectDir, "parametron.semantic-map.json"), []byte(semanticMapJSON), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(projectDir, "prm.semantic-map.json"), []byte(semanticMapJSON), 0o644); err != nil {
 			t.Fatalf("failed to write semantic map fixture: %v", err)
 		}
 	}
@@ -3660,7 +3660,7 @@ product Box {
       }`)
 	}
 
-	capturePath := filepath.Join(projectDir, "parametron.cad.json")
+	capturePath := filepath.Join(projectDir, "prm.cad.json")
 	if err := os.WriteFile(capturePath, []byte(`{
   "schemaVersion": "1.0",
   "captureId": "cap.project",

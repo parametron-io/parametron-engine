@@ -45,7 +45,7 @@ product Widget {
 		t.Fatalf("failed to write project DSL: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(projectDir, "parametron.project.json"), []byte(`{
+	if err := os.WriteFile(filepath.Join(projectDir, "prm.project.json"), []byte(`{
   "version": "1.0",
   "projectId": "project-native-only-run-fixture",
   "dsl": "./project.dsl",

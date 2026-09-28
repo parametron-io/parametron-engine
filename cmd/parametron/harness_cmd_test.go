@@ -522,7 +522,7 @@ product Widget {
 		t.Fatalf("failed to write model fixture: %v", err)
 	}
 
-	projectMap := filepath.Join(projectDir, "parametron.project.json")
+	projectMap := filepath.Join(projectDir, "prm.project.json")
 	if err := os.WriteFile(projectMap, []byte(`{
   "version": "1.0",
   "projectId": "table-conflict",
@@ -603,7 +603,7 @@ product Widget {
 		t.Fatalf("failed to write model fixture: %v", err)
 	}
 
-	projectMap := filepath.Join(projectDir, "parametron.project.json")
+	projectMap := filepath.Join(projectDir, "prm.project.json")
 	if err := os.WriteFile(projectMap, []byte(`{
   "version": "1.0",
   "projectId": "table-before-model",
@@ -675,7 +675,7 @@ product Widget {
 		t.Fatalf("failed to write model fixture: %v", err)
 	}
 
-	projectMap := filepath.Join(projectDir, "parametron.project.json")
+	projectMap := filepath.Join(projectDir, "prm.project.json")
 	if err := os.WriteFile(projectMap, []byte(`{
   "version": "1.0",
   "projectId": "unknown-model-id-boundary",
@@ -805,7 +805,7 @@ product Widget {
 				t.Fatalf("failed to write table fixture: %v", err)
 			}
 
-			projectMap := filepath.Join(projectDir, "parametron.project.json")
+			projectMap := filepath.Join(projectDir, "prm.project.json")
 			if err := os.WriteFile(projectMap, []byte(`{
   "version": "1.0",
   "projectId": "unsafe-project-paths",
@@ -894,7 +894,7 @@ func TestLoadPlannedRun_ProjectModeRelativeEntrypointsDoNotDuplicateProjectRootI
 	expectedSourceModel := filepath.Join(projectDir, "input", "Coupling.FCStd")
 	duplicatedSourceModel := filepath.Join(projectDir, relativeProjectDir, "input", "Coupling.FCStd")
 
-	for _, entryPath := range []string{relativeProjectDir, filepath.Join(relativeProjectDir, "parametron.project.json")} {
+	for _, entryPath := range []string{relativeProjectDir, filepath.Join(relativeProjectDir, "prm.project.json")} {
 		entryPath := entryPath
 		t.Run(filepath.Base(entryPath), func(t *testing.T) {
 			planned, err := loadPlannedRun(entryPath, map[string]string{}, nil)
@@ -1014,7 +1014,7 @@ product Widget {
 		t.Fatalf("failed to write table fixture: %v", err)
 	}
 
-	projectMap := filepath.Join(projectDir, "parametron.project.json")
+	projectMap := filepath.Join(projectDir, "prm.project.json")
 	if err := os.WriteFile(projectMap, []byte(`{
   "version": "1.0",
   "projectId": "normalized-project-mode",
@@ -1125,7 +1125,7 @@ product Widget {
 		t.Fatalf("failed to write table fixture: %v", err)
 	}
 
-	projectMap := filepath.Join(projectDir, "parametron.project.json")
+	projectMap := filepath.Join(projectDir, "prm.project.json")
 	if err := os.WriteFile(projectMap, []byte(`{
   "version": "1.0",
   "projectId": "normalized-project-mode",
@@ -1330,7 +1330,7 @@ func projectFixtureEntrypoints(fixtureRoot string, scenario string) []string {
 func projectEntrypoints(projectDir string) []string {
 	return []string{
 		projectDir,
-		filepath.Join(projectDir, "parametron.project.json"),
+		filepath.Join(projectDir, "prm.project.json"),
 	}
 }
 
@@ -2235,7 +2235,7 @@ product NoAdapterSummary {
 		t.Fatalf("failed to write model fixture: %v", err)
 	}
 
-	projectMap := filepath.Join(projectDir, "parametron.project.json")
+	projectMap := filepath.Join(projectDir, "prm.project.json")
 	if err := os.WriteFile(projectMap, []byte(`{
   "version": "1.0",
   "projectId": "mixed-adapter-project",

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"parametron/internal/authoring/dsl"
@@ -15,7 +16,7 @@ import (
 
 func TestCaptureResources_DeterministicAcrossCallsAndEntrypoints(t *testing.T) {
 	projectDir, expected := writeProjectCaptureFixture(t)
-	projectFile := filepath.Join(projectDir, "parametron.project.json")
+	projectFile := filepath.Join(projectDir, "prm.project.json")
 
 	fromDirResolved, err := ResolveProject(projectDir)
 	if err != nil {
@@ -73,7 +74,7 @@ func TestCaptureResources_OrdersModelsAndTablesByLogicalID(t *testing.T) {
 func TestCaptureResources_ChangeDetection(t *testing.T) {
 	projectDir, baseline := writeProjectCaptureFixture(t)
 
-	projectFile := filepath.Join(projectDir, "parametron.project.json")
+	projectFile := filepath.Join(projectDir, "prm.project.json")
 	resolved, err := ResolveProject(projectFile)
 	if err != nil {
 		t.Fatalf("ResolveProject returned error: %v", err)
@@ -139,7 +140,7 @@ product Widget {
 
 func TestResolveProject_EntrypointsEquivalentAndDeterministic(t *testing.T) {
 	projectDir := filepath.Join(findRepoRoot(t), "testdata", "projects", "freecad", "smoke", "minimal-valid-project")
-	projectFile := filepath.Join(projectDir, "parametron.project.json")
+	projectFile := filepath.Join(projectDir, "prm.project.json")
 
 	firstDir, err := ResolveProject(projectDir)
 	if err != nil {
@@ -162,6 +163,24 @@ func TestResolveProject_EntrypointsEquivalentAndDeterministic(t *testing.T) {
 	}
 }
 
+func TestResolveProject_RejectsOldProjectFilename(t *testing.T) {
+	projectDir := t.TempDir()
+	oldProjectFile := filepath.Join(projectDir, "parametron.project.json")
+	if err := os.WriteFile(oldProjectFile, []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	resolved, err := ResolveProject(projectDir)
+	if resolved != nil || err == nil || !strings.Contains(err.Error(), "does not contain prm.project.json") {
+		t.Fatalf("old-only project directory: resolved=%#v, err=%v", resolved, err)
+	}
+
+	resolved, err = ResolveProject(oldProjectFile)
+	if resolved != nil || err != nil {
+		t.Fatalf("old project basename must not be project input: resolved=%#v, err=%v", resolved, err)
+	}
+}
+
 func TestResolveProject_RelativeEntrypointsReturnAbsoluteResolvedPaths(t *testing.T) {
 	repoRoot := findRepoRoot(t)
 	projectDir := filepath.Join(repoRoot, "testdata", "projects", "freecad", "integration", "real-table-driven-project")
@@ -174,9 +193,9 @@ func TestResolveProject_RelativeEntrypointsReturnAbsoluteResolvedPaths(t *testin
 	if err != nil {
 		t.Fatalf("filepath.Rel(projectDir) returned error: %v", err)
 	}
-	relativeProjectFile := filepath.Join(relativeProjectDir, "parametron.project.json")
+	relativeProjectFile := filepath.Join(relativeProjectDir, "prm.project.json")
 
-	expectedProjectFile := filepath.Join(projectDir, "parametron.project.json")
+	expectedProjectFile := filepath.Join(projectDir, "prm.project.json")
 	expectedDSLPath := filepath.Join(projectDir, "rehearsal.project.dsl")
 	expectedModelPath := filepath.Join(projectDir, "input", "Coupling.FCStd")
 	expectedTablePath := filepath.Join(projectDir, "tables", "variants.json")
@@ -437,7 +456,7 @@ product Widget {
 		t.Fatalf("failed to write labels table: %v", err)
 	}
 
-	projectFile := filepath.Join(projectDir, "parametron.project.json")
+	projectFile := filepath.Join(projectDir, "prm.project.json")
 	if err := os.WriteFile(projectFile, []byte(`{
   "version": "1.0",
   "projectId": "capture-project",

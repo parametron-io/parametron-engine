@@ -258,5 +258,5 @@ func loadFixture(t *testing.T, category, name string) *CADContract {
 
 func fixturePath(t *testing.T, category, name string) string {
 	t.Helper()
-	return filepath.Join("testdata", category, name, "parametron.cad.json")
+	return filepath.Join("testdata", category, name, "prm.cad.json")
 }
