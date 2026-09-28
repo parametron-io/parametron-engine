@@ -78,8 +78,8 @@ func task13StructureNode(id, parent string, children []string) string {
 }
 
 // writeTask13TargetMutationHandoffFixture writes a temp project directory
-// (DSL + parametron.project.json + parametron.cad.json capture contract +
-// parametron.semantic-map.json, reusing defaultCaptureBackedSemanticMapJSON
+// (DSL + prm.project.json + prm.cad.json capture contract +
+// prm.semantic-map.json, reusing defaultCaptureBackedSemanticMapJSON
 // from cli_test.go) whose DSL exercises Part suppression/visibility/deletion
 // and Assembly suppression/visibility/deletion target actions in a single
 // product, plus a top-level parameter assignment.
@@ -116,7 +116,7 @@ product Box {
 		t.Fatalf("failed to write project DSL: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(projectDir, "parametron.project.json"), []byte(`{
+	if err := os.WriteFile(filepath.Join(projectDir, "prm.project.json"), []byte(`{
   "version": "1.0",
   "projectId": "task13-handoff-fixture",
   "dsl": "project.dsl",
@@ -129,7 +129,7 @@ product Box {
 		t.Fatalf("failed to write project map: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(projectDir, "parametron.semantic-map.json"), []byte(defaultCaptureBackedSemanticMapJSON()), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, "prm.semantic-map.json"), []byte(defaultCaptureBackedSemanticMapJSON()), 0o644); err != nil {
 		t.Fatalf("failed to write semantic map fixture: %v", err)
 	}
 
@@ -196,7 +196,7 @@ product Box {
     ]
   }
 }`
-	if err := os.WriteFile(filepath.Join(projectDir, "parametron.cad.json"), []byte(captureJSON), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectDir, "prm.cad.json"), []byte(captureJSON), 0o644); err != nil {
 		t.Fatalf("failed to write capture contract: %v", err)
 	}
 

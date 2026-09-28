@@ -8,7 +8,7 @@ import (
 	"parametron/internal/engine/cad"
 )
 
-const captureContractFileName = "parametron.cad.json"
+const captureContractFileName = "prm.cad.json"
 
 func LoadCaptureContract(resolved *Resolved) (*cad.CADContract, error) {
 	if resolved == nil {

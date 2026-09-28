@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	FileName = "parametron.project.json"
+	FileName = "prm.project.json"
 	Version  = "1.0"
 )
 

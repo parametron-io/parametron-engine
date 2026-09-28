@@ -655,21 +655,21 @@ def stage_canonical_target_project(ctx, staged, name, source_override=None):
     fixture = ctx.freecad_repo / "tests/fixtures/canonical_lifecycle"
     shutil.copytree(fixture, staged)
     source = staged / "input/cube.FCStd"
-    capture = json_file(staged / "parametron.cad.json")
+    capture = json_file(staged / "prm.cad.json")
     require(capture["sourceDocument"]["fingerprint"] == "sha256:" + digest(source),
             "canonical fixture capture fingerprint mismatch")
     if source_override is not None:
         shutil.copyfile(source_override, source)
     source_hash = digest(source)
-    project = json_file(staged / "parametron.project.json")
+    project = json_file(staged / "prm.project.json")
     project["projectId"] = "cube-target-" + name
     project.pop("tables", None)
-    (staged / "parametron.project.json").write_text(
+    (staged / "prm.project.json").write_text(
         json.dumps(project, indent=2) + "\n", encoding="utf-8")
     shutil.rmtree(staged / "tables")
     if source_override is not None:
         capture["sourceDocument"]["fingerprint"] = "sha256:" + source_hash
-        (staged / "parametron.cad.json").write_text(
+        (staged / "prm.cad.json").write_text(
             json.dumps(capture, indent=2) + "\n", encoding="utf-8")
     scenario = TARGET_SCENARIOS[name]
     dsl = ('dsl v1.0\n\nproduct CubeBox {\n'
@@ -687,16 +687,16 @@ def target_foundation_proof(ctx):
     fixture = ctx.freecad_repo / fixture_relative
     require(ctx.freecad_repo.is_dir(), f"FreeCAD repository missing: {ctx.freecad_repo}")
     require(fixture.is_dir(), f"canonical lifecycle fixture missing: {fixture}")
-    required = ("input/cube.FCStd", "parametron.project.json", "parametron.cad.json",
-                "parametron.semantic-map.json", "cube.project.dsl")
+    required = ("input/cube.FCStd", "prm.project.json", "prm.cad.json",
+                "prm.semantic-map.json", "cube.project.dsl")
     for name in required:
         require((fixture / name).is_file(), f"canonical lifecycle file missing: {fixture / name}")
     source = fixture / "input/cube.FCStd"
     source_hash = digest(source)
     require(source_hash == CANONICAL_LIFECYCLE_HASH,
             f"canonical lifecycle fixture hash mismatch: {source_hash}")
-    project = json_file(fixture / "parametron.project.json")
-    capture = json_file(fixture / "parametron.cad.json")
+    project = json_file(fixture / "prm.project.json")
+    capture = json_file(fixture / "prm.cad.json")
     require(project.get("dsl") == "cube.project.dsl" and
             project.get("resources", {}).get("models", {}).get(
                 "cube_canonical_lifecycle_model") == "input/cube.FCStd",
@@ -829,7 +829,7 @@ def stage_unsafe_delete_project(ctx, source_override=None, action="delete"):
     require(source_hash == PARTDESIGN_MUTATIONS_HASH,
             f"PartDesign fixture provenance mismatch: {source_hash}")
     semantic_map_source = (ctx.freecad_repo /
-                           "tests/fixtures/canonical_lifecycle/parametron.semantic-map.json")
+                           "tests/fixtures/canonical_lifecycle/prm.semantic-map.json")
     require(semantic_map_source.is_file(), "FreeCAD semantic map foundation missing")
 
     require(action in ("delete", "unhide"), f"unsupported PartDesign rehearsal action: {action}")
@@ -838,7 +838,7 @@ def stage_unsafe_delete_project(ctx, source_override=None, action="delete"):
     (staged / "input").mkdir(parents=True)
     shutil.copyfile(source_override or source, staged / "input/partdesign-mutations.FCStd")
     staged_hash = digest(staged / "input/partdesign-mutations.FCStd")
-    shutil.copyfile(semantic_map_source, staged / "parametron.semantic-map.json")
+    shutil.copyfile(semantic_map_source, staged / "prm.semantic-map.json")
     require(staged_hash == digest(source_override or source),
             "staged PartDesign source drifted")
     dsl_name = "native-validity.project.dsl" if action == "unhide" else "unsafe-delete.project.dsl"
@@ -849,7 +849,7 @@ def stage_unsafe_delete_project(ctx, source_override=None, action="delete"):
         "resources": {"models": {"partdesign_mutations_model":
                                  "input/partdesign-mutations.FCStd"}},
     }
-    (staged / "parametron.project.json").write_text(
+    (staged / "prm.project.json").write_text(
         json.dumps(project, indent=2) + "\n", encoding="utf-8")
     (staged / dsl_name).write_text(
         'dsl v1.0\n\nproduct PartDesign {\n'
@@ -923,7 +923,7 @@ def stage_unsafe_delete_project(ctx, source_override=None, action="delete"):
             {"componentId": "cmp.mutationBody", "parentComponentId": "cmp.root",
              "children": []}]},
     }
-    (staged / "parametron.cad.json").write_text(
+    (staged / "prm.cad.json").write_text(
         json.dumps(capture, indent=2) + "\n", encoding="utf-8")
     return staged, source_override or source, staged_hash
 
@@ -1189,7 +1189,7 @@ def target_mutations_real_proof(ctx):
             shutil.rmtree(active)
         shutil.copytree(copy_project, active)
         require(digest(active / "input/cube.FCStd") == hidden_hash and
-                json_file(active / "parametron.cad.json")["sourceDocument"]["fingerprint"] ==
+                json_file(active / "prm.cad.json")["sourceDocument"]["fingerprint"] ==
                 "sha256:" + hidden_hash, "derived capture provenance mismatch")
         item = real_target_run(ctx, f"combined-real-{index}", active, runtime,
                                expect_success=True)
@@ -1369,7 +1369,7 @@ def native_validity_real_proof(ctx):
     staged, staged_source, staged_hash = stage_unsafe_delete_project(
         ctx, source_override=derivative, action="unhide")
     require(staged_hash == derivative_hash and
-            json_file(staged / "parametron.cad.json")["sourceDocument"]["fingerprint"] ==
+            json_file(staged / "prm.cad.json")["sourceDocument"]["fingerprint"] ==
             "sha256:" + derivative_hash, "derived capture fingerprint mismatch")
     failed = real_target_run(ctx, "native-validity-real", staged, runtime, expect_success=False)
     manifest = json_file(failed["manifest"])

@@ -69,7 +69,7 @@ DSL files present on disk but not tracked or exercised by any test.
 ### Project Fixtures
 
 - `testdata/projects/freecad/` fixtures are exercised by `TestValidateCommand_ProjectFixtures` and related tests in `cmd/parametron/harness_cmd_test.go`.
-- Tests cover project entrypoint loading in both directory form (`--file <dir>`) and direct-file form (`--file <dir>/parametron.project.json`).
+- Tests cover project entrypoint loading in both directory form (`--file <dir>`) and direct-file form (`--file <dir>/prm.project.json`).
 - Smoke scenarios must result in a successful `validate` execution.
 - Break scenarios must fail at the declared boundary (project mapping validation, resource resolution, CLI validate).
 - Project fixtures are not registered in `_expectations.json`; they are not part of the DSL break matrix.
@@ -96,7 +96,7 @@ testdata/projects/freecad/
     case-mismatched-model-id/   # DSL source_model ID differs in case from the project map key
 ```
 
-**Project entrypoint equivalence**: `minimal-valid-project` is tested with both `--project <dir>` and `--project <dir>/parametron.project.json`. Both forms are accepted and produce identical behavior.
+**Project entrypoint equivalence**: `minimal-valid-project` is tested with both `--project <dir>` and `--project <dir>/prm.project.json`. Both forms are accepted and produce identical behavior.
 
 **Symlink-backed model resources**: Smoke fixture model resources (`input/box.FCStd`) are symlinks to the shared `testdata/projects/freecad/input/box.FCStd` file. Path safety rules apply to the declared path string, not the symlink target. Real project validation succeeds through the symlink.
 
@@ -155,7 +155,7 @@ Machine-enforced registry for Break fixtures.
 |:-----|:----------|
 | `testdata/dsl/smoke/` | Valid DSL fixtures. Every file is executed through parse → validate → plan. All must succeed. |
 | `testdata/dsl/break/` | Invalid or adversarial DSL fixtures. Every file must fail at the stage and with the class declared in `_expectations.json`. Files with `"expect": "pass"` are robustness probes. |
-| `testdata/projects/freecad/` | Project-mode fixtures. Subdirectories `smoke/` and `break/` contain self-contained project directories, each with a `parametron.project.json` and associated resources. Exercised by CLI harness tests. |
+| `testdata/projects/freecad/` | Project-mode fixtures. Subdirectories `smoke/` and `break/` contain self-contained project directories, each with a `prm.project.json` and associated resources. Exercised by CLI harness tests. |
 | `testdata/dsl/stress.dsl` | Single broad regression fixture. Covers multiple DSL feature areas in one valid file. Must pass the full pipeline on every run. |
 
 ---

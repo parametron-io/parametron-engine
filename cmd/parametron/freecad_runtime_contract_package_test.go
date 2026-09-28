@@ -101,14 +101,14 @@ product Box {
 
 ` + dslTargets.String() + `}
 `),
-		"parametron.project.json": `{
+		"prm.project.json": `{
   "version": "1.0",
   "projectId": "contract-package-fixture",
   "dsl": "project.dsl",
   "resources": {"models": {"box_model": "input/box.FCStd"}}
 }`,
-		"parametron.semantic-map.json": defaultCaptureBackedSemanticMapJSON(),
-		"parametron.cad.json": `{
+		"prm.semantic-map.json": defaultCaptureBackedSemanticMapJSON(),
+		"prm.cad.json": `{
   "schemaVersion": "1.0",
   "captureId": "cap.contract.package",
   "adapter": {"name": "freecad", "version": ""},

@@ -260,7 +260,7 @@ func TestLinkCaptureIdentities_DeterminismFlagsRemainEnforced(t *testing.T) {
 func smokeSemanticModel(t *testing.T) *semantic.Model {
 	t.Helper()
 
-	contract, err := cad.Load(filepath.Join("..", "cad", "testdata", "smoke", "with-parameter-group", "parametron.cad.json"))
+	contract, err := cad.Load(filepath.Join("..", "cad", "testdata", "smoke", "with-parameter-group", "prm.cad.json"))
 	if err != nil {
 		t.Fatalf("cad.Load returned error: %v", err)
 	}
