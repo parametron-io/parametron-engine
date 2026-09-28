@@ -141,7 +141,7 @@ def stable_cli_facts(item):
                         if "parametron-record-package" not in path.parts]
     require(len(metadata_matches) == 1, f"expected one run metadata file, found {len(metadata_matches)}")
     metadata = metadata_matches[0]
-    record_manifest = find_one(item["out"], "parametron.record-package.json")
+    record_manifest = find_one(item["out"], "prm.record-package.json")
     runtime_manifests = [path for path in item["out"].rglob("prm.export-manifest.json")
                          if "_working" in path.parts]
     require(len(runtime_manifests) == 1, f"expected one attempt manifest, found {len(runtime_manifests)}")
@@ -195,7 +195,7 @@ def sha256_hex(content):
 def record_package_snapshot(item):
     """Reads one run's record package into plain data: manifest, exact record
     bytes, exact packaged raw bytes, and the output root."""
-    manifest_path = find_one(item["out"], "parametron.record-package.json")
+    manifest_path = find_one(item["out"], "prm.record-package.json")
     package = manifest_path.parent
     manifest = json_file(manifest_path)
     records = {entry["contractPath"]: (package / entry["contractPath"]).read_bytes()
@@ -455,7 +455,7 @@ def compare_repeated_real_step_artifacts(first, second, step_bytes):
                     entry["recordKey"] == record["recordKey"] and
                     entry["identityId"] == record["identity"]["ID"] and
                     entry["contractPath"] ==
-                    f"records/artifacts/{entry['identityId']}/parametron.artifact-record.json",
+                    f"records/artifacts/{entry['identityId']}/prm.artifact-record.json",
                     "STEP record identity or checksum does not follow its accepted artifact")
             step_records.append((entry, record))
         require(len(step_records) == 2, "expected two STEP artifact records")
@@ -1093,7 +1093,7 @@ def real_target_run(ctx, name, staged, runtime, *, expect_success):
                 f"{name}: real observation attempt mismatch")
     else:
         require(not observed.exists(), f"{name}: failed native execution emitted observation")
-    package_path = find_one(output, "parametron.record-package.json")
+    package_path = find_one(output, "prm.record-package.json")
     return {"name": name, "root": root, "out": output, "stagedProject": staged,
             "command": command, "report": report, "reportPath": report_path,
             "attempt": attempt, "attempts": attempts, "manifest": manifest,
@@ -1103,7 +1103,7 @@ def real_target_run(ctx, name, staged, runtime, *, expect_success):
 
 def real_target_facts(run_item, native):
     package = json_file(run_item["package"])
-    verification = run_item["package"].parent / "records/parametron.verification-record.json"
+    verification = run_item["package"].parent / "records/prm.verification-record.json"
     return {"name": run_item["name"], "cliInvocation": run_item["command"],
             "stagedProject": str(run_item["stagedProject"]),
             "planHash": run_item["report"]["planHash"],
@@ -1283,7 +1283,7 @@ def target_mutations_real_proof(ctx):
             any(entry["contractPath"] == "raw/runtime/prm.result.json"
                 for entry in failed_manifest["rawEvidence"]),
             f"Engine failed-run package missing native failure: {failed_families}")
-    failure_record = json_file(failed_package / "records/parametron.failure-record.json")
+    failure_record = json_file(failed_package / "records/prm.failure-record.json")
     packaged_result = failed_package / "raw/runtime/prm.result.json"
     require(packaged_result.read_bytes() == failed["result"].read_bytes() and
             failure_record["failure"]["class"] == "runtime" and
@@ -1403,7 +1403,7 @@ def native_validity_real_proof(ctx):
     package_manifest = json_file(failed["package"])
     families = [item["family"] for item in package_manifest["records"]]
     raw = package / "raw/runtime/prm.result.json"
-    record = package / "records/parametron.failure-record.json"
+    record = package / "records/prm.failure-record.json"
     require("failure" in families and "observation" not in families and
             "verification" not in families and raw.is_file() and record.is_file() and
             raw.read_bytes() == failed["result"].read_bytes() and

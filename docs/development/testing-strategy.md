@@ -109,7 +109,7 @@ record packaging.
   Verifies normal-run emission, deterministic package generation, manifest
   indexing, and raw evidence preservation under `raw/`. Artifact tests cover
   zero, one, and multiple records at the identity-addressed
-  `records/artifacts/<identityId>/parametron.artifact-record.json` path, stable
+  `records/artifacts/<identityId>/prm.artifact-record.json` path, stable
   identity ordering, and duplicate rejection while other record families remain
   singular. CAD evidence tests prove observation, verification, and target-state
   emission from typed Engine material; preserve exact source bytes; reject

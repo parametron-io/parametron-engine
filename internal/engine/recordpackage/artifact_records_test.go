@@ -17,9 +17,9 @@ import (
 // Issue #1: artifact records are the one family that may appear more than
 // once in a package. Each is addressed by its record identity:
 //
-//	records/artifacts/<identityId>/parametron.artifact-record.json
+//	records/artifacts/<identityId>/prm.artifact-record.json
 
-const artifactRecordFileName = "parametron.artifact-record.json"
+const artifactRecordFileName = "prm.artifact-record.json"
 
 func artifactRecordWithKey(t *testing.T, key string) recordcontract.ArtifactRecord {
 	t.Helper()
@@ -85,7 +85,7 @@ func TestArtifactRecordContractPathIsIdentityAddressed(t *testing.T) {
 	t.Parallel()
 
 	got := artifactIdentityPath(t, "abc123")
-	if want := "records/artifacts/abc123/parametron.artifact-record.json"; got != want {
+	if want := "records/artifacts/abc123/prm.artifact-record.json"; got != want {
 		t.Fatalf("ArtifactRecordContractPath = %q, want %q", got, want)
 	}
 	if got := recordpackage.ArtifactRecordsDirectoryContractPath(); got != "records/artifacts" {
@@ -106,7 +106,7 @@ func TestIsNormalizedRecordContractPathClassifiesIdentityAddressedArtifactRecord
 	t.Parallel()
 
 	for _, path := range []string{
-		"records/artifacts/abc123/parametron.artifact-record.json",
+		"records/artifacts/abc123/prm.artifact-record.json",
 		artifactIdentityPath(t, artifactRecordWithKey(t, "k").Identity.ID),
 	} {
 		if !recordpackage.IsNormalizedRecordContractPath(path) {
@@ -115,15 +115,15 @@ func TestIsNormalizedRecordContractPathClassifiesIdentityAddressedArtifactRecord
 	}
 
 	for _, path := range []string{
-		"records/parametron.artifact-record.json",
-		"records/artifacts/parametron.artifact-record.json",
+		"records/prm.artifact-record.json",
+		"records/artifacts/prm.artifact-record.json",
 		"records/artifacts/abc123/other.json",
-		"records/artifacts/abc123/parametron.execution-record.json",
-		"records/artifacts/abc123/nested/parametron.artifact-record.json",
-		"records/artifacts/../parametron.artifact-record.json",
+		"records/artifacts/abc123/prm.execution-record.json",
+		"records/artifacts/abc123/nested/prm.artifact-record.json",
+		"records/artifacts/../prm.artifact-record.json",
 		"records/artifacts/abc123",
 		"records/artifacts",
-		"artifacts/files/abc123/parametron.artifact-record.json",
+		"artifacts/files/abc123/prm.artifact-record.json",
 		"raw/artifact-store/manifest.json",
 	} {
 		if recordpackage.IsNormalizedRecordContractPath(path) {

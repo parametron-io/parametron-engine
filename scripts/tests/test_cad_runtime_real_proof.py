@@ -135,7 +135,7 @@ class RealFreeCADIntegrationTests(unittest.TestCase):
                 f"raw real runtime evidence {forbidden!r} was promoted to a registered artifact",
             )
         self.assertTrue(list(out.rglob("prm.metadata.json")))
-        self.assertTrue(list(out.rglob("parametron.record-package.json")))
+        self.assertTrue(list(out.rglob("prm.record-package.json")))
         self.assertTrue(list(out.rglob("prm.verification.json")))
 
     def test_repeated_real_execution_preserves_engine_identity(self):

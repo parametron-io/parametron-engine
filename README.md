@@ -140,7 +140,7 @@ The package separates normalized records from raw runtime evidence.
 Normal execution emits applicable execution, artifact, observation, reference,
 failure, and verification records through this package. Artifact records are
 plural: each artifact has its own normalized record at
-`records/artifacts/<identityId>/parametron.artifact-record.json`, ordered by
+`records/artifacts/<identityId>/prm.artifact-record.json`, ordered by
 record identity. Other record families remain singular. Duplicate artifact
 identities or resolved record paths are rejected.
 
