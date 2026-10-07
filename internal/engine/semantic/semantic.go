@@ -37,6 +37,9 @@ type Model struct {
 }
 
 type Component struct {
+	// NativeRef retains capture-backed native addressing for target operations.
+	// It is independent of semantic names and excluded from the JSON contract.
+	NativeRef     string            `json:"-"`
 	ID            string            `json:"id"`
 	Kind          string            `json:"kind"`
 	Name          string            `json:"name"`
@@ -49,6 +52,9 @@ type Component struct {
 }
 
 type Feature struct {
+	// NativeRef retains capture-backed native addressing for target operations.
+	// It is independent of semantic names and excluded from the JSON contract.
+	NativeRef     string            `json:"-"`
 	ID            string            `json:"id"`
 	ComponentID   string            `json:"componentId"`
 	Name          string            `json:"name"`
