@@ -45,11 +45,16 @@ func task13BoolJSON(v bool) string {
 }
 
 func task13Component(id, kind, name string, suppress, hide, del bool) string {
+	nativeMapping := ""
+	if suppress || hide || del {
+		nativeMapping = `"identitySource":{"kind":"parent_scoped_path","path":"` + id + `","nativeRef":"` + name + `"},`
+	}
 	return `{
         "id": "` + id + `",
         "kind": "` + kind + `",
         "name": "` + name + `",
         "displayName": "` + name + `",
+        ` + nativeMapping + `
         "cadType": "App::Part",
         "quantity": 1,
         "material": "",

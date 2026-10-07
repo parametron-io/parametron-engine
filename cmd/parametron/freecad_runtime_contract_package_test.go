@@ -48,11 +48,16 @@ type contractPackageTarget struct {
 
 func contractPackageComponent(id, kind, name string, targetable bool) string {
 	capability := task13BoolJSON(targetable)
+	nativeMapping := ""
+	if targetable {
+		nativeMapping = `"identitySource":{"kind":"parent_scoped_path","path":"` + id + `","nativeRef":"` + name + `"},`
+	}
 	return `{
         "id": "` + id + `",
         "kind": "` + kind + `",
         "name": "` + name + `",
         "displayName": "` + name + `",
+        ` + nativeMapping + `
         "cadType": "App::Part",
         "quantity": 1,
         "material": "",
