@@ -613,3 +613,57 @@ func TestTargetMutationIdentity_MutationBearingPlansCarryCanonicalSchema(t *test
 		}
 	}
 }
+
+func TestTargetMutationIdentity_LetOverride(t *testing.T) {
+	ast, baseline := parseValidateAndPlanCaptureBacked(t, runtimeMutationManifestProduct(`
+    let selected = false
+    let unused = 1
+    target Pad: action = selected ? suppress : keep
+`), runtimeMutationManifestModel(), testProjectionContract())
+	model, err := semantic.InjectDSLIntent(semantic.Clone(runtimeMutationManifestModel()), ast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	create := func(overrides map[string]string) *ExecutionPlan {
+		t.Helper()
+		plan, err := CreatePlanWithTablesAndSemanticModel(ast, overrides, nil, model, testProjectionContract())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return plan
+	}
+	hash := func(plan *ExecutionPlan) string {
+		t.Helper()
+		h, err := ComputePlanHash(plan, ast)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	first := create(map[string]string{"selected": "true", "unused": "2"})
+	payload := manifestPayloadFromPlan(t, first)
+	if payload.PartMutations == nil || !reflect.DeepEqual(payload.PartMutations.Suppression, []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}}) {
+		t.Fatalf("unexpected action: %+v", payload.PartMutations)
+	}
+	if hash(first) == hash(baseline) {
+		t.Fatal("changed resolved action did not change identity")
+	}
+	for i := 0; i < 10; i++ {
+		overrides := map[string]string{}
+		if i%2 == 0 {
+			overrides["unused"] = "2"
+			overrides["selected"] = "true"
+		} else {
+			overrides["selected"] = "true"
+			overrides["unused"] = "2"
+		}
+		repeated := create(overrides)
+		if string(mutationIdentityPlanJSON(t, first)) != string(mutationIdentityPlanJSON(t, repeated)) || hash(first) != hash(repeated) {
+			t.Fatal("equivalent overrides changed serialization or identity")
+		}
+	}
+	unchanged := create(map[string]string{"unused": "99"})
+	if string(mutationIdentityPlanJSON(t, baseline)) != string(mutationIdentityPlanJSON(t, unchanged)) || hash(baseline) != hash(unchanged) {
+		t.Fatal("internal-only override changed unchanged resolved plan identity")
+	}
+}

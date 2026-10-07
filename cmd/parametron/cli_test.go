@@ -3892,3 +3892,19 @@ func defaultCaptureBackedSemanticMapJSON() string {
   }
 }`
 }
+
+func TestParseOverrideList_RepeatedBindingLastValueWins(t *testing.T) {
+	previous := paramOverrides
+	t.Cleanup(func() { paramOverrides = previous })
+	root := newHarnessRootCmd()
+	if err := root.ParseFlags([]string{"--set", "width=10", "--set", "width=99"}); err != nil {
+		t.Fatal(err)
+	}
+	overrides, err := parseOverrideList(paramOverrides)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(overrides) != 1 || overrides["width"] != "99" {
+		t.Fatalf("unexpected overrides: %v", overrides)
+	}
+}

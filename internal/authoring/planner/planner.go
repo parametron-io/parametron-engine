@@ -243,15 +243,20 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 	}
 
 	// 2. Ensure all provided overrides exist in the DSL.
-	for overrideKey := range overrides {
+	overrideKeys := make([]string, 0, len(overrides))
+	for key := range overrides {
+		overrideKeys = append(overrideKeys, key)
+	}
+	sort.Strings(overrideKeys)
+	for _, overrideKey := range overrideKeys {
 		if _, ok := definedConstants[overrideKey]; ok {
 			return nil, fmt.Errorf("cannot override constant: '%s'", overrideKey)
 		}
 		if _, ok := definedLets[overrideKey]; ok {
-			return nil, fmt.Errorf("override target '%s' is not an exported parameter", overrideKey)
+			continue
 		}
 		if _, ok := definedParams[overrideKey]; !ok {
-			return nil, fmt.Errorf("override parameter '%s' not defined in DSL", overrideKey)
+			return nil, fmt.Errorf("override binding '%s' not defined in DSL", overrideKey)
 		}
 	}
 
@@ -304,7 +309,7 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 			productBindingNames[param.Name] = struct{}{}
 		}
 
-		// 1. Apply overrides for parameters belonging to this product.
+		// 1. Apply overrides for bindings belonging to this product.
 		for _, param := range product.Parameters {
 			if overrideStr, ok := overrides[param.Name]; ok {
 				slog.Debug("Applying override", "parameter", param.Name, "value", overrideStr)
@@ -313,6 +318,16 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 					return nil, fmt.Errorf("failed to apply override for '%s': %w", param.Name, err)
 				}
 				resolvedValues[param.Name] = val
+			}
+		}
+
+		for _, let := range product.Lets {
+			if overrideStr, ok := overrides[let.Name]; ok {
+				val, err := convertOverrideValue(overrideStr, productBindingScope[let.Name].Type)
+				if err != nil {
+					return nil, fmt.Errorf("failed to apply override for '%s': %w", let.Name, err)
+				}
+				resolvedValues[let.Name] = val
 			}
 		}
 
@@ -325,6 +340,9 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 		}
 		unresolvedBindings := make([]pendingBinding, 0, len(product.Lets)+len(product.Parameters))
 		for _, let := range product.Lets {
+			if _, isResolved := resolvedValues[let.Name]; isResolved {
+				continue
+			}
 			letBinding := productBindingScope[let.Name]
 			unresolvedBindings = append(unresolvedBindings, pendingBinding{
 				name:         let.Name,

@@ -132,15 +132,14 @@ product Test {
 			errorContains: "cannot override constant",
 		},
 		{
-			name: "Cannot Override Let",
+			name: "Override Let Without Exporting",
 			dslContent: `
 product Test {
     let width = 100
     param area: number = width * 2
 }`,
-			overrides:     map[string]string{"width": "99"},
-			expectError:   true,
-			errorContains: "override target 'width' is not an exported parameter",
+			overrides:      map[string]string{"width": "99"},
+			expectedValues: map[string]interface{}{"area": 198.0},
 		},
 		{
 			name: "Circular Dependency Detection",
@@ -524,6 +523,9 @@ product Test {
 					resultMap := make(map[string]interface{})
 					for i, h := range headers {
 						resultMap[h] = values[i]
+					}
+					if tt.name == "Override Let Without Exporting" && len(resultMap) != len(tt.expectedValues) {
+						t.Errorf("unexpected exported bindings: %v", resultMap)
 					}
 
 					for k, expectedV := range tt.expectedValues {
@@ -3279,7 +3281,11 @@ product Demo {
 }
 `
 
-	_, plan := parseValidateAndPlan(t, dslContent)
+	ast, _ := parseValidateAndPlan(t, dslContent)
+	plan, err := CreatePlan(ast, map[string]string{"base": "30"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(plan.Steps) != 2 {
 		t.Fatalf("expected 2 steps, got %d", len(plan.Steps))
 	}
@@ -3291,7 +3297,7 @@ product Demo {
 	if want := []string{"width", "height"}; !reflect.DeepEqual(writePayload.Headers, want) {
 		t.Fatalf("unexpected CSV headers: %+v", writePayload.Headers)
 	}
-	if want := []interface{}{20.0, 25.0}; !reflect.DeepEqual(writePayload.Values, want) {
+	if want := []interface{}{60.0, 65.0}; !reflect.DeepEqual(writePayload.Values, want) {
 		t.Fatalf("unexpected CSV values: %+v", writePayload.Values)
 	}
 
@@ -3301,8 +3307,8 @@ product Demo {
 	}
 
 	expectedValues := map[string]interface{}{
-		"width":  20.0,
-		"height": 25.0,
+		"width":  60.0,
+		"height": 65.0,
 	}
 	if !reflect.DeepEqual(manifestPayload.Values, expectedValues) {
 		t.Fatalf("unexpected manifest values: %+v", manifestPayload.Values)
@@ -3315,8 +3321,8 @@ product Demo {
 	}
 
 	expectedAssignments := []ExportManifestParameterAssignment{
-		{Name: "width", Value: 20.0, Type: "number", Unit: "mm"},
-		{Name: "height", Value: 25.0, Type: "number", Unit: "mm"},
+		{Name: "width", Value: 60.0, Type: "number", Unit: "mm"},
+		{Name: "height", Value: 65.0, Type: "number", Unit: "mm"},
 	}
 	if !reflect.DeepEqual(manifestPayload.ParameterAssignments, expectedAssignments) {
 		t.Fatalf("unexpected parameter assignments: %+v", manifestPayload.ParameterAssignments)

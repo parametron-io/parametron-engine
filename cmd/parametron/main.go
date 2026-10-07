@@ -84,7 +84,7 @@ func bindPersistentFlags(rootCmd *cobra.Command) {
 	rootCmd.PersistentFlags().StringVarP(&outputDir, "out", "o", "./output", "Output directory for artifacts")
 	rootCmd.PersistentFlags().StringVar(&modelHash, "model-hash", "", "Optional model hash for cache signature v2")
 	rootCmd.PersistentFlags().BoolVarP(&debugMode, "debug", "d", false, "Enable debug logging")
-	rootCmd.PersistentFlags().StringSliceVar(&paramOverrides, "set", []string{}, "Set/override a parameter value (e.g., --set length=1500)")
+	rootCmd.PersistentFlags().StringSliceVar(&paramOverrides, "set", []string{}, "Override a param or let binding value (e.g., --set length=1500)")
 	rootCmd.PersistentFlags().StringSliceVar(&tableInputs, "table", []string{}, "Load a planner-visible table as logical-id=path")
 	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "Simulate execution and print resolved parameters")
 	rootCmd.PersistentFlags().BoolVar(&printPlan, "print-plan", false, "Print the execution plan and exit")
