@@ -41,7 +41,7 @@ func mutationIdentityModel() *semantic.Model {
 			{ID: "par.root.width", OwnerKind: semantic.OwnerKindComponent, OwnerID: "cmp.root", ComponentID: "cmp.root", Name: "width", NativeType: "Length"},
 		},
 		Features: []semantic.Feature{
-			{ID: "feat.pad", ComponentID: "cmp.leg", Name: "Pad", NativeType: "PartDesign::Pad", Targetability: allBits},
+			{ID: "feat.pad", ComponentID: "cmp.leg", Name: "Pad", NativeRef: "Pad", NativeType: "PartDesign::Pad", Targetability: allBits},
 		},
 	}
 }

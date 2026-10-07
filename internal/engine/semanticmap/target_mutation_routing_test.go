@@ -14,7 +14,7 @@ import (
 //
 //	semantic target metadata
 //	    -> generic part / assembly destination (shared resolveMutationDestination)
-//	    -> semantic identity -> native Object name (shared resolveManifestEntityName)
+//	    -> semantic identity -> native Object name (shared ResolveTargetNativeObject)
 //	    -> private RoutedTargetMutation{OperationKind, Object}
 //
 // Task 9 performs no mutation-family conversion, no boolean encoding, and no
@@ -38,26 +38,26 @@ import (
 
 // routingModel is a deliberately minimal semantic model. RouteTargetMutations
 // iterates Features/Components directly and never validates the model, so the
-// fixture only needs the identity/name data the routing path reads.
+// fixture only needs the identity/native mapping data the routing path reads.
 func routingModel() *semantic.Model {
 	return &semantic.Model{
 		Components: []semantic.Component{
-			{ID: "cmp.root", Kind: "assembly", Name: "RootAssembly"},
-			{ID: "cmp.sub", Kind: "assembly", Name: "Sub"},
-			{ID: "cmp.cover", Kind: "part", Name: "Cover"},
-			{ID: "cmp.zeta", Kind: "part", Name: "Zeta"},
-			{ID: "cmp.alpha", Kind: "part", Name: "Alpha"},
-			{ID: "cmp.middle", Kind: "part", Name: "Middle"},
-			{ID: "cmp.nameless", Kind: "part", Name: ""},
-			{ID: "cmp.displayonly", Kind: "part", Name: "", DisplayName: "Cover Visible Label"},
+			{ID: "cmp.root", Kind: "assembly", Name: "RootAssembly", NativeRef: "RootAssembly"},
+			{ID: "cmp.sub", Kind: "assembly", Name: "Sub", NativeRef: "Sub"},
+			{ID: "cmp.cover", Kind: "part", Name: "Cover", NativeRef: "Cover"},
+			{ID: "cmp.zeta", Kind: "part", Name: "Zeta", NativeRef: "Zeta"},
+			{ID: "cmp.alpha", Kind: "part", Name: "Alpha", NativeRef: "Alpha"},
+			{ID: "cmp.middle", Kind: "part", Name: "Middle", NativeRef: "Middle"},
+			{ID: "cmp.unmapped", Kind: "part", Name: "unmapped"},
+			{ID: "cmp.displayonly", Kind: "part", Name: "unmapped", DisplayName: "Cover Visible Label"},
 		},
 		Features: []semantic.Feature{
-			{ID: "feat.pad", ComponentID: "cmp.root", Name: "Pad"},
-			{ID: "feat.pocket", ComponentID: "cmp.root", Name: "Pocket"},
-			{ID: "feat.chamfer", ComponentID: "cmp.root", Name: "Chamfer"},
-			{ID: "feat.nameless", ComponentID: "cmp.root", Name: ""},
-			{ID: "feat.displayonly", ComponentID: "cmp.root", Name: "", DisplayName: "Pad Visible Label"},
-			{ID: "feat.whitespace", ComponentID: "cmp.root", Name: "   "},
+			{ID: "feat.pad", ComponentID: "cmp.root", Name: "Pad", NativeRef: "Pad"},
+			{ID: "feat.pocket", ComponentID: "cmp.root", Name: "Pocket", NativeRef: "Pocket"},
+			{ID: "feat.chamfer", ComponentID: "cmp.root", Name: "Chamfer", NativeRef: "Chamfer"},
+			{ID: "feat.unmapped", ComponentID: "cmp.root", Name: "unmapped"},
+			{ID: "feat.displayonly", ComponentID: "cmp.root", Name: "unmapped", DisplayName: "Pad Visible Label"},
+			{ID: "feat.whitespace", ComponentID: "cmp.root", Name: "whitespace_mapping", NativeRef: "   "},
 		},
 	}
 }
@@ -260,9 +260,9 @@ func TestRouteTargetMutations_SharedDestinationHelperParityWithProjection(t *tes
 	}
 }
 
-// 9 / 10. Feature semantic identity resolves to the native Feature.Name, never
+// 9 / 10. Feature semantic identity resolves to the captured Feature.NativeRef, never
 // to the semantic ID that is the lookup key.
-func TestRouteTargetMutations_FeatureSemanticIDResolvesToNativeName(t *testing.T) {
+func TestRouteTargetMutations_FeatureSemanticIDResolvesToNativeRef(t *testing.T) {
 	routing := routeOrFail(t, routingLinkage(),
 		targetActionMutation("suppress", "feature", "feat.pad", "part"))
 	if routing.Part[0].Object != "Pad" {
@@ -273,8 +273,8 @@ func TestRouteTargetMutations_FeatureSemanticIDResolvesToNativeName(t *testing.T
 	}
 }
 
-// 11. part Component resolves to Component.Name.
-func TestRouteTargetMutations_PartComponentResolvesToComponentName(t *testing.T) {
+// 11. part Component resolves to Component.NativeRef.
+func TestRouteTargetMutations_PartComponentResolvesToComponentNativeRef(t *testing.T) {
 	routing := routeOrFail(t, routingLinkage("cmp.cover"),
 		targetActionMutation("hide", "part", "cmp.cover", "part"))
 	if routing.Part[0].Object != "Cover" {
@@ -282,8 +282,8 @@ func TestRouteTargetMutations_PartComponentResolvesToComponentName(t *testing.T)
 	}
 }
 
-// 12. assembly Component resolves to Component.Name.
-func TestRouteTargetMutations_AssemblyComponentResolvesToComponentName(t *testing.T) {
+// 12. assembly Component resolves to Component.NativeRef.
+func TestRouteTargetMutations_AssemblyComponentResolvesToComponentNativeRef(t *testing.T) {
 	routing := routeOrFail(t, routingLinkage("cmp.root"),
 		targetActionMutation("delete", "assembly", "cmp.root", "assembly"))
 	if routing.Assembly[0].Object != "RootAssembly" {
@@ -301,8 +301,8 @@ func TestRouteTargetMutations_ComponentIdentityLinkageMandatory(t *testing.T) {
 	}
 }
 
-// 14. Valid Component identity-linkage resolves to the exact native Name.
-func TestRouteTargetMutations_ValidComponentLinkageResolvesExactName(t *testing.T) {
+// 14. Valid Component identity-linkage resolves to the exact captured NativeRef.
+func TestRouteTargetMutations_ValidComponentLinkageResolvesExactNativeRef(t *testing.T) {
 	routing := routeOrFail(t, routingLinkage("cmp.sub"),
 		targetActionMutation("delete", "assembly", "cmp.sub", "assembly"))
 	if routing.Assembly[0].Object != "Sub" {
@@ -329,11 +329,11 @@ func TestRouteTargetMutations_MissingComponentSemanticIDFails(t *testing.T) {
 	}
 }
 
-// 17 / 20. Empty Feature Name fails; DisplayName is never a fallback.
-func TestRouteTargetMutations_EmptyFeatureNameFailsNoDisplayNameFallback(t *testing.T) {
+// Missing Feature NativeRef fails; DisplayName is never a fallback.
+func TestRouteTargetMutations_MissingFeatureNativeMappingFailsNoDisplayNameFallback(t *testing.T) {
 	err := routeExpectError(t, routingLinkage(),
-		targetActionMutation("suppress", "feature", "feat.nameless", "part"))
-	if !strings.Contains(err.Error(), "missing manifest-facing name for feature") {
+		targetActionMutation("suppress", "feature", "feat.unmapped", "part"))
+	if !strings.Contains(err.Error(), "missing native target mapping for feature") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -344,21 +344,20 @@ func TestRouteTargetMutations_EmptyFeatureNameFailsNoDisplayNameFallback(t *test
 	}
 }
 
-// 18. Whitespace-only Feature Name is rejected deterministically (name resolution
-// trims before the non-empty check).
-func TestRouteTargetMutations_WhitespaceOnlyFeatureNameFails(t *testing.T) {
+// Whitespace-only Feature NativeRef is rejected deterministically.
+func TestRouteTargetMutations_WhitespaceOnlyFeatureNativeMappingFails(t *testing.T) {
 	err := routeExpectError(t, routingLinkage(),
 		targetActionMutation("suppress", "feature", "feat.whitespace", "part"))
-	if !strings.Contains(err.Error(), "missing manifest-facing name for feature") {
+	if !strings.Contains(err.Error(), "missing native target mapping for feature") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-// 19. Empty Component Name fails at the same native-name boundary.
-func TestRouteTargetMutations_EmptyComponentNameFails(t *testing.T) {
-	err := routeExpectError(t, routingLinkage("cmp.nameless"),
-		targetActionMutation("suppress", "part", "cmp.nameless", "part"))
-	if !strings.Contains(err.Error(), "missing manifest-facing name for part") {
+// Missing Component NativeRef fails at the native mapping boundary.
+func TestRouteTargetMutations_MissingComponentNativeMappingFails(t *testing.T) {
+	err := routeExpectError(t, routingLinkage("cmp.unmapped"),
+		targetActionMutation("suppress", "part", "cmp.unmapped", "part"))
+	if !strings.Contains(err.Error(), "missing native target mapping for part") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

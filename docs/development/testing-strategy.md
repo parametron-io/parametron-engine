@@ -54,6 +54,16 @@ record packaging.
 - **Intermediate Representation & Planning (`internal/authoring/ir`, `internal/authoring/planner`)**:
   Validates AST-to-IR conversion, IR-to-plan generation, dependency resolution,
   topological ordering, and roundtrip codegen.
+- **Capture-backed Target Identity (`internal/engine/semantic`, `internal/engine/semanticmap`, `internal/authoring/planner`)**:
+  Uses the shared `internal/engine/semantic/testdata/native-target/prm.cad.json`
+  fixture with distinct semantic Name, stable ID, DisplayName, and native
+  selector. Tests cover internal native-reference retention and JSON exclusion,
+  exact semantic lookup without native aliases, shared native routing across
+  executable target actions, deterministic missing/invalid mapping rejection,
+  exact selector preservation, Component linkage, and independent destinations.
+  Planner tests prove equivalent plan JSON and hashes, identity changes for used
+  native mappings, identity independence from DisplayName and unused mappings,
+  ordering by projected runtime objects, and `keep` without a native mapping.
 - **DSL Regression Gate (`testdata/dsl/stress.dsl`)**: Comprehensive regression
   suite exercising language features, math functions, conditionals, and manifest
   generation.
@@ -70,6 +80,9 @@ record packaging.
   canonical mutation intent, and reference traversal requests
   (`prm.reference-traversal-request.json`). Validates deterministic canonical
   serialization (`destination` then `object`) and schema 1.0 preservation.
+  Capture-backed native-target tests carry `Body01` through the runtime manifest,
+  observation request, in-memory expected state, and controlled returned evidence
+  using exact `(destination, object)` correlation.
 - **Evidence Intake Validation (`internal/engine/cadruntime`, `internal/engine/observed`)**:
   Validates raw `prm.result.json` loading, strict artifact containment checks,
   `prm.observed.json` working copy fingerprint correlation, strict target-state
@@ -162,7 +175,10 @@ record packaging.
   Coverage includes all supported target actions, typed verification and
   evidence failures, runtime-native failure separation, normalized record and
   raw-evidence emission, and repeatable Engine-owned identity and serialization
-  surfaces. This permanent proof covers the normal CLI path, not HTTP API
+  surfaces. The companion `cmd/parametron/native_target_contract_test.go` reuses
+  the separated capture fixture for `suppress` and `hide`, proving `Body01`
+  propagation into runtime requests, returned evidence, and normalized package
+  facts. This permanent proof covers the normal CLI path, not HTTP API
   target-mutation submission, and does not claim real FreeCAD-native mutation or
   observation.
 - **Opt-in Real FreeCAD Integration (`scripts/cad_runtime_integration_proof.py --mode real`)**:
@@ -180,6 +196,7 @@ go vet ./...
 
 # Run targeted package tests
 go test ./internal/authoring/dsl/...
+go test ./internal/engine/semantic/... ./internal/engine/semanticmap/... ./internal/authoring/planner/...
 go test ./internal/engine/verification/...
 go test ./internal/engine/observed/...
 go test ./internal/engine/cadruntime/...

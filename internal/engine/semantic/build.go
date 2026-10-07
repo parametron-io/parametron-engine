@@ -35,6 +35,7 @@ func BuildFromCapture(contract *cad.CADContract) (*Model, error) {
 		node := structureByComponentID[component.ID]
 		children := append([]string(nil), node.Children...)
 		model.Components = append(model.Components, Component{
+			NativeRef:     capturedNativeRef(component.IdentitySource),
 			ID:            component.ID,
 			Kind:          component.Kind,
 			Name:          component.Name,
@@ -62,6 +63,7 @@ func BuildFromCapture(contract *cad.CADContract) (*Model, error) {
 
 	for _, feature := range contract.Entities.Features {
 		model.Features = append(model.Features, Feature{
+			NativeRef:     capturedNativeRef(feature.IdentitySource),
 			ID:            feature.ID,
 			ComponentID:   feature.ComponentID,
 			Name:          feature.Name,
@@ -111,6 +113,13 @@ func BuildFromCapture(contract *cad.CADContract) (*Model, error) {
 	}
 
 	return canonical, nil
+}
+
+func capturedNativeRef(identity *cad.IdentitySource) string {
+	if identity == nil {
+		return ""
+	}
+	return identity.NativeRef
 }
 
 func copySystemIdentity(value cad.NamedVersion) *SystemIdentity {

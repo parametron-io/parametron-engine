@@ -516,7 +516,7 @@ func resolveMutationManifestTarget(contract *SemanticMap, model *semantic.Model,
 		}
 		return objectName, metadata.Key, nil
 	case "suppress", "unsuppress", "hide", "unhide", "delete":
-		objectName, err := resolveManifestEntityName(model, linkage, mutation.TargetEntityKind, mutation.TargetSemanticID)
+		objectName, err := ResolveTargetNativeObject(model, linkage, mutation.TargetEntityKind, mutation.TargetSemanticID)
 		if err != nil {
 			return "", "", wrapProjectionEntityError(err, projectionCodeNonProjectableMutation, mutation.OperationKind, "mutation")
 		}

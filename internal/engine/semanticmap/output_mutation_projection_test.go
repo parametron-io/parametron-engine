@@ -669,8 +669,8 @@ func outputMutationProjectionModel() *semantic.Model {
 			{ID: "cmp.assembly", Kind: "assembly", Name: "AssemblyA", DisplayName: "Assembly A", ChildrenIDs: []string{"cmp.part"}, Quantity: 1},
 		},
 		Features: []semantic.Feature{
-			{ID: "feat.part", ComponentID: "cmp.part", Name: "Pocket", DisplayName: "Pocket Display", NativeType: "PartDesign::Pocket"},
-			{ID: "feat.assembly", ComponentID: "cmp.assembly", Name: "Bracket-1", DisplayName: "Bracket 1", NativeType: "App::Part"},
+			{ID: "feat.part", ComponentID: "cmp.part", Name: "Pocket", NativeRef: "Pocket", DisplayName: "Pocket Display", NativeType: "PartDesign::Pocket"},
+			{ID: "feat.assembly", ComponentID: "cmp.assembly", Name: "Bracket-1", NativeRef: "Bracket-1", DisplayName: "Bracket 1", NativeType: "App::Part"},
 		},
 		ParameterGroups: []semantic.ParameterGroup{
 			{ID: "grp.b", OwnerComponentID: "cmp.part", Name: "GroupB", DisplayName: "Group B", GroupKind: "parameter_group", NativeType: "Spreadsheet::Sheet", Observable: true, Writable: true},

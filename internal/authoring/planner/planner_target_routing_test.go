@@ -79,12 +79,12 @@ func plannerRoutingModel(t *testing.T) *semantic.Model {
 	t.Helper()
 	return plannerSemanticModelWithProductIntent(t, "Demo",
 		[]semantic.Component{
-			{ID: "cmp.leg", Kind: "part", Name: "Leg", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
-			{ID: "cmp.sub", Kind: "assembly", Name: "Sub", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
+			{ID: "cmp.leg", Kind: "part", Name: "Leg", NativeRef: "Leg", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
+			{ID: "cmp.sub", Kind: "assembly", Name: "Sub", NativeRef: "Sub", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
 		},
 		[]semantic.Feature{
-			{ID: "feat.pad", ComponentID: "cmp.leg", Name: "Pad", Targetability: allBitsTrue()},
-			{ID: "feat.bracket", ComponentID: "cmp.root", Name: "Bracket", Targetability: allBitsTrue()},
+			{ID: "feat.pad", ComponentID: "cmp.leg", Name: "Pad", NativeRef: "Pad", Targetability: allBitsTrue()},
+			{ID: "feat.bracket", ComponentID: "cmp.root", Name: "Bracket", NativeRef: "Bracket", Targetability: allBitsTrue()},
 		})
 }
 
@@ -280,13 +280,13 @@ product Demo {
 func TestPlannerTargetRouting_MixedFeatureComponentProductPreservesAuthoredOrder(t *testing.T) {
 	model := plannerSemanticModelWithProductIntent(t, "Demo",
 		[]semantic.Component{
-			{ID: "cmp.leg", Kind: "part", Name: "Leg", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
-			{ID: "cmp.cover", Kind: "part", Name: "Cover", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
-			{ID: "cmp.sub", Kind: "assembly", Name: "Sub", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
+			{ID: "cmp.leg", Kind: "part", Name: "Leg", NativeRef: "Leg", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
+			{ID: "cmp.cover", Kind: "part", Name: "Cover", NativeRef: "Cover", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
+			{ID: "cmp.sub", Kind: "assembly", Name: "Sub", NativeRef: "Sub", ChildrenIDs: []string{}, Quantity: 1, Targetability: allBitsTrue()},
 		},
 		[]semantic.Feature{
-			{ID: "feat.pad", ComponentID: "cmp.leg", Name: "Pad", Targetability: allBitsTrue()},
-			{ID: "feat.bracket", ComponentID: "cmp.root", Name: "Bracket", Targetability: allBitsTrue()},
+			{ID: "feat.pad", ComponentID: "cmp.leg", Name: "Pad", NativeRef: "Pad", Targetability: allBitsTrue()},
+			{ID: "feat.bracket", ComponentID: "cmp.root", Name: "Bracket", NativeRef: "Bracket", Targetability: allBitsTrue()},
 		})
 	routing, err := routeTargetActionsForTest(t, `
 product Demo {
@@ -429,11 +429,11 @@ product Box {
 		Components: []semantic.Component{
 			{ID: "cmp.root", Kind: "assembly", Name: "RootAssembly"},
 			{ID: "cmp.part", Kind: "part", Name: "Leg", ParentID: "cmp.root"},
-			{ID: "cmp.cover", Kind: "part", Name: "Cover", ParentID: "cmp.root", Targetability: allBitsTrue()},
+			{ID: "cmp.cover", Kind: "part", Name: "Cover", NativeRef: "Cover", ParentID: "cmp.root", Targetability: allBitsTrue()},
 		},
 		Features: []semantic.Feature{
-			{ID: "feat.keyway", ComponentID: "cmp.part", Name: "Keyway", NativeType: "PartDesign::Pocket", Targetability: allBitsTrue()},
-			{ID: "feat.rail", ComponentID: "cmp.root", Name: "Rail", NativeType: "PartDesign::Pad", Targetability: allBitsTrue()},
+			{ID: "feat.keyway", ComponentID: "cmp.part", Name: "Keyway", NativeRef: "Keyway", NativeType: "PartDesign::Pocket", Targetability: allBitsTrue()},
+			{ID: "feat.rail", ComponentID: "cmp.root", Name: "Rail", NativeRef: "Rail", NativeType: "PartDesign::Pad", Targetability: allBitsTrue()},
 		},
 	}
 

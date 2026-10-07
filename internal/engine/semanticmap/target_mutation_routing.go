@@ -56,7 +56,7 @@ func RouteTargetMutations(request *TargetMutationRoutingRequest) (*TargetMutatio
 		if err != nil {
 			return nil, err
 		}
-		object, err := resolveManifestEntityName(request.Model, request.IdentityLinkage, mutation.TargetEntityKind, mutation.TargetSemanticID)
+		object, err := ResolveTargetNativeObject(request.Model, request.IdentityLinkage, mutation.TargetEntityKind, mutation.TargetSemanticID)
 		if err != nil {
 			return nil, fmt.Errorf("cannot route target-action mutation %q: %w", mutation.OperationKind, err)
 		}

@@ -177,14 +177,14 @@ func mutationDeterminismModel() *semantic.Model {
 		RootComponentID:         "cmp.root",
 		Components: []semantic.Component{
 			{ID: "cmp.root", Kind: "assembly", Name: "RootAssembly"},
-			{ID: "cmp.leg", Kind: "part", Name: "Leg", ParentID: "cmp.root", Targetability: allBits},
+			{ID: "cmp.leg", Kind: "part", Name: "Leg", NativeRef: "Leg", ParentID: "cmp.root", Targetability: allBits},
 		},
 		Parameters: []semantic.Parameter{
 			{ID: "par.root.width", OwnerKind: semantic.OwnerKindComponent, OwnerID: "cmp.root", ComponentID: "cmp.root", Name: "width", NativeType: "Length"},
 		},
 		Features: []semantic.Feature{
-			{ID: "feat.pad", ComponentID: "cmp.leg", Name: "Pad", NativeType: "PartDesign::Pad", Targetability: allBits},
-			{ID: "feat.slot", ComponentID: "cmp.leg", Name: "Slot", NativeType: "PartDesign::Pocket", Targetability: allBits},
+			{ID: "feat.pad", ComponentID: "cmp.leg", Name: "Pad", NativeRef: "Pad", NativeType: "PartDesign::Pad", Targetability: allBits},
+			{ID: "feat.slot", ComponentID: "cmp.leg", Name: "Slot", NativeRef: "Slot", NativeType: "PartDesign::Pocket", Targetability: allBits},
 		},
 	}
 }
