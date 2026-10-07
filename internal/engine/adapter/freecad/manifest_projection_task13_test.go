@@ -2,11 +2,15 @@ package freecad
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
+	"parametron/internal/authoring/dsl"
 	"parametron/internal/authoring/planner"
+	"parametron/internal/engine/semantic"
 )
 
 // Phase 5 Task 13 Stage 2 permanent adapter closure: explicit non-leakage and
@@ -287,4 +291,47 @@ func TestTask13Adapter_CombinedParameterAndPropertyCompatibility(t *testing.T) {
 	if got := strings.Count(string(data), "Box.Width"); got != 1 {
 		t.Fatalf("expected scalar-write target \"Box.Width\" to appear exactly once, appeared %d times: %s", got, data)
 	}
+}
+
+func TestFreeCADProjection_LetOverrideRemainsInternal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "override.dsl")
+	content := `dsl v1.0
+product Box {
+ adapter = "freecad"
+ source_model = "box_model"
+ outputs = ["step"]
+ let base = 10
+ param width: number = base * 2
+}`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ast, err := dsl.Parse(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	model, err := semantic.InjectDSLIntent(semantic.Clone(mutationDeterminismModel()), ast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := planner.CreatePlanWithTablesAndSemanticModel(ast, map[string]string{"base": "30"}, nil, model, mutationDeterminismContract())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range plan.Steps {
+		if payload, ok := step.Payload.(planner.WriteExportManifestPayload); ok {
+			manifest, err := ProjectFreeCADRuntimeExportManifest(payload)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(manifest.ParameterAssignments) != 1 || manifest.ParameterAssignments[0].Value != 60.0 || manifest.ParameterAssignments[0].Target == "" {
+				t.Fatalf("expected only the downstream width assignment, got %+v", manifest.ParameterAssignments)
+			}
+			if len(payload.ParameterAssignments) != 1 || payload.ParameterAssignments[0].Name != "width" {
+				t.Fatalf("unexpected planner assignments: %+v", payload.ParameterAssignments)
+			}
+			return
+		}
+	}
+	t.Fatal("missing export manifest")
 }

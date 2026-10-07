@@ -170,12 +170,25 @@ product Test {
 		t.Fatalf("expected c to resolve to 7, got %+v", payload.Values)
 	}
 
-	_, err = CreatePlanFromIR(program, map[string]string{"b": "20"})
-	if err == nil {
-		t.Fatal("expected overriding let to fail")
-	}
-	if !contains(err.Error(), "override target 'b' is not an exported parameter") {
-		t.Fatalf("unexpected error: %v", err)
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  float64
+	}{
+		{"b", "20", 21}, {"a", "20", 22},
+	} {
+		overridden, err := CreatePlanFromIR(program, map[string]string{tc.name: tc.value})
+		if err != nil {
+			t.Fatal(err)
+		}
+		csv := overridden.Steps[0].Payload.(planner.WriteCSVPayload)
+		if !reflect.DeepEqual(csv.Headers, []string{"c"}) || !reflect.DeepEqual(csv.Values, []interface{}{tc.want}) {
+			t.Fatalf("override %s: unexpected exported CSV: %+v", tc.name, csv)
+		}
+		manifest := overridden.Steps[1].Payload.(planner.WriteExportManifestPayload)
+		if !reflect.DeepEqual(manifest.Values, map[string]interface{}{"c": tc.want}) || len(manifest.ParameterAssignments) != 1 || manifest.ParameterAssignments[0].Name != "c" || manifest.ParameterAssignments[0].Value != tc.want {
+			t.Fatalf("override %s: unexpected manifest: %+v", tc.name, manifest)
+		}
 	}
 }
 
@@ -977,4 +990,113 @@ func containsInternal(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// Both production planners must use inferred let types, including enum domains.
+func TestBindingOverrides_InferredTypes(t *testing.T) {
+	for _, tc := range []struct {
+		name, bindings, value string
+		want                  interface{}
+		errorContains         string
+	}{
+		{"number", "let selected = 100\nparam result: number = selected * 2", "99", 198.0, ""},
+		{"invalid number", "let selected = 100\nparam result: number = selected", "oops", nil, "failed to apply override for 'selected'"},
+		{"string", "let selected = \"default\"\nparam result: string = selected", "replacement", "replacement", ""},
+		{"boolean", "let selected = false\nparam result: boolean = selected", "true", true, ""},
+		{"invalid boolean", "let selected = false\nparam result: boolean = selected", "oops", nil, "failed to apply override for 'selected'"},
+		{"enum", "param domain: enum { Oak, Pine } = Oak\nlet selected = domain\nparam result: enum { Oak, Pine } = selected", "Pine", "Pine", ""},
+		{"invalid enum", "param domain: enum { Oak, Pine } = Oak\nlet selected = domain\nparam result: enum { Oak, Pine } = selected", "Maple", nil, "invalid enum override 'Maple', allowed values are [Oak Pine]"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ast := parseAndValidate(t, "product Test {\n"+tc.bindings+"\n}")
+			program, err := ConvertAST(ast)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for name, create := range map[string]func(map[string]string) (*planner.ExecutionPlan, error){
+				"AST": func(o map[string]string) (*planner.ExecutionPlan, error) { return planner.CreatePlan(ast, o) },
+				"IR":  func(o map[string]string) (*planner.ExecutionPlan, error) { return CreatePlanFromIR(program, o) },
+			} {
+				t.Run(name, func(t *testing.T) {
+					plan, err := create(map[string]string{"selected": tc.value})
+					if tc.errorContains != "" {
+						if err == nil || !contains(err.Error(), tc.errorContains) {
+							t.Fatalf("got %v, want %s", err, tc.errorContains)
+						}
+						return
+					}
+					if err != nil {
+						t.Fatal(err)
+					}
+					manifest := plan.Steps[1].Payload.(planner.WriteExportManifestPayload)
+					if manifest.Values["result"] != tc.want {
+						t.Fatalf("got %v, want %v", manifest.Values, tc.want)
+					}
+					if _, exists := manifest.Values["selected"]; exists {
+						t.Fatal("let exported")
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestBindingOverrides_DeterministicNameDiagnostics(t *testing.T) {
+	ast := parseAndValidate(t, "const beta = 5\nproduct Test { let selected = 1\nparam result: number = selected }")
+	program, err := ConvertAST(ast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, create := range map[string]func(map[string]string) (*planner.ExecutionPlan, error){
+		"AST": func(o map[string]string) (*planner.ExecutionPlan, error) { return planner.CreatePlan(ast, o) },
+		"IR":  func(o map[string]string) (*planner.ExecutionPlan, error) { return CreatePlanFromIR(program, o) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, keys := range [][]string{{"zeta", "beta", "alpha", "selected"}, {"selected", "alpha", "beta", "zeta"}} {
+				for i := 0; i < 20; i++ {
+					overrides := map[string]string{}
+					for _, key := range keys {
+						overrides[key] = "2"
+					}
+					_, err := create(overrides)
+					if err == nil || err.Error() != "override binding 'alpha' not defined in DSL" {
+						t.Fatalf("unexpected first error: %v", err)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestBindingOverrides_UnqualifiedNamesAcrossProducts(t *testing.T) {
+	ast := parseAndValidate(t, `product A { let width = 10
+param area: number = width * 2 }
+product B { param width: number = 20
+param area: number = width * 3 }`)
+	program, err := ConvertAST(ast)
+	if err != nil {
+		t.Fatal(err)
+	}
+	astPlan, err := planner.CreatePlan(ast, map[string]string{"width": "7"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	irPlan, err := CreatePlanFromIR(program, map[string]string{"width": "7"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(astPlan, irPlan) {
+		t.Fatal("AST/IR plans differ")
+	}
+	for _, step := range astPlan.Steps {
+		if m, ok := step.Payload.(planner.WriteExportManifestPayload); ok {
+			want := map[string]interface{}{"area": 14.0}
+			if m.ProductKey == "B" {
+				want = map[string]interface{}{"width": 7.0, "area": 21.0}
+			}
+			if !reflect.DeepEqual(m.Values, want) {
+				t.Fatalf("%s: got %v want %v", m.ProductKey, m.Values, want)
+			}
+		}
+	}
 }
