@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 
+	"parametron/internal/authoring/dsl"
 	"parametron/internal/authoring/planner"
 	"parametron/internal/authoring/runtime"
 	"parametron/internal/engine/table"
@@ -20,7 +22,7 @@ import (
 const freeCADRuntimeAdapterID = "freecad"
 
 // CreatePlanFromIR generates an ExecutionPlan from an IR program.
-// It applies parameter overrides and evaluates all expressions.
+// It applies binding overrides and evaluates all expressions.
 // This function is the IR-based equivalent of planner.CreatePlan.
 func CreatePlanFromIR(program *IRProgram, overrides map[string]string) (*planner.ExecutionPlan, error) {
 	return createPlanFromIR(program, overrides, nil)
@@ -55,15 +57,20 @@ func createPlanFromIR(program *IRProgram, overrides map[string]string, tables ma
 	}
 
 	// Validate overrides
-	for overrideKey := range overrides {
+	overrideKeys := make([]string, 0, len(overrides))
+	for key := range overrides {
+		overrideKeys = append(overrideKeys, key)
+	}
+	sort.Strings(overrideKeys)
+	for _, overrideKey := range overrideKeys {
 		if _, ok := definedConstants[overrideKey]; ok {
 			return nil, fmt.Errorf("cannot override constant: '%s'", overrideKey)
 		}
 		if _, ok := definedLets[overrideKey]; ok {
-			return nil, fmt.Errorf("override target '%s' is not an exported parameter", overrideKey)
+			continue
 		}
 		if _, ok := definedParams[overrideKey]; !ok {
-			return nil, fmt.Errorf("override parameter '%s' not defined in DSL", overrideKey)
+			return nil, fmt.Errorf("override binding '%s' not defined in DSL", overrideKey)
 		}
 	}
 
@@ -118,6 +125,24 @@ func createPlanFromIR(program *IRProgram, overrides map[string]string, tables ma
 			}
 		}
 
+		var bindingScope map[string]*dsl.ParameterNode
+		for _, binding := range product.Lets {
+			if overrideStr, ok := overrides[binding.Name]; ok {
+				if bindingScope == nil {
+					var err error
+					bindingScope, err = inferIRProductBindingScope(product, program.Constants, tables)
+					if err != nil {
+						return nil, fmt.Errorf("failed to infer binding types for product '%s': %w", product.Name, err)
+					}
+				}
+				val, err := convertOverrideValue(overrideStr, convertType(bindingScope[binding.Name].Type))
+				if err != nil {
+					return nil, fmt.Errorf("failed to apply override for '%s': %w", binding.Name, err)
+				}
+				resolvedValues[binding.Name] = val
+			}
+		}
+
 		// 2. Iteratively evaluate lets and params in one deterministic graph.
 		type pendingBinding struct {
 			name string
@@ -126,6 +151,9 @@ func createPlanFromIR(program *IRProgram, overrides map[string]string, tables ma
 		}
 		unresolvedBindings := make([]pendingBinding, 0, len(product.Lets)+len(product.Parameters))
 		for i := range product.Lets {
+			if _, isResolved := resolvedValues[product.Lets[i].Name]; isResolved {
+				continue
+			}
 			unresolvedBindings = append(unresolvedBindings, pendingBinding{
 				name: product.Lets[i].Name,
 				expr: &product.Lets[i].Value,
