@@ -51,7 +51,7 @@ func ResolveProject(inputPath string) (*Resolved, error) {
 		relativePath := project.Resources.Models[logicalID]
 		modelPath, err := resourcebinding.SourcePath(projectRoot, relativePath)
 		if err != nil {
-			return nil, &resourcebinding.Error{LogicalID: logicalID, Field: "sourceCoordinate", Err: err}
+			return nil, &resourcebinding.Error{LogicalID: logicalID, Field: "sourceCoordinate", Err: fmt.Errorf("%q: %w", relativePath, err)}
 		}
 		modelPaths[logicalID] = modelPath
 		bindings = append(bindings, resourcebinding.Binding{ProjectID: project.ProjectID, Kind: ResourceKindModel, LogicalID: logicalID, SourceCoordinate: relativePath})
