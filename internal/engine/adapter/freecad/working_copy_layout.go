@@ -257,6 +257,14 @@ func PrepareFreeCADRuntimeWorkingCopy(req FreeCADRuntimeWorkingCopyPreparationRe
 	if err := validateExistingFreeCADRuntimeOutputDirectory(req.Layout); err != nil {
 		return FreeCADRuntimeWorkingCopyPreparationResult{}, fmt.Errorf("prepare FreeCAD runtime working copy: %w", err)
 	}
+	for _, destination := range []string{req.Layout.WorkingCopyDir, req.Layout.SourceDocumentPath, req.Layout.OutputDir} {
+		if err := validateResourceDestination(destination); err != nil {
+			return FreeCADRuntimeWorkingCopyPreparationResult{}, fmt.Errorf("prepare FreeCAD runtime working copy: %w", err)
+		}
+		if info, err := os.Lstat(destination); err == nil && info.IsDir() != (destination != req.Layout.SourceDocumentPath) {
+			return FreeCADRuntimeWorkingCopyPreparationResult{}, fmt.Errorf("prepare FreeCAD runtime working copy: destination %q has conflicting file type", destination)
+		}
+	}
 
 	sourcePath, err := normalizeFreeCADRuntimeHostPath("source path", req.SourcePath)
 	if err != nil {

@@ -6,17 +6,21 @@ import (
 	"path/filepath"
 
 	"parametron/internal/authoring/dsl"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/table"
 	"parametron/internal/engine/tableloader"
 	"parametron/internal/shared/projectmap"
 )
 
 type Resolved struct {
-	ProjectFile string
-	ProjectRoot string
-	DSLPath     string
-	ModelPaths  map[string]string
-	TablePaths  map[string]string
+	ProjectID       string
+	ModelInventory  resourcebinding.Inventory
+	ModelSelections map[string]*resourcebinding.Context
+	ProjectFile     string
+	ProjectRoot     string
+	DSLPath         string
+	ModelPaths      map[string]string
+	TablePaths      map[string]string
 }
 
 func ResolveProject(inputPath string) (*Resolved, error) {
@@ -42,8 +46,19 @@ func ResolveProject(inputPath string) (*Resolved, error) {
 	}
 
 	modelPaths := make(map[string]string, len(project.Resources.Models))
-	for logicalID, relativePath := range project.Resources.Models {
-		modelPaths[logicalID] = filepath.Clean(filepath.Join(projectRoot, filepath.FromSlash(relativePath)))
+	var bindings []resourcebinding.Binding
+	for _, logicalID := range sortedLogicalIDs(project.Resources.Models) {
+		relativePath := project.Resources.Models[logicalID]
+		modelPath, err := resourcebinding.SourcePath(projectRoot, relativePath)
+		if err != nil {
+			return nil, &resourcebinding.Error{LogicalID: logicalID, Field: "sourceCoordinate", Err: err}
+		}
+		modelPaths[logicalID] = modelPath
+		bindings = append(bindings, resourcebinding.Binding{ProjectID: project.ProjectID, Kind: ResourceKindModel, LogicalID: logicalID, SourceCoordinate: relativePath})
+	}
+	inventory, err := resourcebinding.New(bindings)
+	if err != nil {
+		return nil, err
 	}
 
 	tablePaths := make(map[string]string, len(project.Tables))
@@ -52,11 +67,14 @@ func ResolveProject(inputPath string) (*Resolved, error) {
 	}
 
 	return &Resolved{
-		ProjectFile: projectFile,
-		ProjectRoot: projectRoot,
-		DSLPath:     dslPath,
-		ModelPaths:  modelPaths,
-		TablePaths:  tablePaths,
+		ProjectID:       project.ProjectID,
+		ModelInventory:  inventory,
+		ModelSelections: make(map[string]*resourcebinding.Context),
+		ProjectFile:     projectFile,
+		ProjectRoot:     projectRoot,
+		DSLPath:         dslPath,
+		ModelPaths:      modelPaths,
+		TablePaths:      tablePaths,
 	}, nil
 }
 
@@ -109,6 +127,16 @@ func ApplyModelMappings(ast *dsl.AST, resolved *Resolved) error {
 		}
 
 		product.SourceModel = &dsl.LiteralExpression{Value: modelPath}
+		if resolved.ProjectID != "" {
+			selection, err := resourcebinding.Select(resolved.ModelInventory, resolved.ProjectID, logicalID, resolved.ProjectRoot)
+			if err != nil {
+				return err
+			}
+			if resolved.ModelSelections == nil {
+				resolved.ModelSelections = make(map[string]*resourcebinding.Context)
+			}
+			resolved.ModelSelections[product.Name] = selection
+		}
 	}
 
 	return nil

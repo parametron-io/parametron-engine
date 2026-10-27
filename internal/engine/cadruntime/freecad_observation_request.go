@@ -104,7 +104,9 @@ func WriteFreeCADRuntimeObservationRequest(req adapter.CADRuntimeOrchestrationRe
 			FreeCADRuntimeObservationRequestStageManifestMaterialization, "", preflight, path, err,
 		)
 	}
-	if !reflect.DeepEqual(written.Attempt, preflight.Attempt) {
+	computed := written.Attempt
+	computed.Resources = req.Resources.Inventory()
+	if !reflect.DeepEqual(computed, preflight.Attempt) {
 		return FreeCADRuntimeObservationRequestMaterialization{}, observationRequestError(
 			FreeCADRuntimeObservationRequestStageManifestMaterialization, "", preflight, path,
 			fmt.Errorf("materialized attempt does not match preflight attempt"),

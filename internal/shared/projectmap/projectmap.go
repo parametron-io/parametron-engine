@@ -105,6 +105,9 @@ type projectMappingVersion struct {
 }
 
 func Read(data []byte) (*Project, error) {
+	if err := rejectDuplicateModelKeys(data); err != nil {
+		return nil, err
+	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 
 	var raw any

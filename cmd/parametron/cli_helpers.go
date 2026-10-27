@@ -29,6 +29,7 @@ import (
 	"parametron/internal/engine/projectinput"
 	"parametron/internal/engine/recordemit"
 	"parametron/internal/engine/report"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/runtimecap"
 	"parametron/internal/engine/scheduler"
 	"parametron/internal/engine/semantic"
@@ -43,15 +44,16 @@ import (
 const harnessSchemaVersion = "1.0"
 
 type plannedRun struct {
-	AST             *dsl.AST
-	Plan            *planner.ExecutionPlan
-	PlanHash        string
-	DSLHash         string
-	DSLFile         string
-	ProfileName     string
-	ProfileSettings map[string]any
-	TableInputs     []metadata.TableInputMetadata
-	ProjectInputs   *projectinput.CapturedResources
+	ResourceContexts map[string]*resourcebinding.Context
+	AST              *dsl.AST
+	Plan             *planner.ExecutionPlan
+	PlanHash         string
+	DSLHash          string
+	DSLFile          string
+	ProfileName      string
+	ProfileSettings  map[string]any
+	TableInputs      []metadata.TableInputMetadata
+	ProjectInputs    *projectinput.CapturedResources
 }
 
 type executionOptions struct {
@@ -340,15 +342,16 @@ func loadPlannedRun(dslPath string, overrides map[string]string, args []string) 
 	}
 
 	return &plannedRun{
-		AST:             ast,
-		Plan:            plan,
-		PlanHash:        planHash,
-		DSLHash:         dslHash,
-		DSLFile:         dslPath,
-		ProfileName:     profileName,
-		ProfileSettings: profileSettings,
-		TableInputs:     tableMetadata,
-		ProjectInputs:   projectResources,
+		ResourceContexts: projectResourceContexts(projectInput),
+		AST:              ast,
+		Plan:             plan,
+		PlanHash:         planHash,
+		DSLHash:          dslHash,
+		DSLFile:          dslPath,
+		ProfileName:      profileName,
+		ProfileSettings:  profileSettings,
+		TableInputs:      tableMetadata,
+		ProjectInputs:    projectResources,
 	}, nil
 }
 
@@ -410,7 +413,7 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 			panic(wrapErr)
 		}
 		return executor.NewWithArtifactsAndCADRuntimeConsumption(aligned, store, resolver, productDir)
-	})
+	}).WithResourceContexts(opts.Planned.ResourceContexts)
 
 	startedAt := time.Now().UTC()
 	schedulerResult, executionErr := s.ExecuteWithResult(ctx, opts.Planned.Plan)
@@ -1041,4 +1044,15 @@ func findProduct(ast *dsl.AST, name string) *dsl.ProductNode {
 		}
 	}
 	return nil
+}
+
+func projectResourceContexts(resolved *resolvedProjectInput) map[string]*resourcebinding.Context {
+	if resolved == nil {
+		return nil
+	}
+	contexts := make(map[string]*resourcebinding.Context, len(resolved.ModelSelections))
+	for key, value := range resolved.ModelSelections {
+		contexts[key] = value.Clone()
+	}
+	return contexts
 }
