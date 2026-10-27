@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -15,6 +16,7 @@ import (
 	"parametron/internal/engine/metadata"
 	"parametron/internal/engine/projectinput"
 	"parametron/internal/engine/report"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/shared/projectlock"
 	"parametron/internal/shared/projectmap"
 )
@@ -307,7 +309,7 @@ func TestValidateCommand_ProjectFixtures(t *testing.T) {
 				name:     "missing mapped model file",
 				scenario: "break/missing-model-file",
 				wantContains: []string{
-					"hash model",
+					"invalid declared resource binding", `resource="box_model"`, "sourceCoordinate",
 					"missing.FCStd",
 				},
 			},
@@ -442,43 +444,51 @@ func TestValidateCommand_ProjectFlagAcceptsProjectEntrypoints(t *testing.T) {
 	}
 }
 
-func TestValidateCommand_ProjectFixtureSymlinkedModelIsAccepted(t *testing.T) {
-	repoRoot := findRepoRoot(t)
-	fixtureRoot := filepath.Join(repoRoot, "testdata", "projects", "freecad")
+func TestValidateCommand_ProjectFixtureSymlinkedModelContainment(t *testing.T) {
+	fixtureRoot := filepath.Join(findRepoRoot(t), "testdata", "projects", "freecad")
 	projectDir := filepath.Join(fixtureRoot, "smoke", "symlinked-model-project")
-
-	projectInput, err := resolveProjectInput(projectDir)
+	resolved, err := filepath.EvalSymlinks(filepath.Join(projectDir, "input", "box.FCStd"))
 	if err != nil {
-		t.Fatalf("resolveProjectInput returned error: %v", err)
+		t.Fatal(err)
 	}
-
-	modelPath, ok := projectInput.ModelPaths["box_model"]
-	if !ok {
-		t.Fatalf("expected box_model in resolved model paths, got %#v", projectInput.ModelPaths)
+	relative, err := filepath.Rel(projectDir, resolved)
+	if err != nil || !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		t.Fatalf("fixture no longer escapes project: %q %v", relative, err)
 	}
-
-	info, err := os.Lstat(modelPath)
+	for _, entry := range projectEntrypoints(projectDir) {
+		_, err := executeHarnessCommand(t, []string{"validate", "--file", entry})
+		if !errors.Is(err, resourcebinding.ErrInvalid) || !strings.Contains(err.Error(), `resource="box_model"`) || !strings.Contains(err.Error(), "escapes project root") {
+			t.Fatalf("expected classified escape rejection: %v", err)
+		}
+	}
+	root := t.TempDir()
+	for _, name := range []string{"prm.project.json", "firstCad.project.dsl"} {
+		data, err := os.ReadFile(filepath.Join(projectDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(root, "input"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(resolved)
 	if err != nil {
-		t.Fatalf("Lstat(%q) returned error: %v", modelPath, err)
+		t.Fatal(err)
 	}
-	if info.Mode()&os.ModeSymlink == 0 {
-		t.Fatalf("expected %q to be a symlink fixture, mode=%v", modelPath, info.Mode())
+	if err := os.WriteFile(filepath.Join(root, "contained.FCStd"), data, 0o644); err != nil {
+		t.Fatal(err)
 	}
-
-	for _, entryPath := range projectFixtureEntrypoints(fixtureRoot, "smoke/symlinked-model-project") {
-		entryPath := entryPath
-		t.Run(filepath.Base(entryPath), func(t *testing.T) {
-			stdout, err := executeHarnessCommand(t, []string{
-				"validate",
-				"--file", entryPath,
-			})
-			if err != nil {
-				t.Fatalf("unexpected error for symlink-backed fixture via %s: %v", entryPath, err)
-			}
-			if !strings.Contains(stdout, "Validation succeeded") {
-				t.Fatalf("expected success output via %s, got %q", entryPath, stdout)
-			}
-		})
+	if err := os.Symlink("../contained.FCStd", filepath.Join(root, "input", "box.FCStd")); err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range projectEntrypoints(root) {
+		stdout, err := executeHarnessCommand(t, []string{"validate", "--file", entry})
+		if err != nil || !strings.Contains(stdout, "Validation succeeded") {
+			t.Fatalf("in-root symlink rejected: %v %s", err, stdout)
+		}
 	}
 }
 
@@ -1031,7 +1041,12 @@ product Widget {
 		t.Fatalf("failed to write project map: %v", err)
 	}
 
+	inventory, err := resourcebinding.New([]resourcebinding.Binding{{ProjectID: "normalized-project-mode", Kind: resourcebinding.ResourceKindModel, LogicalID: "box_model", SourceCoordinate: "models/box.FCStd"}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	expected := &resolvedProjectInput{
+		ProjectID: "normalized-project-mode", ModelInventory: inventory, ModelSelections: map[string]*resourcebinding.Context{},
 		ProjectFile: projectMap,
 		ProjectRoot: projectDir,
 		DSLPath:     projectDSL,
@@ -1554,7 +1569,7 @@ func TestSyncCommand_PropagatesProjectFailures(t *testing.T) {
 			name:     "missing mapped model file",
 			scenario: "break/missing-model-file",
 			wantContains: []string{
-				"hash model",
+				"invalid declared resource binding", `resource="box_model"`, "sourceCoordinate",
 				"missing.FCStd",
 			},
 		},

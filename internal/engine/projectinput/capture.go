@@ -7,14 +7,16 @@ import (
 	"fmt"
 	"os"
 	"slices"
+
+	"parametron/internal/engine/resourcebinding"
 )
 
-type ResourceKind string
+type ResourceKind = resourcebinding.ResourceKind
 
 const (
-	ResourceKindDSL   ResourceKind = "dsl"
-	ResourceKindModel ResourceKind = "model"
-	ResourceKindTable ResourceKind = "table"
+	ResourceKindDSL   = resourcebinding.ResourceKindDSL
+	ResourceKindModel = resourcebinding.ResourceKindModel
+	ResourceKindTable = resourcebinding.ResourceKindTable
 )
 
 type CapturedResource struct {

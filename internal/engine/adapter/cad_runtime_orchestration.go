@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"parametron/internal/authoring/planner"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/runtimecap"
 )
 
@@ -23,6 +24,8 @@ type CADRuntimeOrchestrator interface {
 // handoff for one RunCADRuntime attempt. Logical payloads stay separate from
 // operational executable selection.
 type CADRuntimeOrchestrationRequest struct {
+	// Resources is immutable internal execution context; it is not a runtime wire payload.
+	Resources  *resourcebinding.Context `json:"-"`
 	JobID      string
 	ProductKey string
 	ProductDir string
@@ -83,6 +86,16 @@ func (e *CADRuntimeOrchestrationRequestError) Unwrap() error {
 // ValidateCADRuntimeOrchestrationRequest checks request completeness and
 // internal consistency without filesystem, process, or config side effects.
 func ValidateCADRuntimeOrchestrationRequest(req CADRuntimeOrchestrationRequest) error {
+	if req.Resources != nil {
+		selected := req.Resources.Selected()
+		// Source existence and filesystem containment are checked at preparation.
+		if selected.LogicalID == "" {
+			return &CADRuntimeOrchestrationRequestError{Field: "Resources", Err: fmt.Errorf("missing selected declared resource")}
+		}
+		if req.Resources.SelectedSourcePath() != req.Manifest.Inputs.SourceModel {
+			return &CADRuntimeOrchestrationRequestError{Field: "Resources", Err: fmt.Errorf("selected declared resource source does not match Manifest.Inputs.SourceModel")}
+		}
+	}
 	if strings.TrimSpace(req.JobID) == "" {
 		return &CADRuntimeOrchestrationRequestError{
 			Field: "JobID",

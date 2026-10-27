@@ -145,7 +145,9 @@ func WriteFreeCADRuntimeManifest(req adapter.CADRuntimeOrchestrationRequest) (Fr
 			Err:       err,
 		}
 	}
-	if !reflect.DeepEqual(prepared, materialization.Attempt) {
+	computed := prepared
+	computed.Resources = req.Resources.Inventory()
+	if !reflect.DeepEqual(computed, materialization.Attempt) {
 		return FreeCADRuntimeManifestMaterialization{}, &FreeCADRuntimeManifestError{
 			Stage:     FreeCADRuntimeManifestStageAttemptPreparation,
 			AttemptID: materialization.Attempt.Identity.ID,
@@ -154,6 +156,7 @@ func WriteFreeCADRuntimeManifest(req adapter.CADRuntimeOrchestrationRequest) (Fr
 		}
 	}
 
+	materialization.Attempt = prepared
 	if err := adapter.WriteExportManifestFile(
 		prepared.Layout.WorkingCopyDir,
 		prepared.Layout.ManifestPath,

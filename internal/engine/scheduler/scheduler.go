@@ -10,13 +10,25 @@ import (
 	"parametron/internal/engine/executor"
 	"parametron/internal/engine/handoff"
 	"parametron/internal/engine/job"
+	"parametron/internal/engine/resourcebinding"
 )
 
 // Scheduler orchestrates plan execution through the runtime layer.
 type Scheduler struct {
-	runtime        *executor.Executor
-	runRoot        string
-	adapterFactory func(productDir string) *executor.Executor
+	resourceContexts map[string]*resourcebinding.Context
+	runtime          *executor.Executor
+	runRoot          string
+	adapterFactory   func(productDir string) *executor.Executor
+}
+
+// WithResourceContexts snapshots product selection without changing plans or
+// serialized handoff packages. Context values are immutable.
+func (s *Scheduler) WithResourceContexts(contexts map[string]*resourcebinding.Context) *Scheduler {
+	s.resourceContexts = make(map[string]*resourcebinding.Context, len(contexts))
+	for key, value := range contexts {
+		s.resourceContexts[key] = value.Clone()
+	}
+	return s
 }
 
 // ExecutionResult captures deterministic per-job execution state in scheduler order.
@@ -106,6 +118,7 @@ func (s *Scheduler) ExecuteWithResult(ctx context.Context, plan *planner.Executi
 			for scheduledJob := range jobs {
 				rt := s.resolveExecutor(scheduledJob.job, scheduledJob.productIndex)
 				execCopy := *rt
+				execCopy.SetResourceContext(s.resourceContexts[scheduledJob.job.ProductKey])
 				var err error
 				if jobRequiresCADRuntime(scheduledJob.job) {
 					var pkg *handoff.Package

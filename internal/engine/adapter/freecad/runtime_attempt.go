@@ -10,6 +10,7 @@ import (
 	"unicode"
 
 	"parametron/internal/engine/adapter"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/runtimecap"
 )
 
@@ -39,6 +40,7 @@ type FreeCADRuntimeAttemptIdentity struct {
 // FreeCADRuntimeAttempt is the reusable prepared-or-computed FreeCAD attempt
 // state for Tasks 8–10.
 type FreeCADRuntimeAttempt struct {
+	Resources  resourcebinding.Inventory `json:"-"`
 	Identity   FreeCADRuntimeAttemptIdentity
 	SourcePath string
 	Layout     FreeCADRuntimeWorkingCopyLayout
@@ -122,6 +124,7 @@ func ComputeFreeCADRuntimeAttempt(req adapter.CADRuntimeOrchestrationRequest) (F
 	}
 
 	return FreeCADRuntimeAttempt{
+		Resources:  req.Resources.Inventory(),
 		Identity:   identity,
 		SourcePath: sourcePath,
 		Layout:     layout,
@@ -137,6 +140,11 @@ func PrepareFreeCADRuntimeAttempt(req adapter.CADRuntimeOrchestrationRequest) (F
 		return FreeCADRuntimeAttempt{}, err
 	}
 
+	copies, inventory, err := planDeclaredResourceCopies(req.Resources, attempt)
+	if err != nil {
+		return FreeCADRuntimeAttempt{}, &FreeCADRuntimeAttemptError{Stage: FreeCADRuntimeAttemptStageSourcePreparation, AttemptID: attempt.Identity.ID, Err: err}
+	}
+
 	if _, err := PrepareFreeCADRuntimeWorkingCopy(FreeCADRuntimeWorkingCopyPreparationRequest{
 		Layout:     attempt.Layout,
 		SourcePath: attempt.SourcePath,
@@ -147,6 +155,10 @@ func PrepareFreeCADRuntimeAttempt(req adapter.CADRuntimeOrchestrationRequest) (F
 			Err:       err,
 		}
 	}
+	if err := prepareDeclaredResourceCopies(copies, attempt.Layout.SourceDocumentPath); err != nil {
+		return FreeCADRuntimeAttempt{}, &FreeCADRuntimeAttemptError{Stage: FreeCADRuntimeAttemptStageSourcePreparation, AttemptID: attempt.Identity.ID, Err: err}
+	}
+	attempt.Resources = inventory
 
 	return attempt, nil
 }

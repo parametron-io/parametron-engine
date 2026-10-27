@@ -12,6 +12,7 @@ import (
 	"parametron/internal/engine/artifact"
 	"parametron/internal/engine/cadruntime"
 	"parametron/internal/engine/observed"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/verification"
 )
 
@@ -51,6 +52,7 @@ type CADRuntimeFailureOutcome struct {
 }
 
 type CADRuntimeOutcome struct {
+	Resources              resourcebinding.Inventory `json:"-"`
 	AttemptID              string
 	JobID                  string
 	ProductKey             string
@@ -160,6 +162,7 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 	attempt := run.Runtime.ObservationRequest.Manifest.Attempt
 	identity := attempt.Identity
 	outcome := &CADRuntimeOutcome{
+		Resources: attempt.Resources,
 		AttemptID: identity.ID, JobID: identity.JobID, ProductKey: identity.ProductKey,
 		StepID: identity.StepID, Attempt: identity.Attempt, Adapter: identity.Adapter,
 		WorkingCopyDir:         run.Runtime.ExecutionRequest.WorkingCopyDir,

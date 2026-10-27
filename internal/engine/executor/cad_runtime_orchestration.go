@@ -138,6 +138,7 @@ func (e *Executor) prepareCADRuntimeDispatch(plan *planner.ExecutionPlan) (*cadR
 	}
 
 	base := adapter.CADRuntimeOrchestrationRequest{
+		Resources:  e.resourceContext.Clone(),
 		JobID:      e.pkg.JobID,
 		ProductKey: e.pkg.ProductKey,
 		ProductDir: e.productDir,
@@ -242,6 +243,7 @@ func (e *Executor) buildCADRuntimeOrchestrationRequest(
 	attempt int,
 ) adapter.CADRuntimeOrchestrationRequest {
 	return adapter.CADRuntimeOrchestrationRequest{
+		Resources:  cad.base.Resources.Clone(),
 		JobID:      cad.base.JobID,
 		ProductKey: cad.base.ProductKey,
 		ProductDir: cad.base.ProductDir,

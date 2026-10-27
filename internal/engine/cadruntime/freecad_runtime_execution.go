@@ -131,6 +131,14 @@ func InvokeAndValidateFreeCADRuntime(
 	if err != nil {
 		return run, runError(FreeCADRuntimeRunStageRequestMaterialization, "ReferenceTraversalRequest", "", "", nil, err)
 	}
+	// Retain the established output-preparation classification while rejecting
+	// a redirected attempt root before request materialization can write to it.
+	if attempt, err := freecad.ComputeFreeCADRuntimeAttempt(req); err == nil {
+		root := attempt.Layout.WorkingCopyDir
+		if info, err := os.Lstat(root); err == nil && info.Mode()&os.ModeSymlink != 0 {
+			return run, runError(FreeCADRuntimeRunStageOutputPreparation, "", attempt.Identity.ID, root, nil, fmt.Errorf("working-copy root is a symlink: %q", root))
+		}
+	}
 	materialization, err := WriteFreeCADRuntimeObservationRequest(req)
 	if err != nil {
 		return run, runError(FreeCADRuntimeRunStageRequestMaterialization, "", "", "", nil, err)

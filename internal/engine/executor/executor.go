@@ -15,11 +15,13 @@ import (
 	"parametron/internal/engine/cache"
 	"parametron/internal/engine/handoff"
 	"parametron/internal/engine/job"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/runtimecap"
 )
 
 // Executor runs plans sequentially by delegating each step to the adapter.
 type Executor struct {
+	resourceContext       *resourcebinding.Context
 	adapter               adapter.Adapter
 	states                []ExecutionState
 	pkg                   *handoff.Package
@@ -586,4 +588,10 @@ func (e *Executor) CreateKeyContext(plan *planner.ExecutionPlan, stepIndex int) 
 // ComputeCacheKey computes a cache key for the given layer and context using the executor's strategy.
 func (e *Executor) ComputeCacheKey(layer cache.CacheLayer, ctx cache.KeyContext) string {
 	return e.Strategy().ComputeKey(layer, ctx)
+}
+
+// SetResourceContext attaches immutable project execution context independently
+// of the serialized handoff and planner identity.
+func (e *Executor) SetResourceContext(context *resourcebinding.Context) {
+	e.resourceContext = context.Clone()
 }
