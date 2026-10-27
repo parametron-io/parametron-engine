@@ -23,6 +23,8 @@ Parametron Engine currently provides:
 - cache-aware execution
 - simulation and plan inspection
 - CAD adapter and runtime capability contracts
+- deterministic finite declared CAD-resource inventory with project-scoped identity separate from operational paths
+- declared-resource staging within isolated execution attempts
 - aligned external FreeCAD runtime invocation
 - runtime evidence validation and verification
 - normalized engineering record contracts

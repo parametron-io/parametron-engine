@@ -70,9 +70,26 @@ record packaging.
 
 ### 2. CAD Runtime and Adapter Contracts
 
+- **Declared Resource Contracts (`internal/shared/projectmap`, `internal/engine/projectinput`, `internal/engine/resourcebinding`)**:
+  Pure mapping/binding tests cover case-sensitive project-scoped model identity,
+  canonical coordinates, aliases, deterministic inventory and failure ordering,
+  conflict rejection, and copy-safe selection. Filesystem resolution and capture
+  tests separately prove relocated-root binding equivalence and validation of
+  unused, standalone, and zero-reference declarations, including source symlink
+  containment. Relocation proof concerns the resource join, not global plan,
+  job, cache, attempt, or normalized record identity.
 - **Attempt Management (`internal/engine/cadruntime`)**: Validates attempt
   identity derivation, isolated layout creation (`_working/<attemptID>/`),
   atomic source model preparation, and pre-invocation output cleaning.
+- **Declared Resource Staging (`internal/engine/adapter/freecad`, `internal/engine/cadruntime`)**:
+  Filesystem tests prove bounded multi-resource materialization with distinct
+  canonical attempt-relative coordinates, primary-source placement compatibility,
+  source preservation, and retry isolation. Unsafe sources, destinations,
+  ancestors, and reserved-file conflicts fail preflight in the tested cases
+  before source staging or runtime invocation. Computed inventory has no
+  completed materialized coordinates; prepared inventory does. Atomic staging
+  is per file, not a transaction over the inventory, and containment checks do
+  not establish protection against concurrent adversarial filesystem mutation.
 - **Manifest & Request Materialization (`internal/engine/cadruntime`, `internal/engine/verification`, `internal/engine/adapter/freecad`)**:
   Ensures pure, deterministic projection of execution manifests, verification
   requests (`prm.verification.json`) including optional request-scoped target-state
@@ -138,7 +155,10 @@ record packaging.
   reconstruction.
 - **Scheduler & Executor (`internal/engine/scheduler`, `internal/engine/executor`)**:
   Validates worker pool concurrency, step execution dispatch, retry state
-  machines, timeout enforcement, and context cancellation.
+  machines, timeout enforcement, and context cancellation. Resource-context
+  tests verify scheduler snapshots, defensive copies, per-product selection,
+  and complete inventory propagation into executor orchestration requests
+  independently of serialized planner and handoff payloads.
 - **Layered Cache (`internal/engine/cache`)**: Tests geometry, artifact, and
   metadata cache key derivation, table fingerprint sensitivity, and cache hit/skip
   logic.
@@ -181,6 +201,15 @@ record packaging.
   facts. This permanent proof covers the normal CLI path, not HTTP API
   target-mutation submission, and does not claim real FreeCAD-native mutation or
   observation.
+- **Declared Resources on the Normal CLI Path (`cmd/parametron/declared_resources_test.go`)**:
+  Reuses the controlled contract-package runtime participant to prove the
+  project-input, CLI, scheduler, executor, orchestration, attempt, and outcome
+  resource join. Success and retried runtime failure retain the complete
+  inventory and completed materialized coordinates; multiple products retain
+  distinct selections. Declared inventory does not depend on traversal edges
+  or automatically produce reference records. This Engine proof does not
+  establish FreeCAD-native recursive dependency discovery, native link
+  rebinding, or resource-qualified reference normalization.
 - **Opt-in Real FreeCAD Integration (`scripts/cad_runtime_integration_proof.py --mode real`)**:
   Executes live CAD mutation, recompute, export, and verification against
   `parametron-freecad` and FreeCAD binaries.
