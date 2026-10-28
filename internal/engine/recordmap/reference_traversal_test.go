@@ -9,6 +9,7 @@ import (
 	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/recordmap"
 	"parametron/internal/engine/recordpackage"
+	"parametron/internal/engine/resourcebinding"
 )
 
 const referenceTraversalRecordKey = "reference-traversal:job-a:step-a"
@@ -83,12 +84,20 @@ func referenceTraversalEdge(source, target, kind, state string) recordmap.Refere
 // validReferenceTraversalInput returns a base valid canonical mapping input with
 // one document_internal_reference edge between two object nodes.
 func validReferenceTraversalInput() recordmap.ReferenceTraversalMappingInput {
+	inventory, err := resourcebinding.New([]resourcebinding.Binding{
+		{ProjectID: "project-a", Kind: resourcebinding.ResourceKindModel, LogicalID: "main", SourceCoordinate: "models/main.FCStd", MaterializedCoordinate: "Assemblies/Main.FCStd"},
+	})
+	if err != nil {
+		panic(err)
+	}
 	return recordmap.ReferenceTraversalMappingInput{
-		RecordKey: referenceTraversalRecordKey,
+		Resources:              inventory,
+		ExpectedSourceDocument: "Assemblies/Main.FCStd",
+		RecordKey:              referenceTraversalRecordKey,
 		Traversal: recordmap.ReferenceTraversalRuntimeEvidence{
 			SchemaVersion:  "1.0",
 			Kind:           "raw_reference_traversal",
-			Boundary:       "engine_invocation",
+			Boundary:       "reference_traversal_entrypoint",
 			Operation:      "reference_traversal",
 			Status:         "succeeded",
 			SourceDocument: "Assemblies/Main.FCStd",
@@ -100,7 +109,7 @@ func validReferenceTraversalInput() recordmap.ReferenceTraversalMappingInput {
 				referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", "resolved"),
 			},
 			Diagnostics: []recordmap.ReferenceTraversalRuntimeDiagnostic{
-				{Severity: "warning", Code: "unsupported_reference_value_shape", Message: "note", Stage: strPtr("reference_discovery")},
+				{Severity: "info", Code: "traversal_note", Message: "note", Stage: strPtr("reference_discovery")},
 			},
 		},
 	}
@@ -171,15 +180,15 @@ func TestMapReferenceTraversalInternalReferenceMapsToComponent(t *testing.T) {
 		t.Fatalf("Role = %q, want empty", edge.Role)
 	}
 
-	if edge.Source.Path != "Assemblies/Main.FCStd" || edge.Source.Name != "Bracket" {
-		t.Fatalf("Source = %#v, want Path=Assemblies/Main.FCStd Name=Bracket", edge.Source)
+	if edge.Source.Path != "" || edge.Source.Resource == nil || edge.Source.Resource.LogicalID != "main" || edge.Source.Name != "Bracket" {
+		t.Fatalf("Source = %#v, want declared main resource and native name Bracket", edge.Source)
 	}
-	if edge.Target.Path != "Assemblies/Main.FCStd" || edge.Target.Name != "Fastener" {
-		t.Fatalf("Target = %#v, want Path=Assemblies/Main.FCStd Name=Fastener", edge.Target)
+	if edge.Target.Path != "" || edge.Target.Resource == nil || edge.Target.Resource.LogicalID != "main" || edge.Target.Name != "Fastener" {
+		t.Fatalf("Target = %#v, want declared main resource and native name Fastener", edge.Target)
 	}
 
-	// Raw label/objectType/node-id/sourceProperty/referenceMechanism/diagnostic/status
-	// material must not leak into normalized identity or role fields.
+	// Labels, lookup IDs and diagnostic prose must not substitute for native
+	// endpoint identity. Property and mechanism remain neutral discriminators.
 	forbidden := []string{
 		"Bracket (renamed label)", "Fastener (renamed label)",
 		"Part::FeaturePython", "object:raw-runtime-node-source", "object:raw-runtime-node-target",
@@ -272,23 +281,25 @@ func TestMapReferenceTraversalExternalFileMapsToExternal(t *testing.T) {
 	}
 }
 
-// --- 4/5: raw state compression matrix + unknown state rejection ---------
+// --- 4/5: preserved native states and unknown state rejection -------------
 
-func TestMapReferenceTraversalStateCompressionMatrix(t *testing.T) {
+func TestMapReferenceTraversalPreservesResolutionMatrix(t *testing.T) {
 	tests := []struct {
 		rawState   string
 		wantResult recordcontract.ReferenceResolutionState
 	}{
 		{"resolved", recordcontract.ReferenceResolutionResolved},
-		{"missing", recordcontract.ReferenceResolutionUnresolved},
+		{"missing", recordcontract.ReferenceResolutionMissing},
 		{"unresolved", recordcontract.ReferenceResolutionUnresolved},
-		{"skipped", recordcontract.ReferenceResolutionUnresolved},
-		{"failed", recordcontract.ReferenceResolutionUnresolved},
+		{"skipped", recordcontract.ReferenceResolutionSkipped},
+		{"failed", recordcontract.ReferenceResolutionFailed},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.rawState, func(t *testing.T) {
 			input := validReferenceTraversalInput()
+			input.Traversal.Nodes[1].State = tt.rawState
+			input.Traversal.Nodes[1].Diagnostic = strPtr("target state evidence")
 			input.Traversal.Edges = []recordmap.ReferenceTraversalRuntimeEdge{
 				referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", tt.rawState),
 			}
@@ -335,6 +346,13 @@ func TestMapReferenceTraversalEdgeKindMatrix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.rawKind, func(t *testing.T) {
 			input := validReferenceTraversalInput()
+			if tt.rawKind != "document_internal_reference" {
+				input.Traversal.Nodes[1].DocumentPath = "External/Spec.FCStd"
+			}
+			if tt.rawKind == "external_file_reference" {
+				input.Traversal.Nodes[1].Kind = "external_file"
+				input.Traversal.Nodes[1].ObjectName = nil
+			}
 			input.Traversal.Edges = []recordmap.ReferenceTraversalRuntimeEdge{
 				referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", tt.rawKind, "resolved"),
 			}
@@ -397,7 +415,7 @@ func TestMapReferenceTraversalNodeKindsAccepted(t *testing.T) {
 				target,
 			}
 			input.Traversal.Edges = []recordmap.ReferenceTraversalRuntimeEdge{
-				referenceTraversalEdge("object:raw-runtime-node-source", target.ID, "document_internal_reference", "resolved"),
+				referenceTraversalEdge("object:raw-runtime-node-source", target.ID, map[bool]string{true: "external_file_reference", false: "external_document_reference"}[target.Kind == "external_file"], "resolved"),
 			}
 			record := mapReferenceTraversalRecord(t, input)
 			if len(record.Reference.Edges) != 1 {
@@ -829,7 +847,7 @@ func TestMapReferenceTraversalProvenanceEvidenceDedupe(t *testing.T) {
 
 // --- 18/19: zero-edge behavior ----------------------------------------------
 
-func TestMapReferenceTraversalZeroEdgesReturnsNilRecordNoError(t *testing.T) {
+func TestMapReferenceTraversalZeroEdgesRetainsCompleteRecord(t *testing.T) {
 	input := validReferenceTraversalInput()
 	input.Traversal.Edges = []recordmap.ReferenceTraversalRuntimeEdge{}
 
@@ -837,16 +855,16 @@ func TestMapReferenceTraversalZeroEdgesReturnsNilRecordNoError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MapReferenceTraversalToReferenceRecord(zero edges) returned error: %v", err)
 	}
-	if record != nil {
-		t.Fatalf("record = %#v, want nil", record)
+	if record == nil || record.Reference.Completeness != "complete" || len(record.Reference.Edges) != 0 {
+		t.Fatalf("missing complete empty record: %#v", record)
 	}
 
 	output, err := recordmap.MapReferenceTraversal(input)
 	if err != nil {
 		t.Fatalf("MapReferenceTraversal(zero edges) returned error: %v", err)
 	}
-	if output.ReferenceRecord != nil {
-		t.Fatalf("output.ReferenceRecord = %#v, want nil", output.ReferenceRecord)
+	if !reflect.DeepEqual(output.ReferenceRecord, record) {
+		t.Fatal("wrapper lost empty traversal record")
 	}
 }
 
@@ -877,7 +895,7 @@ func TestMapReferenceTraversalZeroEdgesStillValidatesProvenance(t *testing.T) {
 
 // --- 20/21: normalized duplicate collapse ------------------------------------
 
-func TestMapReferenceTraversalDuplicateCollapsePropertyAndMechanismLoss(t *testing.T) {
+func TestMapReferenceTraversalPreservesPropertyAndMechanism(t *testing.T) {
 	input := validReferenceTraversalInput()
 	edgeA := recordmap.ReferenceTraversalRuntimeEdge{
 		Source:             "object:raw-runtime-node-source",
@@ -901,27 +919,23 @@ func TestMapReferenceTraversalDuplicateCollapsePropertyAndMechanismLoss(t *testi
 	}
 
 	record := mapReferenceTraversalRecord(t, input)
-	if len(record.Reference.Edges) != 1 {
-		t.Fatalf("len(Edges) = %d, want 1 (normalized duplicates collapsed)", len(record.Reference.Edges))
+	if len(record.Reference.Edges) != 2 {
+		t.Fatalf("len(Edges) = %d, want 2 discriminator-qualified relationships", len(record.Reference.Edges))
 	}
 	if record.Reference.Edges[0].Role != "" {
 		t.Fatalf("Role = %q, want empty despite raw property/mechanism data", record.Reference.Edges[0].Role)
 	}
 }
 
-func TestMapReferenceTraversalDuplicateCollapseStateCompression(t *testing.T) {
+func TestMapReferenceTraversalConflictingStatesRejected(t *testing.T) {
 	input := validReferenceTraversalInput()
-	edgeA := referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", "missing")
-	edgeB := referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", "failed")
-	input.Traversal.Edges = []recordmap.ReferenceTraversalRuntimeEdge{edgeA, edgeB}
-
-	record := mapReferenceTraversalRecord(t, input)
-	if len(record.Reference.Edges) != 1 {
-		t.Fatalf("len(Edges) = %d, want 1 (missing/failed both compress to unresolved)", len(record.Reference.Edges))
+	input.Traversal.Nodes[1].State = "unresolved"
+	input.Traversal.Edges = []recordmap.ReferenceTraversalRuntimeEdge{
+		referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", "missing"),
+		referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", "failed"),
 	}
-	if record.Reference.Edges[0].Resolution != recordcontract.ReferenceResolutionUnresolved {
-		t.Fatalf("Resolution = %q, want unresolved", record.Reference.Edges[0].Resolution)
-	}
+	_, err := recordmap.MapReferenceTraversalToReferenceRecord(input)
+	assertInvalidReferenceTraversalMapping(t, err)
 }
 
 // --- 22: distinct normalized edges remain distinct ---------------------------
@@ -943,26 +957,21 @@ func TestMapReferenceTraversalDistinctEdgesRemainDistinct(t *testing.T) {
 
 	t.Run("different kind", func(t *testing.T) {
 		input := validReferenceTraversalInput()
+		input.Traversal.Nodes[1] = referenceTraversalExternalFileNode("target", "External/model.FCStd")
 		input.Traversal.Edges = []recordmap.ReferenceTraversalRuntimeEdge{
-			referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", "resolved"),
-			referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "external_document_reference", "resolved"),
+			referenceTraversalEdge(input.Traversal.Nodes[0].ID, "target", "external_document_reference", "resolved"),
+			referenceTraversalEdge(input.Traversal.Nodes[0].ID, "target", "external_file_reference", "resolved"),
 		}
 		record := mapReferenceTraversalRecord(t, input)
 		if len(record.Reference.Edges) != 2 {
-			t.Fatalf("len(Edges) = %d, want 2 distinct kinds", len(record.Reference.Edges))
+			t.Fatal("distinct native kinds collapsed")
 		}
 	})
-
-	t.Run("different resolution", func(t *testing.T) {
+	t.Run("different resolution conflicts", func(t *testing.T) {
 		input := validReferenceTraversalInput()
-		input.Traversal.Edges = []recordmap.ReferenceTraversalRuntimeEdge{
-			referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", "resolved"),
-			referenceTraversalEdge("object:raw-runtime-node-source", "object:raw-runtime-node-target", "document_internal_reference", "missing"),
-		}
-		record := mapReferenceTraversalRecord(t, input)
-		if len(record.Reference.Edges) != 2 {
-			t.Fatalf("len(Edges) = %d, want 2 distinct resolutions", len(record.Reference.Edges))
-		}
+		input.Traversal.Edges = append(input.Traversal.Edges, referenceTraversalEdge(input.Traversal.Nodes[0].ID, input.Traversal.Nodes[1].ID, "document_internal_reference", "missing"))
+		_, err := recordmap.MapReferenceTraversalToReferenceRecord(input)
+		assertInvalidReferenceTraversalMapping(t, err)
 	})
 }
 
@@ -1313,7 +1322,7 @@ func TestMapReferenceTraversalZeroEdgeCanonicalContextValidation(t *testing.T) {
 		return input
 	}
 
-	t.Run("valid one-sided linkage and provenance-only digest returns nil record no error", func(t *testing.T) {
+	t.Run("valid one-sided linkage and provenance-only digest retains record", func(t *testing.T) {
 		input := zeroEdgeInput()
 		input.Linkage = recordmap.ReferenceTraversalMappingLinkage{JobID: "job-a", ProductKey: "product-a", StepRef: "step-a"}
 		input.Provenance.Evidence = []recordcontract.EvidenceReference{
@@ -1324,8 +1333,8 @@ func TestMapReferenceTraversalZeroEdgeCanonicalContextValidation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error = %v, want nil", err)
 		}
-		if record != nil {
-			t.Fatalf("record = %#v, want nil", record)
+		if record == nil || record.Reference.Completeness != "complete" {
+			t.Fatalf("missing complete empty record: %#v", record)
 		}
 	})
 

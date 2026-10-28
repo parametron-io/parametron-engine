@@ -1504,14 +1504,14 @@ func TestCLIProjectRun_EmitsRecordPackageFromNormalRun(t *testing.T) {
 func validReferenceTraversalJSONFixture() []byte {
 	return []byte(`{
   "schemaVersion":  "1.0",
-  "kind": "reference-traversal",
-  "boundary": "internal",
-  "operation": "resolve",
+  "kind": "raw_reference_traversal",
+  "boundary": "reference_traversal_entrypoint",
+  "operation": "reference_traversal",
   "status": "succeeded",
-  "sourceDocument": "Widget.FCStd",
+  "sourceDocument": "source/box.FCStd",
   "nodes": [
-    {"sequence": 0, "id": "n1", "kind": "document", "state": "resolved", "documentPath": "Widget.FCStd", "objectName": null, "objectType": null, "label": null, "diagnostic": null},
-    {"sequence": 1, "id": "n2", "kind": "object", "state": "resolved", "documentPath": "Widget.FCStd", "objectName": "Body", "objectType": "PartDesign::Body", "label": "Body", "diagnostic": null}
+    {"sequence": 0, "id": "n1", "kind": "document", "state": "resolved", "documentPath": "source/box.FCStd", "objectName": null, "objectType": null, "label": null, "diagnostic": null},
+    {"sequence": 1, "id": "n2", "kind": "object", "state": "resolved", "documentPath": "source/box.FCStd", "objectName": "Body", "objectType": "PartDesign::Body", "label": "Body", "diagnostic": null}
   ],
   "edges": [
     {"sequence": 0, "source": "n1", "target": "n2", "kind": "document_internal_reference", "sourceProperty": "Group", "referenceMechanism": "App::PropertyLinkList", "state": "resolved", "diagnostic": null}
@@ -1803,7 +1803,7 @@ func TestCLIProjectRun_InvalidReferenceTraversalFailsPackageEmissionAndCache(t *
 	installControlledAlignedRuntime(t, "success")
 	// Unsupported schema version: syntactically valid, strictly-decodable
 	// JSON that nonetheless violates the mapper contract.
-	invalidTraversal := []byte(`{"schemaVersion":"9.9","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
+	invalidTraversal := []byte(`{"schemaVersion":"9.9","kind":"raw_reference_traversal","boundary":"reference_traversal_entrypoint","operation":"reference_traversal","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
 	t.Setenv("PARAMETRON_TASK13_RUNTIME_TRAVERSAL_JSON", string(invalidTraversal))
 
 	resetGlobals()

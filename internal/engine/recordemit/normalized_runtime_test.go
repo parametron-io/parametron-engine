@@ -644,7 +644,7 @@ func TestEmitRunPackage_CADRuntime_ArtifactsObservationVerificationAndReferenceT
 			testArtifact("art-csv", artifact.ArtifactTypeCSV, "Widget.csv", digestOf("b")),
 		},
 		CADRuntime:         material.evidence(),
-		ReferenceTraversal: &recordemit.ReferenceTraversalRunEvidence{Content: traversal, JobID: "job-1", ProductKey: "Widget", StepRef: "step-cad"},
+		ReferenceTraversal: &recordemit.ReferenceTraversalRunEvidence{Resources: traversalInventory(t), ExpectedSourceDocument: "Widget.FCStd", Content: traversal, JobID: "job-1", ProductKey: "Widget", StepRef: "step-cad"},
 	})
 
 	gotFamilies := map[string]int{}

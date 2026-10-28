@@ -52,7 +52,9 @@ type CADRuntimeFailureOutcome struct {
 }
 
 type CADRuntimeOutcome struct {
-	Resources              resourcebinding.Inventory `json:"-"`
+	Resources resourcebinding.Inventory `json:"-"`
+	// SourceDocument is the prepared contract-relative source coordinate.
+	SourceDocument         string
 	AttemptID              string
 	JobID                  string
 	ProductKey             string
@@ -162,8 +164,9 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 	attempt := run.Runtime.ObservationRequest.Manifest.Attempt
 	identity := attempt.Identity
 	outcome := &CADRuntimeOutcome{
-		Resources: attempt.Resources,
-		AttemptID: identity.ID, JobID: identity.JobID, ProductKey: identity.ProductKey,
+		Resources:      attempt.Resources,
+		SourceDocument: attempt.Layout.SourceDocument,
+		AttemptID:      identity.ID, JobID: identity.JobID, ProductKey: identity.ProductKey,
 		StepID: identity.StepID, Attempt: identity.Attempt, Adapter: identity.Adapter,
 		WorkingCopyDir:         run.Runtime.ExecutionRequest.WorkingCopyDir,
 		ObservationRequestPath: run.Runtime.ExecutionRequest.ObservationRequestPath,

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"parametron/internal/engine/recordmap"
 	"parametron/internal/engine/recordpackage"
 	"parametron/internal/engine/report"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/verification"
 )
 
@@ -236,9 +238,9 @@ func syntheticMetadata(planHash string) *metadata.Metadata {
 func referenceTraversalJSON(edges string) []byte {
 	return []byte(fmt.Sprintf(`{
   "schemaVersion":   "1.0",
-  "kind": "reference-traversal",
-  "boundary": "internal",
-  "operation":    "resolve",
+  "kind": "raw_reference_traversal",
+  "boundary": "reference_traversal_entrypoint",
+  "operation":    "reference_traversal",
   "status": "succeeded",
   "sourceDocument": "Widget.FCStd",
   "nodes": [
@@ -266,7 +268,7 @@ func TestEmitRunPackage_ReferenceTraversal_ProducesValidatedRecordAndRawEvidence
 		Report:   syntheticSuccessReport(planHash),
 		Metadata: syntheticMetadata(planHash),
 		ReferenceTraversal: &recordemit.ReferenceTraversalRunEvidence{
-			Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
+			Resources: traversalInventory(t), ExpectedSourceDocument: "Widget.FCStd", Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
 		},
 	}); err != nil {
 		t.Fatalf("EmitRunPackage returned error: %v", err)
@@ -347,7 +349,7 @@ func TestEmitRunPackage_ReferenceTraversal_ProducesValidatedRecordAndRawEvidence
 	}
 }
 
-func TestEmitRunPackage_ReferenceTraversal_ZeroEdgesOmitsRecordButKeepsRawEvidence(t *testing.T) {
+func TestEmitRunPackage_ReferenceTraversal_ZeroEdgesEmitsCompleteRecordAndRawEvidence(t *testing.T) {
 	runRoot := t.TempDir()
 	planHash := "traversal-zero-edges"
 	raw := referenceTraversalJSON("")
@@ -357,7 +359,7 @@ func TestEmitRunPackage_ReferenceTraversal_ZeroEdgesOmitsRecordButKeepsRawEviden
 		PlanHash: planHash,
 		Report:   syntheticSuccessReport(planHash),
 		ReferenceTraversal: &recordemit.ReferenceTraversalRunEvidence{
-			Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
+			Resources: traversalInventory(t), ExpectedSourceDocument: "Widget.FCStd", Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
 		},
 	}); err != nil {
 		t.Fatalf("EmitRunPackage returned error: %v", err)
@@ -365,17 +367,24 @@ func TestEmitRunPackage_ReferenceTraversal_ZeroEdgesOmitsRecordButKeepsRawEviden
 
 	packageRoot := filepath.Join(runRoot, recordpackage.PackageDirectoryName)
 	assertEmitFileExists(t, packageRoot, recordpackage.RawRuntimeReferenceTraversalContractPath())
-	if _, err := os.Stat(filepath.Join(packageRoot, filepath.FromSlash(recordpackage.MustRecordContractPath("reference")))); !os.IsNotExist(err) {
-		t.Fatalf("expected no reference record file for zero-edge traversal, stat err=%v", err)
+	referenceBytes := readEmitPackageFile(t, packageRoot, recordpackage.MustRecordContractPath("reference"))
+	var record recordcontract.ReferenceRecord
+	if err := json.Unmarshal(referenceBytes, &record); err != nil {
+		t.Fatal(err)
 	}
-
+	if err := recordcontract.ValidateReferenceRecord(record); err != nil {
+		t.Fatal(err)
+	}
+	if record.Reference.Completeness != "complete" || len(record.Reference.Edges) != 0 || record.Reference.Source.Resource.LogicalID != "widget" {
+		t.Fatalf("invalid empty traversal: %#v", record.Reference)
+	}
+	if !bytes.Equal(readEmitPackageFile(t, packageRoot, recordpackage.RawRuntimeReferenceTraversalContractPath()), raw) {
+		t.Fatal("raw bytes changed")
+	}
 	manifest := readEmitManifest(t, packageRoot)
 	assertEmitRawEvidence(t, manifest, recordpackage.RawRuntimeReferenceTraversalContractPath())
-	for _, record := range manifest.Records {
-		if record.Family == "reference" {
-			t.Fatalf("manifest indexes a reference record for zero-edge traversal: %#v", record)
-		}
-	}
+	assertEmitManifestRecord(t, manifest, "reference", recordpackage.MustRecordContractPath("reference"), "engine-run:"+planHash+":reference")
+
 }
 
 func TestEmitRunPackage_ReferenceTraversal_MalformedJSONFailsClosed(t *testing.T) {
@@ -401,14 +410,14 @@ func TestEmitRunPackage_ReferenceTraversal_MalformedJSONFailsClosed(t *testing.T
 func TestEmitRunPackage_ReferenceTraversal_UnknownFieldRejected(t *testing.T) {
 	runRoot := t.TempDir()
 	planHash := "traversal-unknown-field"
-	raw := []byte(`{"schemaVersion":"1.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[],"unexpectedField":true}`)
+	raw := []byte(`{"schemaVersion":"1.0","kind":"raw_reference_traversal","boundary":"reference_traversal_entrypoint","operation":"reference_traversal","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[],"unexpectedField":true}`)
 
 	err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
 		RunRoot:  runRoot,
 		PlanHash: planHash,
 		Report:   syntheticSuccessReport(planHash),
 		ReferenceTraversal: &recordemit.ReferenceTraversalRunEvidence{
-			Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
+			Resources: traversalInventory(t), ExpectedSourceDocument: "Widget.FCStd", Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
 		},
 	})
 	if err == nil {
@@ -419,7 +428,7 @@ func TestEmitRunPackage_ReferenceTraversal_UnknownFieldRejected(t *testing.T) {
 func TestEmitRunPackage_ReferenceTraversal_TrailingJSONRejected(t *testing.T) {
 	runRoot := t.TempDir()
 	planHash := "traversal-trailing"
-	valid := `{"schemaVersion":"1.0","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`
+	valid := `{"schemaVersion":"1.0","kind":"raw_reference_traversal","boundary":"reference_traversal_entrypoint","operation":"reference_traversal","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`
 	raw := []byte(valid + "\ntrue\n")
 
 	err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
@@ -427,7 +436,7 @@ func TestEmitRunPackage_ReferenceTraversal_TrailingJSONRejected(t *testing.T) {
 		PlanHash: planHash,
 		Report:   syntheticSuccessReport(planHash),
 		ReferenceTraversal: &recordemit.ReferenceTraversalRunEvidence{
-			Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
+			Resources: traversalInventory(t), ExpectedSourceDocument: "Widget.FCStd", Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
 		},
 	})
 	if err == nil {
@@ -440,14 +449,14 @@ func TestEmitRunPackage_ReferenceTraversal_MapperInvalidPayloadFailsClosed(t *te
 	planHash := "traversal-mapper-invalid"
 	// A syntactically valid, strictly-decodable payload with an unsupported
 	// schema version violates the mapper contract, not the JSON decoder.
-	raw := []byte(`{"schemaVersion":"9.9","kind":"reference-traversal","boundary":"internal","operation":"resolve","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
+	raw := []byte(`{"schemaVersion":"9.9","kind":"raw_reference_traversal","boundary":"reference_traversal_entrypoint","operation":"reference_traversal","status":"succeeded","sourceDocument":"Widget.FCStd","nodes":[],"edges":[],"diagnostics":[]}`)
 
 	err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
 		RunRoot:  runRoot,
 		PlanHash: planHash,
 		Report:   syntheticSuccessReport(planHash),
 		ReferenceTraversal: &recordemit.ReferenceTraversalRunEvidence{
-			Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
+			Resources: traversalInventory(t), ExpectedSourceDocument: "Widget.FCStd", Content: raw, JobID: "job-1", ProductKey: "widget", StepRef: "2",
 		},
 	})
 	if err == nil {
@@ -652,4 +661,28 @@ func TestEmitRunPackage_CADRuntime_DoesNotFallBackToRunRootGuess(t *testing.T) {
 			}
 		}
 	})
+}
+
+func traversalInventory(t *testing.T) resourcebinding.Inventory {
+	t.Helper()
+	inventory, err := resourcebinding.New([]resourcebinding.Binding{{ProjectID: "project-a", Kind: resourcebinding.ResourceKindModel, LogicalID: "widget", SourceCoordinate: "models/Widget.FCStd", MaterializedCoordinate: "Widget.FCStd"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return inventory
+}
+
+func TestEmitRunPackage_ReferenceTraversal_MalformedDiscriminatorRejected(t *testing.T) {
+	for _, field := range []string{"sourceProperty", "referenceMechanism"} {
+		t.Run(field, func(t *testing.T) {
+			edge := strings.TrimSuffix(validReferenceTraversalEdgeJSON(), "}") + "," + fmt.Sprintf("%q:123}", field)
+			err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
+				RunRoot: t.TempDir(), PlanHash: "malformed-discriminator", Report: syntheticSuccessReport("malformed-discriminator"),
+				ReferenceTraversal: &recordemit.ReferenceTraversalRunEvidence{Resources: traversalInventory(t), ExpectedSourceDocument: "Widget.FCStd", Content: referenceTraversalJSON(edge)},
+			})
+			if err == nil || !strings.Contains(err.Error(), "cannot unmarshal number") {
+				t.Fatalf("malformed discriminator was not rejected at JSON intake: %v", err)
+			}
+		})
+	}
 }
