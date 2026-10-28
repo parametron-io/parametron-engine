@@ -6,8 +6,13 @@ record packaging.
 
 ## Core Testing Philosophy
 
-- **Deterministic identity**: Equivalent inputs must yield byte-identical plans,
-  hashes, canonical JSON, and normalized records.
+- **Deterministic identity**: Equivalent complete contract inputs must yield
+  byte-identical plans, hashes, canonical JSON, and normalized records. Native
+  reference relationship keys and ordering remain stable across equivalent
+  accepted relationships, including relocation and evidence reordering.
+  `ReferenceRecord.Identity` remains evidence-sensitive under the shared
+  `DeriveIdentity` contract: differing exact raw evidence digests can change
+  record identity and bytes even when relationship keys are identical.
 - **Contract boundary isolation**: Package boundaries (such as verification,
   record mapping, and runtime capability) are tested with unit suites using typed
   models rather than live subprocesses.
@@ -208,8 +213,21 @@ record packaging.
   inventory and completed materialized coordinates; multiple products retain
   distinct selections. Declared inventory does not depend on traversal edges
   or automatically produce reference records. This Engine proof does not
-  establish FreeCAD-native recursive dependency discovery, native link
-  rebinding, or resource-qualified reference normalization.
+  establish FreeCAD-native recursive dependency discovery or native link
+  rebinding. Resource-qualified normalization is proved separately by the
+  reference mapping, contract, emission, and controlled CLI suites below.
+- **Resource-qualified Reference Proof (`internal/engine/recordmap`, `internal/engine/recordcontract`, `internal/engine/recordemit`, `cmd/parametron/reference_structure_test.go`)**:
+  Permanent tests cover completed finite-inventory joins, selected prepared
+  source correlation, source aliases, same-name objects in different resources,
+  independent property/mechanism discrimination, deterministic duplicate and
+  conflict handling, native resolution, explicit unqualified targets, and
+  complete/incomplete/unavailable empty traversal records. The controlled CLI
+  participant returns raw evidence through the normal single-candidate path;
+  Engine preserves exact bytes and SHA-256 provenance, with stable relationship
+  keys but evidence-sensitive record identity across relocated/reordered inputs.
+  These are Engine contract proofs, not real FreeCAD execution or proof of
+  occurrence identity, quantities, recursive discovery, automatic external
+  mapping population, or general multi-outcome aggregation.
 - **Opt-in Real FreeCAD Integration (`scripts/cad_runtime_integration_proof.py --mode real`)**:
   Executes live CAD mutation, recompute, export, and verification against
   `parametron-freecad` and FreeCAD binaries.
