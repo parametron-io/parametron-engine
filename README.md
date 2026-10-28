@@ -152,6 +152,24 @@ evidence and is not treated as equivalent to normalized Engine records.
 Observation and verification records come from Engine-owned typed
 interpretation; raw bytes remain independently preserved for provenance.
 
+Traversal reference records qualify native endpoints with declared project,
+resource kind, and logical resource identity; native object names are scoped to
+that resource. Neutral native relationship kind, source property, and reference
+mechanism remain distinguishable. Equivalent duplicates canonicalize;
+contradictory evidence for one relationship identity fails deterministically.
+Native resolution and bounded traversal completeness remain explicit, including
+accepted empty traversals and undeclared or unsupported targets. Generic
+references, including the historical `component` kind, do not establish assembly
+occurrences, quantities, or BOM totals.
+
+Resource-qualified relationship keys and ordering are stable for equivalent
+accepted relationships, including declared-resource relocation. The containing
+`ReferenceRecord.Identity` remains evidence-sensitive: differing exact raw
+traversal bytes can change SHA-256 provenance and record identity. Exact bytes
+remain separate at `raw/runtime/prm.reference-traversal.json`. Normal successful
+execution adds traversal material only for exactly one eligible verified outcome;
+zero or multiple candidates add none.
+
 Adapter-native CAD failures are interpreted by the adapter/runtime boundary as
 a generic Engine CAD runtime failure outcome before `MapCADRuntimeFailure`
 produces the normalized `FailureRecord`. A valid, uniquely correlated failure

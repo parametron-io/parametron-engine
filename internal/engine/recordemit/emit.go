@@ -19,6 +19,7 @@ import (
 	"parametron/internal/engine/recordmap"
 	"parametron/internal/engine/recordpackage"
 	"parametron/internal/engine/report"
+	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/verification"
 )
 
@@ -49,10 +50,12 @@ type CADRuntimeRunEvidence struct {
 }
 
 type ReferenceTraversalRunEvidence struct {
-	Content    []byte
-	JobID      string
-	ProductKey string
-	StepRef    string
+	Resources              resourcebinding.Inventory
+	ExpectedSourceDocument string
+	Content                []byte
+	JobID                  string
+	ProductKey             string
+	StepRef                string
 }
 
 type rawEvidenceSource struct {
@@ -242,11 +245,13 @@ func mapReferenceTraversal(evidence *ReferenceTraversalRunEvidence, planHash str
 	}
 	digest := fmt.Sprintf("%x", sha256.Sum256(content))
 	mapped, err := recordmap.MapReferenceTraversal(recordmap.ReferenceTraversalMappingInput{
-		Traversal:            traversal,
-		RecordKey:            packageKeyForPlanHash(planHash) + ":reference",
-		Provenance:           provenance,
-		Linkage:              recordmap.ReferenceTraversalMappingLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
-		EvidenceDigestSHA256: digest,
+		Resources:              evidence.Resources,
+		ExpectedSourceDocument: evidence.ExpectedSourceDocument,
+		Traversal:              traversal,
+		RecordKey:              packageKeyForPlanHash(planHash) + ":reference",
+		Provenance:             provenance,
+		Linkage:                recordmap.ReferenceTraversalMappingLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
+		EvidenceDigestSHA256:   digest,
 	})
 	if err != nil {
 		return recordmap.ReferenceTraversalMappingOutput{}, recordpackage.RawEvidenceFile{}, fmt.Errorf("recordemit: map reference traversal: %w", err)

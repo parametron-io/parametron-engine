@@ -653,8 +653,10 @@ func referenceTraversalRunEvidence(execution scheduler.ExecutionResult, overallE
 			return nil
 		}
 		candidate = &recordemit.ReferenceTraversalRunEvidence{
-			Content: append([]byte(nil), outcome.ReferenceTraversalJSON...),
-			JobID:   outcome.JobID, ProductKey: outcome.ProductKey, StepRef: outcome.StepID,
+			Resources:              outcome.Resources,
+			ExpectedSourceDocument: outcome.SourceDocument,
+			Content:                append([]byte(nil), outcome.ReferenceTraversalJSON...),
+			JobID:                  outcome.JobID, ProductKey: outcome.ProductKey, StepRef: outcome.StepID,
 		}
 	}
 	return candidate

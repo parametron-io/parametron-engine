@@ -3,8 +3,11 @@ package recordcontract
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
+
+	"parametron/internal/engine/resourcebinding"
 )
 
 // ReferenceKind is a normalized reference graph edge kind vocabulary value.
@@ -23,16 +26,33 @@ type ReferenceResolutionState string
 const (
 	ReferenceResolutionResolved   ReferenceResolutionState = "resolved"
 	ReferenceResolutionUnresolved ReferenceResolutionState = "unresolved"
+	ReferenceResolutionMissing    ReferenceResolutionState = "missing"
+	ReferenceResolutionSkipped    ReferenceResolutionState = "skipped"
+	ReferenceResolutionFailed     ReferenceResolutionState = "failed"
 )
 
-// ReferenceEndpoint captures normalized reference graph endpoint identity material.
+// ReferenceResource carries the existing declared resource identity tuple.
+type ReferenceResource struct {
+	ProjectID string                       `json:"projectId"`
+	Kind      resourcebinding.ResourceKind `json:"kind"`
+	LogicalID string                       `json:"logicalId"`
+}
+
+// ReferenceEndpoint identifies a native entity within a declared resource, or
+// explicitly retains an unqualified contract-relative target coordinate.
 type ReferenceEndpoint struct {
-	ID           string `json:"id,omitempty"`
-	Name         string `json:"name,omitempty"`
-	Path         string `json:"path,omitempty"`
-	AssetID      string `json:"assetId,omitempty"`
-	RevisionID   string `json:"revisionId,omitempty"`
-	DigestSHA256 string `json:"digestSha256,omitempty"`
+	Resource   *ReferenceResource `json:"resource,omitempty"`
+	NativeKind string             `json:"nativeKind,omitempty"`
+	// Qualification is declared, undeclared, or unsupported. Resolution describes
+	// native evidence independently of membership in the declared inventory.
+	Qualification string                   `json:"qualification,omitempty"`
+	Resolution    ReferenceResolutionState `json:"resolution,omitempty"`
+	ID            string                   `json:"id,omitempty"`
+	Name          string                   `json:"name,omitempty"`
+	Path          string                   `json:"path,omitempty"`
+	AssetID       string                   `json:"assetId,omitempty"`
+	RevisionID    string                   `json:"revisionId,omitempty"`
+	DigestSHA256  string                   `json:"digestSha256,omitempty"`
 }
 
 // ReferenceLinkage captures normalized job/product/step linkage material.
@@ -51,6 +71,12 @@ type ReferenceEvidence struct {
 
 // ReferenceEdge captures one normalized reference graph edge.
 type ReferenceEdge struct {
+	// NativeKind is a neutral discriminator. The historical coarse component
+	// kind does not establish an assembly occurrence or physical instance.
+	NativeKind         string  `json:"nativeKind,omitempty"`
+	SourceProperty     *string `json:"sourceProperty,omitempty"`
+	ReferenceMechanism *string `json:"referenceMechanism,omitempty"`
+
 	Kind       ReferenceKind            `json:"kind"`
 	Source     ReferenceEndpoint        `json:"source"`
 	Target     ReferenceEndpoint        `json:"target"`
@@ -62,6 +88,14 @@ type ReferenceEdge struct {
 
 // ReferenceSummary captures normalized reference graph payload material.
 type ReferenceSummary struct {
+	// Status retains succeeded/partial/failed runtime status. Completeness is
+	// complete/incomplete/unavailable for supported scope and resource joins;
+	// it does not claim recursive native dependency closure.
+	Status       string             `json:"status,omitempty"`
+	Completeness string             `json:"completeness,omitempty"`
+	Unsupported  bool               `json:"unsupported,omitempty"`
+	Source       *ReferenceEndpoint `json:"source,omitempty"`
+
 	Edges []ReferenceEdge `json:"edges"`
 }
 
@@ -83,6 +117,11 @@ type ReferenceRecordInput struct {
 }
 
 type canonicalReferenceEndpoint struct {
+	Resource      *ReferenceResource       `json:"resource,omitempty"`
+	NativeKind    string                   `json:"nativeKind,omitempty"`
+	Qualification string                   `json:"qualification,omitempty"`
+	Resolution    ReferenceResolutionState `json:"resolution,omitempty"`
+
 	ID           string `json:"id,omitempty"`
 	Name         string `json:"name,omitempty"`
 	Path         string `json:"path,omitempty"`
@@ -104,6 +143,10 @@ type canonicalReferenceEvidence struct {
 }
 
 type canonicalReferenceEdge struct {
+	NativeKind         string  `json:"nativeKind,omitempty"`
+	SourceProperty     *string `json:"sourceProperty,omitempty"`
+	ReferenceMechanism *string `json:"referenceMechanism,omitempty"`
+
 	Kind       string                     `json:"kind"`
 	Source     canonicalReferenceEndpoint `json:"source"`
 	Target     canonicalReferenceEndpoint `json:"target"`
@@ -114,6 +157,11 @@ type canonicalReferenceEdge struct {
 }
 
 type canonicalReferenceSummary struct {
+	Status       string             `json:"status,omitempty"`
+	Completeness string             `json:"completeness,omitempty"`
+	Unsupported  bool               `json:"unsupported,omitempty"`
+	Source       *ReferenceEndpoint `json:"source,omitempty"`
+
 	Edges []canonicalReferenceEdge `json:"edges"`
 }
 
@@ -214,6 +262,7 @@ func normalizeReferenceRecordInput(input ReferenceRecordInput) normalizedReferen
 
 func normalizeReferenceSummary(summary ReferenceSummary) ReferenceSummary {
 	return ReferenceSummary{
+		Status: summary.Status, Completeness: summary.Completeness, Unsupported: summary.Unsupported, Source: cloneReferenceEndpoint(summary.Source),
 		Edges: normalizeReferenceEdges(summary.Edges),
 	}
 }
@@ -229,64 +278,36 @@ func normalizeReferenceEdges(edges []ReferenceEdge) []ReferenceEdge {
 	}
 
 	sort.Slice(out, func(i, j int) bool {
-		left := out[i]
-		right := out[j]
-		if left.Kind != right.Kind {
-			return left.Kind < right.Kind
+		if out[i].NativeKind == "" && out[j].NativeKind == "" {
+			if n := slices.Compare(legacyReferenceOrder(out[i]), legacyReferenceOrder(out[j])); n != 0 {
+				return n < 0
+			}
 		}
-		if left.Source.ID != right.Source.ID {
-			return left.Source.ID < right.Source.ID
+		left, _ := referenceEdgeKey(out[i])
+		right, _ := referenceEdgeKey(out[j])
+		if left != right {
+			return left < right
 		}
-		if left.Source.Path != right.Source.Path {
-			return left.Source.Path < right.Source.Path
-		}
-		if left.Source.AssetID != right.Source.AssetID {
-			return left.Source.AssetID < right.Source.AssetID
-		}
-		if left.Source.Name != right.Source.Name {
-			return left.Source.Name < right.Source.Name
-		}
-		if left.Target.ID != right.Target.ID {
-			return left.Target.ID < right.Target.ID
-		}
-		if left.Target.Path != right.Target.Path {
-			return left.Target.Path < right.Target.Path
-		}
-		if left.Target.AssetID != right.Target.AssetID {
-			return left.Target.AssetID < right.Target.AssetID
-		}
-		if left.Target.Name != right.Target.Name {
-			return left.Target.Name < right.Target.Name
-		}
-		if left.Role != right.Role {
-			return left.Role < right.Role
-		}
-		if left.Resolution != right.Resolution {
-			return left.Resolution < right.Resolution
-		}
-		if left.Linkage.ProductKey != right.Linkage.ProductKey {
-			return left.Linkage.ProductKey < right.Linkage.ProductKey
-		}
-		if left.Linkage.JobID != right.Linkage.JobID {
-			return left.Linkage.JobID < right.Linkage.JobID
-		}
-		if left.Linkage.StepRef != right.Linkage.StepRef {
-			return left.Linkage.StepRef < right.Linkage.StepRef
-		}
-		if left.Evidence.SourceKind != right.Evidence.SourceKind {
-			return left.Evidence.SourceKind < right.Evidence.SourceKind
-		}
-		if left.Evidence.SourceRef != right.Evidence.SourceRef {
-			return left.Evidence.SourceRef < right.Evidence.SourceRef
-		}
-		return left.Evidence.DigestSHA256 < right.Evidence.DigestSHA256
+		l, _ := json.Marshal(canonicalReferenceEdgeFromNormalized(out[i]))
+		r, _ := json.Marshal(canonicalReferenceEdgeFromNormalized(out[j]))
+		return string(l) < string(r)
 	})
 
 	return out
 }
 
 func normalizeReferenceEdge(edge ReferenceEdge) ReferenceEdge {
+	if edge.NativeKind != "" {
+		edge.Source = normalizeReferenceEndpoint(edge.Source)
+		edge.Target = normalizeReferenceEndpoint(edge.Target)
+		edge.SourceProperty = cloneReferenceString(edge.SourceProperty)
+		edge.ReferenceMechanism = cloneReferenceString(edge.ReferenceMechanism)
+		edge.Linkage = normalizeReferenceLinkage(edge.Linkage)
+		edge.Evidence = normalizeReferenceEvidence(edge.Evidence)
+		return edge
+	}
 	return ReferenceEdge{
+		NativeKind: edge.NativeKind, SourceProperty: cloneReferenceString(edge.SourceProperty), ReferenceMechanism: cloneReferenceString(edge.ReferenceMechanism),
 		Kind:       NormalizeReferenceKind(edge.Kind),
 		Source:     normalizeReferenceEndpoint(edge.Source),
 		Target:     normalizeReferenceEndpoint(edge.Target),
@@ -298,7 +319,12 @@ func normalizeReferenceEdge(edge ReferenceEdge) ReferenceEdge {
 }
 
 func normalizeReferenceEndpoint(endpoint ReferenceEndpoint) ReferenceEndpoint {
+	if endpoint.NativeKind != "" {
+		endpoint.Resource = cloneReferenceResource(endpoint.Resource)
+		return endpoint
+	}
 	return ReferenceEndpoint{
+		Resource: cloneReferenceResource(endpoint.Resource), Qualification: endpoint.Qualification, Resolution: endpoint.Resolution,
 		ID:           trimString(endpoint.ID),
 		Name:         trimString(endpoint.Name),
 		Path:         trimString(endpoint.Path),
@@ -344,8 +370,8 @@ func knownReferenceKind(kind ReferenceKind) bool {
 }
 
 func knownReferenceResolutionState(state ReferenceResolutionState) bool {
-	switch NormalizeReferenceResolutionState(state) {
-	case ReferenceResolutionResolved, ReferenceResolutionUnresolved:
+	switch state {
+	case ReferenceResolutionResolved, ReferenceResolutionUnresolved, ReferenceResolutionMissing, ReferenceResolutionSkipped, ReferenceResolutionFailed:
 		return true
 	default:
 		return false
@@ -353,24 +379,27 @@ func knownReferenceResolutionState(state ReferenceResolutionState) bool {
 }
 
 func hasReferenceEndpointIdentity(endpoint ReferenceEndpoint) bool {
-	return endpoint.ID != "" ||
+	return endpoint.Resource != nil || endpoint.ID != "" ||
 		endpoint.Path != "" ||
 		endpoint.AssetID != "" ||
 		endpoint.Name != ""
 }
 
 func validateReferenceSummary(summary ReferenceSummary) error {
-	if len(summary.Edges) == 0 {
+	if len(summary.Edges) == 0 && summary.Status == "" {
 		return fmt.Errorf("%w: reference must contain at least one edge", ErrInvalidReferenceRecord)
 	}
 
+	if err := validateReferenceTraversalSummary(summary); err != nil {
+		return err
+	}
 	seen := make(map[string]struct{}, len(summary.Edges))
 	for i, edge := range summary.Edges {
 		if err := validateReferenceEdge(edge, i); err != nil {
 			return err
 		}
 
-		key, err := referenceEdgeDuplicateKey(edge)
+		key, err := referenceEdgeKey(edge)
 		if err != nil {
 			return err
 		}
@@ -384,6 +413,10 @@ func validateReferenceSummary(summary ReferenceSummary) error {
 }
 
 func validateReferenceEdge(edge ReferenceEdge, index int) error {
+	if err := validateNativeReferenceEdge(edge); err != nil {
+		return err
+	}
+
 	if edge.Kind == "" {
 		return fmt.Errorf("%w: edge %d kind is required", ErrInvalidReferenceRecord, index)
 	}
@@ -484,6 +517,7 @@ func referenceIdentityParts(input normalizedReferenceRecordInput) ([]IdentityPar
 
 func canonicalReferenceSummaryFromNormalized(summary ReferenceSummary) canonicalReferenceSummary {
 	return canonicalReferenceSummary{
+		Status: summary.Status, Completeness: summary.Completeness, Unsupported: summary.Unsupported, Source: cloneReferenceEndpoint(summary.Source),
 		Edges: canonicalReferenceEdgesFromNormalized(summary.Edges),
 	}
 }
@@ -498,6 +532,7 @@ func canonicalReferenceEdgesFromNormalized(edges []ReferenceEdge) []canonicalRef
 
 func canonicalReferenceEdgeFromNormalized(edge ReferenceEdge) canonicalReferenceEdge {
 	return canonicalReferenceEdge{
+		NativeKind: edge.NativeKind, SourceProperty: cloneReferenceString(edge.SourceProperty), ReferenceMechanism: cloneReferenceString(edge.ReferenceMechanism),
 		Kind:       string(edge.Kind),
 		Source:     canonicalReferenceEndpointFromNormalized(edge.Source),
 		Target:     canonicalReferenceEndpointFromNormalized(edge.Target),
@@ -518,6 +553,7 @@ func canonicalReferenceEdgeFromNormalized(edge ReferenceEdge) canonicalReference
 
 func canonicalReferenceEndpointFromNormalized(endpoint ReferenceEndpoint) canonicalReferenceEndpoint {
 	return canonicalReferenceEndpoint{
+		Resource: cloneReferenceResource(endpoint.Resource), NativeKind: endpoint.NativeKind, Qualification: endpoint.Qualification, Resolution: endpoint.Resolution,
 		ID:           endpoint.ID,
 		Name:         endpoint.Name,
 		Path:         endpoint.Path,
@@ -533,4 +569,219 @@ func referenceEdgeDuplicateKey(edge ReferenceEdge) (string, error) {
 		return "", fmt.Errorf("%w: marshal edge duplicate key material: %v", ErrInvalidReferenceRecord, err)
 	}
 	return string(data), nil
+}
+
+func cloneReferenceString(v *string) *string {
+	if v == nil {
+		return nil
+	}
+	copy := *v
+	return &copy
+}
+func cloneReferenceResource(v *ReferenceResource) *ReferenceResource {
+	if v == nil {
+		return nil
+	}
+	copy := *v
+	return &copy
+}
+func cloneReferenceEndpoint(v *ReferenceEndpoint) *ReferenceEndpoint {
+	if v == nil {
+		return nil
+	}
+	copy := normalizeReferenceEndpoint(*v)
+	return &copy
+}
+func exactReferenceString(v string) bool {
+	return v != "" && strings.TrimSpace(v) == v && !strings.ContainsRune(v, '\x00')
+}
+func invalidReference(message string) error {
+	return fmt.Errorf("%w: %s", ErrInvalidReferenceRecord, message)
+}
+
+func validateNativeReferenceEndpoint(e ReferenceEndpoint) error {
+	switch e.NativeKind {
+	case "object":
+		if !exactReferenceString(e.Name) {
+			return invalidReference("native object name is required")
+		}
+	case "document", "external_document", "external_file":
+		if e.Name != "" {
+			return invalidReference("non-object endpoint has object name")
+		}
+	default:
+		return invalidReference("invalid native entity kind")
+	}
+	if !knownReferenceResolutionState(e.Resolution) {
+		return invalidReference("invalid native entity resolution")
+	}
+	switch e.Qualification {
+	case "declared":
+		if e.Resource == nil || !exactReferenceString(e.Resource.ProjectID) || !exactReferenceString(e.Resource.LogicalID) || e.Resource.Kind != resourcebinding.ResourceKindModel || e.Path != "" {
+			return invalidReference("invalid declared resource endpoint")
+		}
+	case "undeclared", "unsupported":
+		if e.Resource != nil || resourcebinding.ValidateCoordinate(e.Path) != nil {
+			return invalidReference("invalid unqualified endpoint")
+		}
+	default:
+		return invalidReference("invalid resource qualification")
+	}
+	if e.ID != "" || e.AssetID != "" || e.RevisionID != "" || e.DigestSHA256 != "" {
+		return invalidReference("native identity cannot use unrelated endpoint identifiers")
+	}
+	return nil
+}
+
+func validateNativeReferenceEdge(e ReferenceEdge) error {
+	if e.NativeKind == "" {
+		if e.SourceProperty != nil || e.ReferenceMechanism != nil || e.Source.NativeKind != "" || e.Target.NativeKind != "" || e.Source.Resource != nil || e.Target.Resource != nil || e.Source.Qualification != "" || e.Target.Qualification != "" || e.Source.Resolution != "" || e.Target.Resolution != "" {
+			return invalidReference("native relationship kind is required")
+		}
+		return nil
+	}
+	expected := ReferenceKindExternal
+	switch e.NativeKind {
+	case "document_internal_reference":
+		expected = ReferenceKindComponent
+	case "external_document_reference", "external_file_reference":
+	default:
+		return invalidReference("invalid native relationship kind")
+	}
+	if e.Kind != expected || e.Role != "" {
+		return invalidReference("inconsistent native relationship kind or role")
+	}
+	if !knownReferenceResolutionState(e.Resolution) {
+		return invalidReference("invalid native relationship resolution")
+	}
+	for _, endpoint := range []ReferenceEndpoint{e.Source, e.Target} {
+		if err := validateNativeReferenceEndpoint(endpoint); err != nil {
+			return err
+		}
+	}
+	if e.Source.Qualification != "declared" || (e.Resolution == ReferenceResolutionResolved && (e.Source.Resolution != ReferenceResolutionResolved || e.Target.Resolution != ReferenceResolutionResolved)) || (e.Resolution == ReferenceResolutionMissing && e.Target.Resolution == ReferenceResolutionResolved) {
+		return invalidReference("inconsistent relationship endpoint state")
+	}
+	if e.NativeKind == "document_internal_reference" && (e.Target.Resource == nil || *e.Source.Resource != *e.Target.Resource) {
+		return invalidReference("internal relationship must remain in one declared resource")
+	}
+	if e.NativeKind != "document_internal_reference" && e.Target.Resource != nil && *e.Source.Resource == *e.Target.Resource {
+		return invalidReference("external relationship must target another resource")
+	}
+	if e.NativeKind == "external_file_reference" && e.Target.NativeKind != "external_file" {
+		return invalidReference("external file relationship requires file endpoint")
+	}
+	for _, value := range []*string{e.SourceProperty, e.ReferenceMechanism} {
+		if value != nil && !exactReferenceString(*value) {
+			return invalidReference("invalid native discriminator")
+		}
+	}
+	return nil
+}
+
+func validateReferenceTraversalSummary(s ReferenceSummary) error {
+	if s.Status == "" {
+		if s.Source != nil || s.Completeness != "" || s.Unsupported {
+			return invalidReference("traversal status is required")
+		}
+		for _, edge := range s.Edges {
+			if edge.NativeKind != "" {
+				return invalidReference("native traversal requires scope status")
+			}
+		}
+		return nil
+	}
+	if s.Source == nil {
+		return invalidReference("traversal source is required")
+	}
+	if err := validateNativeReferenceEndpoint(*s.Source); err != nil {
+		return err
+	}
+	if s.Source.Qualification != "declared" || s.Source.NativeKind != "document" {
+		return invalidReference("traversal source must be a declared document")
+	}
+	if s.Status != "failed" && s.Source.Resolution != ReferenceResolutionResolved {
+		return invalidReference("usable traversal requires resolved source document")
+	}
+	switch s.Status {
+	case "succeeded":
+		if s.Completeness != "complete" && s.Completeness != "incomplete" {
+			return invalidReference("invalid succeeded completeness")
+		}
+	case "partial":
+		if s.Completeness != "incomplete" {
+			return invalidReference("partial traversal must be incomplete")
+		}
+	case "failed":
+		if s.Completeness != "unavailable" || len(s.Edges) != 0 {
+			return invalidReference("failed traversal has no usable relationships")
+		}
+	default:
+		return invalidReference("invalid traversal status")
+	}
+	if s.Unsupported && s.Completeness == "complete" {
+		return invalidReference("unsupported scope cannot be complete")
+	}
+	for _, edge := range s.Edges {
+		if edge.NativeKind == "" {
+			return invalidReference("traversal requires native relationships")
+		}
+		if edge.Target.Qualification != "declared" && s.Completeness == "complete" {
+			return invalidReference("unqualified target requires incomplete scope")
+		}
+		if edge.Source.Resource == nil || *edge.Source.Resource != *s.Source.Resource {
+			return invalidReference("relationship source disagrees with traversal source")
+		}
+	}
+	return nil
+}
+
+// ReferenceRelationshipKey is canonical relationship identity, distinct from
+// evidence-sensitive record identity. State, linkage, sequence and evidence digest
+// are excluded. Unqualified targets use only accepted contract-relative coordinates.
+func ReferenceRelationshipKey(edge ReferenceEdge) (string, error) {
+	if edge.NativeKind == "" {
+		return "", invalidReference("resource-qualified native relationship is required")
+	}
+	if err := validateNativeReferenceEdge(edge); err != nil {
+		return "", err
+	}
+	type endpointKey struct {
+		Resource      *ReferenceResource `json:"resource,omitempty"`
+		Qualification string             `json:"qualification"`
+		Kind          string             `json:"kind"`
+		Name          string             `json:"name,omitempty"`
+		Coordinate    string             `json:"coordinate,omitempty"`
+	}
+	endpoint := func(e ReferenceEndpoint) endpointKey {
+		return endpointKey{e.Resource, e.Qualification, e.NativeKind, e.Name, e.Path}
+	}
+	value := struct {
+		Source    endpointKey `json:"source"`
+		Target    endpointKey `json:"target"`
+		Kind      string      `json:"kind"`
+		Property  *string     `json:"sourceProperty"`
+		Mechanism *string     `json:"referenceMechanism"`
+	}{endpoint(edge.Source), endpoint(edge.Target), edge.NativeKind, edge.SourceProperty, edge.ReferenceMechanism}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return "", fmt.Errorf("%w: relationship identity: %v", ErrInvalidReferenceRecord, err)
+	}
+	return string(data), nil
+}
+
+// Legacy generic reference records retain their established duplicate semantics.
+// New traversal records always use the resource-qualified relationship key.
+func referenceEdgeKey(edge ReferenceEdge) (string, error) {
+	if edge.NativeKind == "" {
+		return referenceEdgeDuplicateKey(edge)
+	}
+	return ReferenceRelationshipKey(edge)
+}
+
+func legacyReferenceOrder(e ReferenceEdge) []string {
+	return []string{string(e.Kind), e.Source.ID, e.Source.Path, e.Source.AssetID, e.Source.Name,
+		e.Target.ID, e.Target.Path, e.Target.AssetID, e.Target.Name, e.Role, string(e.Resolution),
+		e.Linkage.ProductKey, e.Linkage.JobID, e.Linkage.StepRef,
+		e.Evidence.SourceKind, e.Evidence.SourceRef, e.Evidence.DigestSHA256}
 }
