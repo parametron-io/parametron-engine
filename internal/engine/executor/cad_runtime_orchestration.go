@@ -9,6 +9,7 @@ import (
 	"parametron/internal/authoring/planner"
 	"parametron/internal/engine/adapter"
 	"parametron/internal/engine/artifact"
+	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/runtimecap"
 )
 
@@ -138,16 +139,17 @@ func (e *Executor) prepareCADRuntimeDispatch(plan *planner.ExecutionPlan) (*cadR
 	}
 
 	base := adapter.CADRuntimeOrchestrationRequest{
-		Resources:  e.resourceContext.Clone(),
-		JobID:      e.pkg.JobID,
-		ProductKey: e.pkg.ProductKey,
-		ProductDir: e.productDir,
-		StepID:     stepID,
-		Attempt:    1,
-		CSV:        cloneWriteCSVPayload(e.pkg.CSV),
-		Manifest:   cloneManifestPayload(e.pkg.Manifest),
-		CADRuntime: cloneRunCADRuntimePayload(payload),
-		Executable: selection,
+		OccurrenceObservation: recordcontract.CloneOccurrenceRequest(e.packageOptions.OccurrenceObservation),
+		Resources:             e.resourceContext.Clone(),
+		JobID:                 e.pkg.JobID,
+		ProductKey:            e.pkg.ProductKey,
+		ProductDir:            e.productDir,
+		StepID:                stepID,
+		Attempt:               1,
+		CSV:                   cloneWriteCSVPayload(e.pkg.CSV),
+		Manifest:              cloneManifestPayload(e.pkg.Manifest),
+		CADRuntime:            cloneRunCADRuntimePayload(payload),
+		Executable:            selection,
 	}
 	if err := adapter.ValidateCADRuntimeOrchestrationRequest(base); err != nil {
 		return nil, e.wrapCADRuntimeDispatchError(cadRuntimeDispatchStageRequestValidation, e.pkg.JobID, e.pkg.ProductKey, payload.Adapter, stepID, 0, err)
@@ -243,16 +245,17 @@ func (e *Executor) buildCADRuntimeOrchestrationRequest(
 	attempt int,
 ) adapter.CADRuntimeOrchestrationRequest {
 	return adapter.CADRuntimeOrchestrationRequest{
-		Resources:  cad.base.Resources.Clone(),
-		JobID:      cad.base.JobID,
-		ProductKey: cad.base.ProductKey,
-		ProductDir: cad.base.ProductDir,
-		StepID:     cad.base.StepID,
-		Attempt:    attempt,
-		CSV:        cloneWriteCSVPayload(cad.base.CSV),
-		Manifest:   cloneManifestPayload(cad.base.Manifest),
-		CADRuntime: cloneRunCADRuntimePayload(cad.base.CADRuntime),
-		Executable: cad.base.Executable,
+		OccurrenceObservation: recordcontract.CloneOccurrenceRequest(cad.base.OccurrenceObservation),
+		Resources:             cad.base.Resources.Clone(),
+		JobID:                 cad.base.JobID,
+		ProductKey:            cad.base.ProductKey,
+		ProductDir:            cad.base.ProductDir,
+		StepID:                cad.base.StepID,
+		Attempt:               attempt,
+		CSV:                   cloneWriteCSVPayload(cad.base.CSV),
+		Manifest:              cloneManifestPayload(cad.base.Manifest),
+		CADRuntime:            cloneRunCADRuntimePayload(cad.base.CADRuntime),
+		Executable:            cad.base.Executable,
 	}
 }
 
