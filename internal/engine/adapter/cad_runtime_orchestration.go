@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"parametron/internal/authoring/planner"
+	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/runtimecap"
 )
@@ -41,6 +42,8 @@ type CADRuntimeOrchestrationRequest struct {
 	// external reference coordinates. The runtime must never derive these
 	// identities from resolved working-copy paths.
 	ExternalTargets []ReferenceTraversalExternalTarget
+	// OccurrenceObservation is opt-in and is never derived from generic references.
+	OccurrenceObservation *recordcontract.OccurrenceRequest
 }
 
 // ReferenceTraversalExternalTarget maps one runtime-observable reference
@@ -86,6 +89,26 @@ func (e *CADRuntimeOrchestrationRequestError) Unwrap() error {
 // ValidateCADRuntimeOrchestrationRequest checks request completeness and
 // internal consistency without filesystem, process, or config side effects.
 func ValidateCADRuntimeOrchestrationRequest(req CADRuntimeOrchestrationRequest) error {
+	if req.OccurrenceObservation != nil {
+		if err := recordcontract.ValidateOccurrenceRequest(*req.OccurrenceObservation); err != nil {
+			return &CADRuntimeOrchestrationRequestError{Field: "OccurrenceObservation", Err: err}
+		}
+		if req.Resources == nil {
+			return &CADRuntimeOrchestrationRequestError{Field: "OccurrenceObservation", Err: fmt.Errorf("declared resource context required")}
+		}
+		selected := req.Resources.Selected()
+		parent := req.OccurrenceObservation.Scope.Parent.Resource
+		if selected.ProjectID != parent.ProjectID || selected.Kind != parent.Kind || selected.LogicalID != parent.LogicalID {
+			return &CADRuntimeOrchestrationRequestError{Field: "OccurrenceObservation", Err: fmt.Errorf("requested parent must belong to selected resource")}
+		}
+		for _, frame := range req.OccurrenceObservation.Scope.Context {
+			resource := frame.Parent.Resource
+			if _, err := req.Resources.Inventory().Lookup(resource.ProjectID, resource.Kind, resource.LogicalID); err != nil {
+				return &CADRuntimeOrchestrationRequestError{Field: "OccurrenceObservation", Err: err}
+			}
+		}
+
+	}
 	if req.Resources != nil {
 		selected := req.Resources.Selected()
 		// Source existence and filesystem containment are checked at preparation.

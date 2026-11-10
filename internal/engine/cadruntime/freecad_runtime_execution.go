@@ -174,6 +174,9 @@ func InvokeAndValidateFreeCADRuntime(
 	for _, artifact := range expectedArtifacts {
 		ownedPaths = append(ownedPaths, artifact.Path)
 	}
+	if req.OccurrenceObservation != nil {
+		ownedPaths = append(ownedPaths, filepath.Join(executionRequest.OutputDir, OccurrenceEvidenceFilename))
+	}
 	for _, ownedPath := range ownedPaths {
 		if err := removeStaleFreeCADRuntimeOutput(executionRequest.WorkingCopyDir, ownedPath); err != nil {
 			return run, runError(FreeCADRuntimeRunStageOutputPreparation, "", attempt.Identity.ID, ownedPath, nil, err)
@@ -185,6 +188,9 @@ func InvokeAndValidateFreeCADRuntime(
 	}
 	run.ReferenceTraversalRequest = writtenTraversal
 
+	if err := writeOccurrenceRequest(layout.WorkingCopyDir, req.OccurrenceObservation); err != nil {
+		return run, runError(FreeCADRuntimeRunStageRequestMaterialization, "OccurrenceRequest", attempt.Identity.ID, "", nil, err)
+	}
 	process, invocationErr := freecad.InvokeFreeCADRuntime(capability, ctx, executionRequest)
 	run.Process = copyFreeCADRuntimeExecutionResult(process)
 	if invocationErr != nil {

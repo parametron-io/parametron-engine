@@ -59,7 +59,8 @@ type ObservationFact struct {
 
 // ObservationSummary captures normalized observation payload material.
 type ObservationSummary struct {
-	Facts []ObservationFact `json:"facts"`
+	Facts       []ObservationFact  `json:"facts"`
+	Occurrences *OccurrenceSummary `json:"occurrences,omitempty"`
 }
 
 // ObservationRecord is the Engine-produced normalized observation record contract payload.
@@ -114,7 +115,8 @@ type canonicalObservationFact struct {
 }
 
 type canonicalObservationSummary struct {
-	Facts []canonicalObservationFact `json:"facts"`
+	Facts       []canonicalObservationFact `json:"facts"`
+	Occurrences *OccurrenceSummary         `json:"occurrences,omitempty"`
 }
 
 // BuildObservationRecord normalizes input, derives identity, and returns a validated observation record.
@@ -214,7 +216,8 @@ func normalizeObservationRecordInput(input ObservationRecordInput) normalizedObs
 
 func normalizeObservationSummary(summary ObservationSummary) ObservationSummary {
 	return ObservationSummary{
-		Facts: normalizeObservationFacts(summary.Facts),
+		Facts:       normalizeObservationFacts(summary.Facts),
+		Occurrences: NormalizeOccurrenceSummary(summary.Occurrences),
 	}
 }
 
@@ -333,7 +336,12 @@ func hasObservationSubjectIdentity(subject ObservationSubject) bool {
 }
 
 func validateObservationSummary(summary ObservationSummary) error {
-	if len(summary.Facts) == 0 {
+	if summary.Occurrences != nil {
+		if err := ValidateOccurrenceSummary(*summary.Occurrences); err != nil {
+			return err
+		}
+	}
+	if len(summary.Facts) == 0 && summary.Occurrences == nil {
 		return fmt.Errorf("%w: observation must contain at least one fact", ErrInvalidObservationRecord)
 	}
 
@@ -469,7 +477,8 @@ func observationIdentityParts(input normalizedObservationRecordInput) ([]Identit
 
 func canonicalObservationSummaryFromNormalized(summary ObservationSummary) canonicalObservationSummary {
 	return canonicalObservationSummary{
-		Facts: canonicalObservationFactsFromNormalized(summary.Facts),
+		Facts:       canonicalObservationFactsFromNormalized(summary.Facts),
+		Occurrences: NormalizeOccurrenceSummary(summary.Occurrences),
 	}
 }
 
