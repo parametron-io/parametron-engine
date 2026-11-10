@@ -189,6 +189,130 @@ See the canonical
 and [execution runtime](https://github.com/parametron-io/parametron-docs/blob/main/docs/engine/runtime/execution-runtime.md)
 documentation in `parametron-docs`.
 
+## Explicit occurrence observation
+
+Generic reference evidence is distinct from explicit occurrence evidence. Engine
+owns occurrence requests, resource-qualified validation, normalized identity,
+completeness interpretation, duplicate/conflict handling, quantity rollup, and
+record/package emission with raw provenance. FreeCAD owns native Assembly
+inspection, member discovery, membership/target observations, coverage evidence,
+and production evidence generation. Engine does not perform native CAD discovery;
+production FreeCAD occurrence emission is not established by the Engine tests.
+
+### Supported native scope
+
+The supported mechanism is
+`freecad-1.1.4-assembly-group-individual-link`, with evidence requiring exact
+`freecadVersion: "1.1.4"`. It accepts an exact `Assembly::AssemblyObject` root
+and direct `Group` members that are individual `App::Link` objects with
+`ElementCount == 0`, corroborated parent membership, valid native state, and a
+resolved, unambiguously declared-resource-qualified target. Supported target
+types are `PartDesign::Body`, `Part::Feature`, and `App::Part`. Each qualifying
+link contributes one occurrence of its exact target; `App::Part` contents are
+not expanded or counted recursively. This contract makes no FreeCAD 1.1.1
+compatibility guarantee.
+
+Evidence `1.1` can classify an exact `Assembly::JointGroup` member as `auxiliary`
+only with corroborated parent membership, valid native state, `resolved`
+resolution, completed contents inspection, and an explicitly empty child
+inventory. Its `elementCount` and `target` must be null and its diagnostic absent
+or empty. The following is only the `members[]` entry's `contents` value, not a
+complete evidence document:
+
+```json
+{"inspectionCompleted": true, "group": []}
+```
+
+Such a group contributes no occurrence. Missing contents or child inventory does
+not prove emptiness. Nonempty, unverified, unknown, or unclassified members cannot
+be silently excluded; every direct member must be accounted for before the
+scope can be complete. No general auxiliary-type exclusion is supported.
+
+### Identity, completeness, and quantity
+
+`OccurrenceScope` contains `parent`, ordered `context`, and `mechanism`.
+`OccurrenceKey(scope, member)` combines that scope with the exact native member
+name and excludes semantic annotations and the target. Each `OccurrenceEntity`
+has a declared `resource` tuple `(projectId, kind, logicalId)`, `nativeKind`
+(`object`), exact native `name`, and optional `semanticId`. Owning resource and
+parent assembly identity remain separate from member identity and referenced
+resource/native target identity. Source coordinates and attempt-relative
+materialized `document` coordinates qualify evidence against the finite declared
+inventory; logical identity and document coordinate must identify the same
+binding. The observed parent must match the requested selected source. Absolute
+paths, labels, generic relationship keys, and raw digests are not occurrence keys.
+
+Context is an explicit ordered array of `OccurrenceContextFrame` values, each
+with `parent` and `member`, bounded to 16 frames. Missing context, malformed
+members, repeated parent entities, and cycles to the scope parent are rejected.
+Context preserves instance coordinates but does not certify recursive membership:
+accepted occurrences and complete quantity require an empty context.
+
+Completeness is `complete`, `incomplete`, `unsupported`, or `unavailable`.
+A complete scope requires the exact requested root, completed full direct-member
+inspection, explicit classification of every inventory member, corroborated
+ownership, supported individual links and resolved resource-qualified targets,
+and no unhandled members or scope diagnostics. An inspected empty scope, including
+one containing only verified empty auxiliary members, is complete with
+`occurrences: []` and `quantities: []`. Incomplete or unsupported evidence can
+retain accepted members but has `quantities: null`; unavailable or omitted
+evidence also has unavailable quantity, never a fabricated zero.
+
+Engine derives quantity from distinct accepted occurrences only within a complete
+scope. Within its owning scope/context, the grouping key is
+`OccurrenceEntityKey(target)`: referenced `(projectId, kind, logicalId)` plus
+`nativeKind` and exact `name`, excluding `semanticId`. Different native entities
+in one resource remain separate; distinct members targeting the same entity
+contribute independently. Exact duplicate member evidence canonicalizes;
+conflicting evidence for one member identity fails deterministically, including
+conflicting semantic annotations. Occurrences sort by member name and quantities
+by target entity key, independently of raw member or inventory ordering.
+
+### Execution and package boundary
+
+The Engine API entrypoint is `Executor.ExecutePackageWithOptions`, with
+`PackageExecutionOptions.OccurrenceObservation` carrying one explicit
+`OccurrenceRequest`. Intent is execution-scoped, defensively copied through
+dispatch and each attempt, preserved across retries, and cleared for later default
+executions.
+`ExecutePackage` uses empty options and preserves ordinary execution. The public
+CLI and DSL do not author occurrence requests.
+
+Request and normalized summary schemas are independently `1.0`; evidence accepts
+`1.0` and `1.1`. Evidence `1.0` retains its closed legacy member shape and rejects
+`contents`, including explicit null. Structured auxiliary contents require `1.1`.
+Request/evidence decoding rejects unknown fields, duplicate fields (including
+case variants), trailing JSON, invalid versions/types, and invalid contracts;
+contradictory coverage or membership evidence is rejected during intake.
+
+Engine materializes `prm.occurrence-request.json` in the prepared attempt working
+directory and reads only `prm.occurrence-evidence.json` in its confined output
+directory. No additional process argument is implied. A request's `requirement`
+is `optional` or `complete`: optional omitted evidence becomes unavailable;
+required noncomplete evidence fails with `ErrOccurrenceCompletenessRequired`,
+wrapped by `FreeCADRuntimeVerificationError` at `occurrence_validation`.
+Malformed evidence fails even when observation is optional. Executor outcomes
+retain the request and exact evidence bytes for normalized emission.
+
+The existing exactly-one-eligible-verified-CAD-outcome projection boundary applies;
+there is no general multi-outcome aggregation. Emission integrates the summary as
+`ObservationRecord.observation.occurrences`, preserving ordinary observation facts
+and the separate generic `ReferenceRecord`. Original bytes are preserved at
+`raw/runtime/prm.occurrence-evidence.json`, classified as raw runtime evidence;
+SHA-256 of those original bytes supplies summary evidence and record provenance
+with kind `occurrence-evidence`. Stable normalized semantic keys and rollup do not
+imply stable provenance-bearing record identity when raw evidence bytes differ.
+The shared record identity contract remains unchanged.
+
+This bounded contract does not support recursive assembly quantity, recursive
+occurrence or cyclic assembly expansion, link arrays, `App::LinkElement` counting,
+automatic recursive resource discovery, or general auxiliary exclusions.
+Quantity is not a generic reference-edge count, semantic declaration, link-array
+count, or CAD-reported BOM quantity. It introduces no BOM serialization, general
+engineering facts, units, mass, or material calculations. Permanent verification
+uses controlled Engine evidence, not real FreeCAD occurrence discovery; see the
+[test matrix](docs/test-matrix.md#explicit-occurrence-contract-coverage).
+
 ## Target actions
 
 The authoring layer supports target actions for engineering-model intent such

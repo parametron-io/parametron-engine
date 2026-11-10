@@ -12,6 +12,7 @@ import (
 	"parametron/internal/engine/artifact"
 	"parametron/internal/engine/cadruntime"
 	"parametron/internal/engine/observed"
+	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/verification"
 )
@@ -67,6 +68,9 @@ type CADRuntimeOutcome struct {
 	ResultPath             string
 	ReferenceTraversalPath string
 	ReferenceTraversalJSON []byte
+	OccurrenceRequest      *recordcontract.OccurrenceRequest
+	OccurrencePath         string
+	OccurrenceJSON         []byte
 	Artifacts              []CADRuntimeArtifactOutcome
 	Observed               *observed.Observed
 	VerificationResult     *verification.Result
@@ -147,6 +151,8 @@ func cloneCADRuntimeOutcome(in *CADRuntimeOutcome) *CADRuntimeOutcome {
 	}
 	out := *in
 	out.Artifacts = append([]CADRuntimeArtifactOutcome(nil), in.Artifacts...)
+	out.OccurrenceRequest = recordcontract.CloneOccurrenceRequest(in.OccurrenceRequest)
+	out.OccurrenceJSON = append([]byte(nil), in.OccurrenceJSON...)
 	out.ReferenceTraversalJSON = append([]byte(nil), in.ReferenceTraversalJSON...)
 	out.Observed = cloneObserved(in.Observed)
 	if in.VerificationResult != nil {
@@ -214,6 +220,15 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 			run.Verification == nil || run.Verification.Status != verification.StatusPass ||
 			run.Verification.Failure != verification.FailureClassNone {
 			return e.consumptionError(CADRuntimeConsumptionStageOutcomeValidation, req, identity.ID, "", "", "", "", "", errors.New("provider returned contradictory successful runtime verification state"))
+		}
+		if req.OccurrenceObservation != nil {
+			occurrence, err := cadruntime.LoadOccurrenceRun(req, run.Runtime)
+			if err != nil {
+				return e.consumptionError(CADRuntimeConsumptionStageOutcomeValidation, req, identity.ID, "", "", "", "", "", err)
+			}
+			outcome.OccurrenceRequest = recordcontract.CloneOccurrenceRequest(occurrence.Request)
+			outcome.OccurrencePath = occurrence.Path
+			outcome.OccurrenceJSON = append([]byte(nil), occurrence.Content...)
 		}
 		outcome.Verification = artifact.VerificationOutcomePassed
 		e.cadRuntimeOutcome = cloneCADRuntimeOutcome(outcome)

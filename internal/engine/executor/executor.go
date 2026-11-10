@@ -15,12 +15,14 @@ import (
 	"parametron/internal/engine/cache"
 	"parametron/internal/engine/handoff"
 	"parametron/internal/engine/job"
+	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/resourcebinding"
 	"parametron/internal/engine/runtimecap"
 )
 
 // Executor runs plans sequentially by delegating each step to the adapter.
 type Executor struct {
+	packageOptions        PackageExecutionOptions
 	resourceContext       *resourcebinding.Context
 	adapter               adapter.Adapter
 	states                []ExecutionState
@@ -33,6 +35,12 @@ type Executor struct {
 	cadRuntime            *cadRuntimeExecutionDependencies
 	cadRuntimeConsumption bool
 	cadRuntimeOutcome     *CADRuntimeOutcome
+}
+
+// PackageExecutionOptions carries explicit execution intent independently of
+// planning and serialized handoff contracts. Zero options preserve ordinary execution.
+type PackageExecutionOptions struct {
+	OccurrenceObservation *recordcontract.OccurrenceRequest
 }
 
 const defaultStepTimeout = 30 * time.Second
@@ -162,6 +170,7 @@ func (e *Executor) ArtifactAcceptanceContext() artifact.AcceptanceContext {
 
 // Execute runs all steps in order and propagates context unchanged.
 func (e *Executor) Execute(ctx context.Context, plan *planner.ExecutionPlan) error {
+	e.packageOptions = PackageExecutionOptions{}
 	e.cadRuntimeOutcome = nil
 	e.jobID = ""
 	e.pkg = nil
@@ -287,6 +296,15 @@ func finalOutcomeFromExecutionFailure(timeout, canceled bool) artifact.FinalOutc
 
 // ExecutePackage runs a validated handoff package and preserves it for downstream inspection.
 func (e *Executor) ExecutePackage(ctx context.Context, pkg *handoff.Package) error {
+	return e.ExecutePackageWithOptions(ctx, pkg, PackageExecutionOptions{})
+}
+
+// ExecutePackageWithOptions runs the normal package execution path with explicit
+// caller-owned intent. Intent is snapshotted for this execution and cleared on return;
+// adapters receive independent copies for each attempt through normal validation.
+func (e *Executor) ExecutePackageWithOptions(ctx context.Context, pkg *handoff.Package, options PackageExecutionOptions) error {
+	e.packageOptions = PackageExecutionOptions{OccurrenceObservation: recordcontract.CloneOccurrenceRequest(options.OccurrenceObservation)}
+	defer func() { e.packageOptions = PackageExecutionOptions{} }()
 	e.cadRuntimeOutcome = nil
 	if pkg == nil {
 		e.states = nil

@@ -42,6 +42,10 @@ func RawRuntimeReferenceTraversalContractPath() string {
 	return mustJoinContractPath(RawEvidenceDirectoryName, rawRuntimeDirectoryName, rawRuntimeReferenceTraversalFileName)
 }
 
+func RawRuntimeOccurrenceEvidenceContractPath() string {
+	return mustJoinContractPath(RawEvidenceDirectoryName, rawRuntimeDirectoryName, "prm.occurrence-evidence.json")
+}
+
 // RawHandoffDirectoryContractPath returns the canonical raw handoff directory contract path.
 func RawHandoffDirectoryContractPath() string {
 	return mustJoinContractPath(RawEvidenceDirectoryName, rawHandoffDirectoryName)
@@ -146,7 +150,7 @@ func IsRawRuntimeEvidenceContractPath(path string) bool {
 		return false
 	}
 	switch path {
-	case RawRuntimeResultContractPath(), RawRuntimeReferenceTraversalContractPath():
+	case RawRuntimeResultContractPath(), RawRuntimeReferenceTraversalContractPath(), RawRuntimeOccurrenceEvidenceContractPath():
 		return true
 	default:
 		return false
@@ -154,6 +158,11 @@ func IsRawRuntimeEvidenceContractPath(path string) bool {
 }
 
 func entryForValidatedContractPath(path string) (Entry, bool) {
+	// Optional occurrence evidence extends classification without changing the
+	// established core layout returned for runs that request no occurrences.
+	if path == RawRuntimeOccurrenceEvidenceContractPath() {
+		return Entry{ContractPath: path, Kind: EntryKindFile, Role: EntryRoleRawEvidence}, true
+	}
 	for _, entry := range Entries() {
 		if entry.ContractPath == path {
 			return entry, true

@@ -27,6 +27,7 @@ import (
 	"parametron/internal/engine/executor"
 	"parametron/internal/engine/metadata"
 	"parametron/internal/engine/projectinput"
+	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/recordemit"
 	"parametron/internal/engine/report"
 	"parametron/internal/engine/resourcebinding"
@@ -550,6 +551,11 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 		return nil, nil
 	}
 	evidence := &recordemit.CADRuntimeRunEvidence{}
+	if candidate.OccurrenceRequest != nil || len(candidate.OccurrenceJSON) > 0 {
+		evidence.Occurrence = &recordemit.OccurrenceRunEvidence{Input: cadruntime.OccurrenceMappingInput{
+			Request: recordcontract.CloneOccurrenceRequest(candidate.OccurrenceRequest), Resources: candidate.Resources, ExpectedSourceDocument: candidate.SourceDocument, Content: append([]byte(nil), candidate.OccurrenceJSON...),
+		}}
+	}
 	evidence.ObservedValue = candidate.Observed
 	evidence.VerificationResult = candidate.VerificationResult
 	evidence.JobID = candidate.JobID

@@ -81,7 +81,15 @@ func InvokeAndVerifyFreeCADRuntime(
 			Err:       err,
 		}
 	}
-	return verifyFreeCADRuntimeRun(runtimeRun)
+	verified, err := verifyFreeCADRuntimeRun(runtimeRun)
+	if err != nil {
+		return verified, err
+	}
+	_, err = LoadOccurrenceRun(req, runtimeRun)
+	if err != nil {
+		return verified, &FreeCADRuntimeVerificationError{Stage: "occurrence_validation", AttemptID: freeCADRuntimeVerificationAttemptID(runtimeRun), Err: err}
+	}
+	return verified, nil
 }
 
 // verifyFreeCADRuntimeRun performs only the Engine-owned in-memory comparison.
