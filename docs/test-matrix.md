@@ -108,6 +108,48 @@ closure or assembly occurrence coverage. Automatic external mapping population,
 general multi-outcome aggregation, occurrence identity, and quantity/BOM inference
 remain outside this proof.
 
+## Explicit occurrence contract coverage
+
+The [local contract summary](../README.md#explicit-occurrence-observation)
+describes the bounded FreeCAD 1.1.4 direct-member contract. These permanent tests
+use controlled Engine evidence; none proves real FreeCAD-native occurrence
+discovery or production emission. Generic reference proof above remains separate
+from explicit occurrence/quantity proof below.
+
+| Permanent test file | Test identifiers | Verification responsibility |
+|:--------------------|:-----------------|:----------------------------|
+| `internal/engine/recordcontract/occurrence_test.go` | `TestOccurrenceIdentitySeparatesMemberParentResourceAndContext`; `TestOccurrenceContextBoundsOrderAndCycles`; `TestOccurrenceSummaryRejectsFabricatedQuantitiesAndIndependentVersion` | Member/parent/resource/context identity, optional semantic annotation, ordered 16-frame bound and cycle rejection, independent summary version, and rejection of duplicate members or fabricated/noncomplete quantities |
+| `internal/engine/cadruntime/occurrence_evidence_test.go` | `TestOccurrenceSupportedTargetsAndDistinctQuantity`; `TestOccurrenceRejectsUnprovenNativeEvidence`; `TestOccurrenceQuantityResourceAndEntitySeparation` | Supported Body/Feature/Part targets, distinct same-target members, complete empty scope, exact native eligibility, parent/resource/materialized-coordinate joins, and separate native entities/resources in rollup |
+| Same file | `TestOccurrenceAuxiliaryRequiresVerifiedEmptyContents`; `TestOccurrenceAuxiliaryJSONRequiresExplicitInspectionInventory` | Exact empty joint-group exclusion; explicit completed empty inventory; rejection of missing, null, nonempty, contradictory, or unclassified auxiliary evidence and concealed coverage gaps |
+| Same file | `TestOccurrenceStrictJSONAndVersionIsolation`; `TestOccurrenceRequestRequiredFieldsAndTypes` | Request schema 1.0, evidence 1.0/1.1 acceptance, closed legacy member shape, unknown/duplicate/case-duplicate/trailing JSON rejection, and required fields/types |
+| Same file | `TestOccurrenceAvailabilityAndRequiredCompleteness`; `TestOccurrenceNoncompleteMembersCannotProduceQuantity`; `TestOccurrenceScopeContextCannotAuthorizeRecursiveQuantity` | Complete zero versus incomplete/unsupported/unavailable/omitted quantity; optional/required completeness; accepted partial members without numeric quantity; nested context cannot authorize recursive quantity |
+| Same file | `TestOccurrenceDuplicateConflictAndSemanticDeterminism` | Exact duplicates canonicalize; conflicts fail under reordered evidence; member/inventory ordering leaves normalized occurrences and rollup stable while exact-byte digest changes; semantic annotations do not split groups |
+| `internal/engine/cadruntime/occurrence_request_test.go` | `TestOccurrenceRuntimeSidecarAndVerificationBoundary` | Sidecar materialization, canonical confined intake, no-request behavior, exact bytes, typed required-completeness and invalid-evidence failures at `occurrence_validation`, alternate-path and escaping-symlink rejection |
+| `internal/engine/executor/occurrence_test.go` | `TestCADRuntimeAttemptRequestPreservesOccurrenceIntent`; `TestExecutePackageWithOptionsOwnsOccurrenceIntentAcrossRetriesAndExecutions`; `TestOccurrenceOutcomeRetentionAndRequiredFailure` | Explicit optional/complete intent through dispatch and attempts, defensive copying, retry and later-execution isolation, outcome retention, default execution, and typed required/malformed failures |
+| `internal/engine/recordemit/occurrence_test.go` | `TestEmitOccurrencePreservesRawProvenanceAndIndependentReferences`; `TestEmitOccurrenceOptionalOmissionAndRequiredFailure` | Observation integration preserving ordinary facts and independent references; exact raw bytes and SHA-256 provenance; stable semantic rollup with evidence-sensitive containing identity; omission versus required failure |
+| `cmd/parametron/occurrence_test.go` | `TestCADRuntimeRunEvidenceOccurrenceCardinalityAndCopy` | Zero/one/multiple eligible outcome projection boundary, exact transport, defensive copying, and failed-overall-execution exclusion |
+| `cmd/parametron/occurrence_execution_test.go` | `TestOccurrenceExecutionCompletePackageAndProvenance`; `TestOccurrenceExecutionEvidenceStatesAndFailures` | Continuous Engine API execution through attempt sidecar, runtime invocation, intake, verification, retained outcome, normal projection, and package emission; three distinct occurrences form two native quantity groups; reordered evidence preserves semantics and changes provenance-bearing identity; independent generic references; optional/complete failures and no-intent preservation |
+
+The continuous proof calls `ExecutePackageWithOptions` on a planned handoff and
+uses the existing controlled external runtime participant for ordinary CAD output;
+a controlled capability supplies occurrence evidence. It is not occurrence
+authoring through public CLI flags or DSL, nor native FreeCAD discovery.
+Its package checks include raw-evidence classification and exact bytes at
+`raw/runtime/prm.occurrence-evidence.json`.
+
+Direct occurrence coverage preserves the declared-resource joins and
+provenance-sensitive identity contracts. Existing capture-backed native-target
+tests, declared-resource tests, and resource-qualified reference tests documented
+above remain the separate regression coverage for #42, #48, and #49. Their
+relocation and native-target guarantees must not be recast as recursive occurrence
+or real FreeCAD quantity proof.
+
+Focused verification uses the existing package test interface:
+
+```bash
+go test ./internal/engine/recordcontract/... ./internal/engine/cadruntime/... ./internal/engine/executor/... ./internal/engine/recordemit/... ./cmd/parametron/... -run 'Test.*Occurrence'
+```
+
 ## Integration and End-to-End Proof
 
 | Boundary | Coverage | Validation Command | Notes |
