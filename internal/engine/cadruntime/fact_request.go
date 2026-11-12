@@ -77,8 +77,8 @@ func LoadFactRun(req adapter.CADRuntimeOrchestrationRequest, run FreeCADRuntimeR
 // DecodeFactRequest strictly accepts the explicit versioned request sidecar.
 func DecodeFactRequest(content []byte) (recordcontract.FactRequest, error) {
 	var request recordcontract.FactRequest
-	if err := uniqueOccurrenceJSON(content); err != nil {
-		return request, err
+	if err := jsonObjectFieldsAreUnique(content); err != nil {
+		return request, factInvalid(err.Error())
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()

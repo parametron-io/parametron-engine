@@ -72,8 +72,8 @@ func knownFactAvailability(state string) bool {
 // Exact bytes remain the caller's provenance material.
 func DecodeFactEvidence(content []byte) (FactRuntimeEvidence, error) {
 	var evidence FactRuntimeEvidence
-	if err := uniqueOccurrenceJSON(content); err != nil {
-		return evidence, err
+	if err := jsonObjectFieldsAreUnique(content); err != nil {
+		return evidence, factInvalid(err.Error())
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()
