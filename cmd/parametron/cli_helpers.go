@@ -556,6 +556,11 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 			Request: recordcontract.CloneOccurrenceRequest(candidate.OccurrenceRequest), Resources: candidate.Resources, ExpectedSourceDocument: candidate.SourceDocument, Content: append([]byte(nil), candidate.OccurrenceJSON...),
 		}}
 	}
+	if candidate.FactRequest != nil || len(candidate.FactJSON) > 0 {
+		evidence.Fact = &recordemit.FactRunEvidence{Input: cadruntime.FactMappingInput{
+			Request: recordcontract.CloneFactRequest(candidate.FactRequest), Resources: candidate.Resources, ExpectedSourceDocument: candidate.SourceDocument, Content: append([]byte(nil), candidate.FactJSON...),
+		}}
+	}
 	evidence.ObservedValue = candidate.Observed
 	evidence.VerificationResult = candidate.VerificationResult
 	evidence.JobID = candidate.JobID

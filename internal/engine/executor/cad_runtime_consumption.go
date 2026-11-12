@@ -71,6 +71,9 @@ type CADRuntimeOutcome struct {
 	OccurrenceRequest      *recordcontract.OccurrenceRequest
 	OccurrencePath         string
 	OccurrenceJSON         []byte
+	FactRequest            *recordcontract.FactRequest
+	FactPath               string
+	FactJSON               []byte
 	Artifacts              []CADRuntimeArtifactOutcome
 	Observed               *observed.Observed
 	VerificationResult     *verification.Result
@@ -153,6 +156,8 @@ func cloneCADRuntimeOutcome(in *CADRuntimeOutcome) *CADRuntimeOutcome {
 	out.Artifacts = append([]CADRuntimeArtifactOutcome(nil), in.Artifacts...)
 	out.OccurrenceRequest = recordcontract.CloneOccurrenceRequest(in.OccurrenceRequest)
 	out.OccurrenceJSON = append([]byte(nil), in.OccurrenceJSON...)
+	out.FactRequest = recordcontract.CloneFactRequest(in.FactRequest)
+	out.FactJSON = append([]byte(nil), in.FactJSON...)
 	out.ReferenceTraversalJSON = append([]byte(nil), in.ReferenceTraversalJSON...)
 	out.Observed = cloneObserved(in.Observed)
 	if in.VerificationResult != nil {
@@ -229,6 +234,15 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 			outcome.OccurrenceRequest = recordcontract.CloneOccurrenceRequest(occurrence.Request)
 			outcome.OccurrencePath = occurrence.Path
 			outcome.OccurrenceJSON = append([]byte(nil), occurrence.Content...)
+		}
+		if req.FactObservation != nil {
+			fact, err := cadruntime.LoadFactRun(req, run.Runtime)
+			if err != nil {
+				return e.consumptionError(CADRuntimeConsumptionStageOutcomeValidation, req, identity.ID, "", "", "", "", "", err)
+			}
+			outcome.FactRequest = recordcontract.CloneFactRequest(fact.Request)
+			outcome.FactPath = fact.Path
+			outcome.FactJSON = append([]byte(nil), fact.Content...)
 		}
 		outcome.Verification = artifact.VerificationOutcomePassed
 		e.cadRuntimeOutcome = cloneCADRuntimeOutcome(outcome)
