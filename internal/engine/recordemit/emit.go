@@ -39,6 +39,7 @@ type RunEmitInput struct {
 // CADRuntimeRunEvidence carries unchanged bytes read from one execution attempt.
 type CADRuntimeRunEvidence struct {
 	Occurrence         *OccurrenceRunEvidence
+	Fact               *FactRunEvidence
 	Result             []byte
 	Verification       []byte
 	Observed           []byte
@@ -219,7 +220,12 @@ func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey, planHash s
 		}
 		failureRecord = &mapped
 	}
-	records, err := appendOccurrenceRecords(records, evidence, recordKey, provenance)
+	endRecords, err := appendFactRecords(records, evidence, recordKey, provenance)
+	if err != nil {
+		return nil, nil, err
+	}
+	records = endRecords
+	records, err = appendOccurrenceRecords(records, evidence, recordKey, provenance)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -313,6 +319,9 @@ func collectRawEvidence(runRoot string, input RunEmitInput) ([]recordpackage.Raw
 	if input.CADRuntime != nil {
 		if input.CADRuntime.Occurrence != nil && len(input.CADRuntime.Occurrence.Input.Content) > 0 {
 			out = append(out, recordpackage.RawEvidenceFile{ContractPath: recordpackage.RawRuntimeOccurrenceEvidenceContractPath(), Content: append([]byte(nil), input.CADRuntime.Occurrence.Input.Content...)})
+		}
+		if input.CADRuntime.Fact != nil && len(input.CADRuntime.Fact.Input.Content) > 0 {
+			out = append(out, recordpackage.RawEvidenceFile{ContractPath: recordpackage.RawFactEvidenceContractPath(), Content: append([]byte(nil), input.CADRuntime.Fact.Input.Content...)})
 		}
 		for _, evidence := range []recordpackage.RawEvidenceFile{
 			{ContractPath: recordpackage.RawRuntimeResultContractPath(), Content: input.CADRuntime.Result},

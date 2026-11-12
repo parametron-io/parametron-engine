@@ -41,6 +41,7 @@ type Executor struct {
 // planning and serialized handoff contracts. Zero options preserve ordinary execution.
 type PackageExecutionOptions struct {
 	OccurrenceObservation *recordcontract.OccurrenceRequest
+	FactObservation       *recordcontract.FactRequest
 }
 
 const defaultStepTimeout = 30 * time.Second
@@ -303,7 +304,10 @@ func (e *Executor) ExecutePackage(ctx context.Context, pkg *handoff.Package) err
 // caller-owned intent. Intent is snapshotted for this execution and cleared on return;
 // adapters receive independent copies for each attempt through normal validation.
 func (e *Executor) ExecutePackageWithOptions(ctx context.Context, pkg *handoff.Package, options PackageExecutionOptions) error {
-	e.packageOptions = PackageExecutionOptions{OccurrenceObservation: recordcontract.CloneOccurrenceRequest(options.OccurrenceObservation)}
+	e.packageOptions = PackageExecutionOptions{
+		OccurrenceObservation: recordcontract.CloneOccurrenceRequest(options.OccurrenceObservation),
+		FactObservation:       recordcontract.CloneFactRequest(options.FactObservation),
+	}
 	defer func() { e.packageOptions = PackageExecutionOptions{} }()
 	e.cadRuntimeOutcome = nil
 	if pkg == nil {

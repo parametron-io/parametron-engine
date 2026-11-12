@@ -1,0 +1,72 @@
+{
+  "family": "observation",
+  "version": "1.0",
+  "recordKey": "engine-run:golden-plan:observation",
+  "identity": {
+    "ID": "294a8adc79f0617585f0e4cb118f2980efefa4caafe5e38948d32ae4901cb005",
+    "Algorithm": "sha256-canonical-json-v1",
+    "Family": "observation",
+    "Version": "1.0"
+  },
+  "provenance": {
+    "SourceRevision": {
+      "RevisionID": "rev-golden",
+      "AssetID": "",
+      "DigestSHA256": ""
+    },
+    "Inputs": [
+      {
+        "Kind": "dsl",
+        "Identity": "model-golden",
+        "DigestSHA256": "1111111111111111111111111111111111111111111111111111111111111111"
+      }
+    ],
+    "Plan": {
+      "PlanID": "plan-golden",
+      "PlanHash": "hash-golden"
+    },
+    "Linkage": {
+      "ProductKey": "widget",
+      "JobID": "job-golden",
+      "StepRef": "step-golden"
+    },
+    "Evidence": [
+      {
+        "Kind": "observed",
+        "Ref": "raw/observed/prm.observed.json",
+        "DigestSHA256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "Runtime": {
+      "ToolID": "parametron",
+      "RuntimeID": "runtime-golden",
+      "Adapter": "freecad"
+    }
+  },
+  "observation": {
+    "facts": [
+      {
+        "kind": "parameter",
+        "subject": {
+          "id": "part/body",
+          "name": "Body"
+        },
+        "key": "length",
+        "value": {
+          "kind": "number",
+          "raw": "42.0"
+        },
+        "linkage": {
+          "jobId": "job-golden",
+          "productKey": "widget",
+          "stepRef": "step-golden"
+        },
+        "evidence": {
+          "sourceKind": "observed",
+          "sourceRef": "raw/observed/prm.observed.json",
+          "digestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ]
+  }
+}

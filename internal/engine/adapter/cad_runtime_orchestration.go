@@ -44,6 +44,9 @@ type CADRuntimeOrchestrationRequest struct {
 	ExternalTargets []ReferenceTraversalExternalTarget
 	// OccurrenceObservation is opt-in and is never derived from generic references.
 	OccurrenceObservation *recordcontract.OccurrenceRequest
+	// FactObservation is opt-in explicit engineering fact intent and is never
+	// derived from generic references, occurrences, or property discovery.
+	FactObservation *recordcontract.FactRequest
 }
 
 // ReferenceTraversalExternalTarget maps one runtime-observable reference
@@ -108,6 +111,25 @@ func ValidateCADRuntimeOrchestrationRequest(req CADRuntimeOrchestrationRequest) 
 			}
 		}
 
+	}
+	if req.FactObservation != nil {
+		if err := recordcontract.ValidateFactRequest(*req.FactObservation); err != nil {
+			return &CADRuntimeOrchestrationRequestError{Field: "FactObservation", Err: err}
+		}
+		if req.Resources == nil {
+			return &CADRuntimeOrchestrationRequestError{Field: "FactObservation", Err: fmt.Errorf("declared resource context required")}
+		}
+		for _, binding := range req.FactObservation.Bindings {
+			if _, err := req.Resources.Inventory().Lookup(binding.Subject.Resource.ProjectID, binding.Subject.Resource.Kind, binding.Subject.Resource.LogicalID); err != nil {
+				return &CADRuntimeOrchestrationRequestError{Field: "FactObservation", Err: err}
+			}
+			for _, frame := range binding.Context {
+				parent := frame.Parent.Resource
+				if _, err := req.Resources.Inventory().Lookup(parent.ProjectID, parent.Kind, parent.LogicalID); err != nil {
+					return &CADRuntimeOrchestrationRequestError{Field: "FactObservation", Err: err}
+				}
+			}
+		}
 	}
 	if req.Resources != nil {
 		selected := req.Resources.Selected()

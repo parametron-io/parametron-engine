@@ -80,8 +80,8 @@ func occurrenceInvalid(message string) error {
 // DecodeOccurrenceEvidence rejects unknown fields, duplicate JSON keys and
 // trailing values. Exact bytes remain the caller's provenance material.
 func DecodeOccurrenceEvidence(content []byte) (OccurrenceRuntimeEvidence, error) {
-	if err := uniqueOccurrenceJSON(content); err != nil {
-		return OccurrenceRuntimeEvidence{}, err
+	if err := jsonObjectFieldsAreUnique(content); err != nil {
+		return OccurrenceRuntimeEvidence{}, fmt.Errorf("%w: %v", recordcontract.ErrInvalidOccurrence, err)
 	}
 	d := json.NewDecoder(bytes.NewReader(content))
 	d.DisallowUnknownFields()
@@ -116,7 +116,11 @@ func DecodeOccurrenceEvidence(content []byte) (OccurrenceRuntimeEvidence, error)
 	return e, nil
 }
 
-func uniqueOccurrenceJSON(content []byte) error {
+// jsonObjectFieldsAreUnique rejects duplicate JSON object field names,
+// malformed delimiters, and trailing values. It assigns no record-family failure
+// class, so occurrence and fact sidecars can wrap the shared structural check
+// with their own contract sentinel.
+func jsonObjectFieldsAreUnique(content []byte) error {
 	d := json.NewDecoder(bytes.NewReader(content))
 	var value func() error
 	value = func() error {
@@ -137,7 +141,7 @@ func uniqueOccurrenceJSON(content []byte) error {
 				}
 				s, ok := k.(string)
 				if !ok || seen[strings.ToLower(s)] {
-					return occurrenceInvalid("duplicate JSON field")
+					return fmt.Errorf("duplicate JSON field")
 				}
 				seen[strings.ToLower(s)] = true
 				if err := value(); err != nil {
@@ -151,16 +155,16 @@ func uniqueOccurrenceJSON(content []byte) error {
 				}
 			}
 		} else {
-			return occurrenceInvalid("invalid JSON delimiter")
+			return fmt.Errorf("invalid JSON delimiter")
 		}
 		_, err = d.Token()
 		return err
 	}
 	if err := value(); err != nil {
-		return fmt.Errorf("%w: %v", recordcontract.ErrInvalidOccurrence, err)
+		return err
 	}
 	if _, err := d.Token(); err != io.EOF {
-		return occurrenceInvalid("trailing JSON")
+		return fmt.Errorf("trailing JSON")
 	}
 	return nil
 }
@@ -377,8 +381,8 @@ func occurrenceExactText(s string) bool {
 // DecodeOccurrenceRequest strictly accepts the explicit versioned request sidecar.
 func DecodeOccurrenceRequest(content []byte) (recordcontract.OccurrenceRequest, error) {
 	var request recordcontract.OccurrenceRequest
-	if err := uniqueOccurrenceJSON(content); err != nil {
-		return request, err
+	if err := jsonObjectFieldsAreUnique(content); err != nil {
+		return request, fmt.Errorf("%w: %v", recordcontract.ErrInvalidOccurrence, err)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()

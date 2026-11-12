@@ -140,6 +140,7 @@ func (e *Executor) prepareCADRuntimeDispatch(plan *planner.ExecutionPlan) (*cadR
 
 	base := adapter.CADRuntimeOrchestrationRequest{
 		OccurrenceObservation: recordcontract.CloneOccurrenceRequest(e.packageOptions.OccurrenceObservation),
+		FactObservation:       recordcontract.CloneFactRequest(e.packageOptions.FactObservation),
 		Resources:             e.resourceContext.Clone(),
 		JobID:                 e.pkg.JobID,
 		ProductKey:            e.pkg.ProductKey,
@@ -246,6 +247,7 @@ func (e *Executor) buildCADRuntimeOrchestrationRequest(
 ) adapter.CADRuntimeOrchestrationRequest {
 	return adapter.CADRuntimeOrchestrationRequest{
 		OccurrenceObservation: recordcontract.CloneOccurrenceRequest(cad.base.OccurrenceObservation),
+		FactObservation:       recordcontract.CloneFactRequest(cad.base.FactObservation),
 		Resources:             cad.base.Resources.Clone(),
 		JobID:                 cad.base.JobID,
 		ProductKey:            cad.base.ProductKey,

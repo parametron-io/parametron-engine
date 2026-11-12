@@ -33,6 +33,8 @@ Parametron Engine currently provides:
 - target-action authoring for suppression, visibility, and deletion intent
 - target-state observation request and result contracts for suppression, visibility, and existence evidence
 - Engine-owned target-state expectation derivation, verification, failure classification, and normalized record mapping
+- bounded engineering fact observation request and evidence contracts for explicitly bound, resource-qualified property facts
+- normalized engineering facts with typed finite values, explicit units, and explicit availability states within the observation record family
 - CLI and HTTP API foundations
 
 Equivalent inputs and execution context are designed to produce stable
@@ -308,10 +310,112 @@ This bounded contract does not support recursive assembly quantity, recursive
 occurrence or cyclic assembly expansion, link arrays, `App::LinkElement` counting,
 automatic recursive resource discovery, or general auxiliary exclusions.
 Quantity is not a generic reference-edge count, semantic declaration, link-array
-count, or CAD-reported BOM quantity. It introduces no BOM serialization, general
-engineering facts, units, mass, or material calculations. Permanent verification
-uses controlled Engine evidence, not real FreeCAD occurrence discovery; see the
+count, or CAD-reported BOM quantity. It introduces no BOM serialization, mass, or
+material calculations, and quantity introduces no engineering facts or units of
+its own; bounded engineering fact observation with explicit units is a separate
+contract, described below. Permanent verification uses controlled Engine
+evidence, not real FreeCAD occurrence discovery; see the
 [test matrix](docs/test-matrix.md#explicit-occurrence-contract-coverage).
+
+## Bounded engineering fact observation
+
+Engineering facts are normalized `ObservationRecord` material, not a parallel
+fact database. Engine owns the requested fact scope, subject identity and
+resource qualification, accepted fact kinds, value typing, explicit unit
+representation, availability semantics, normalization into the existing
+observation record family, deterministic identity and ordering, and
+deterministic failure classification. The CAD runtime owns native property
+access, native value extraction, native unit evidence, unavailable and
+unsupported diagnostics, and raw evidence. Engine performs no heuristic
+property discovery and invents no facts the runtime did not observe.
+
+Fact observation is separate from mutation verification: fact observations
+never serve as target-state evidence, and target-state verification never
+decides fact acceptance. Quantity remains the #50 occurrence-derived semantics;
+it is not a CAD fact and is not observed through the fact contract.
+
+### Contract surface
+
+The supported fact kind is `bound_property`: one explicitly named native
+property observed under an explicitly bound, resource-qualified subject. The
+subject is the #50 `OccurrenceEntity` shape — declared resource tuple
+`(projectId, kind, logicalId)`, `nativeKind`, exact native name, and optional
+`semanticId` — and can carry #50 occurrence context frames only when a fact is
+genuinely occurrence-scoped. Observed subjects join the declared logical
+identity with the materialized document coordinate: identity and coordinate
+must identify the same binding, and the same native name in two declared
+resources stays distinct. Operational absolute paths are not identity
+material.
+
+Intent is opt-in and execution-scoped through
+`Executor.ExecutePackageWithOptions` with
+`PackageExecutionOptions.FactObservation`; the public CLI and DSL do not author
+fact requests. Engine materializes the versioned request sidecar
+`prm.fact-request.json` (schema `1.0`) in the prepared attempt working directory
+and reads only the versioned evidence sidecar `prm.fact-evidence.json` (schema
+`1.0`, kind `native_fact_evidence`) from its confined output directory. Nil
+intent requests no fact observation and forbids unsolicited fact evidence.
+
+### Values, units, and availability
+
+Observed values are typed finite scalars: `number`, `integer`, `string`, or
+`boolean`. The value kind is cross-checked against the actual JSON scalar at
+intake and again during record validation. Numeric values canonicalize
+deterministically — `42`, `42.0`, and `4.2e1` are one observed value — while
+`NaN`, infinities, non-integral integers, and non-canonical strings are
+rejected. Zero is a valid observed value.
+
+Units are optional explicit opaque text tokens carried by both the request
+binding and the evidence; an absent unit is an explicit unitless fact, never an
+implicit unit. Unit tokens have no semantics in Engine: no unit conversion,
+conversion algebra, or quantity arithmetic exists or is implied. Units are
+incompatible with non-numeric `string` and `boolean` values.
+
+Availability is explicit: `observed`, `unavailable`, or `unsupported`. Observed
+evidence must carry a value and value kind; `unavailable` and `unsupported`
+evidence must carry a diagnostic and no value material. Omission never
+substitutes a state. A request binding's `requirement` is `optional` or
+`required`: an optional `unavailable` or `unsupported` fact is retained as a
+normalized fact carrying its explicit state, while a required non-observed
+binding fails deterministically. An omitted evidence file is explicit
+unavailability for every requested binding; a present evidence file must cover
+every requested binding, and unsolicited fact evidence is rejected.
+
+Invalid fact contracts fail with `ErrInvalidFact`; required unavailable or
+unsupported bindings fail with `ErrRequiredFactUnavailable`. Conflicting
+duplicates within evidence fail under `ErrInvalidFact`, and record-level
+conflicting facts fail under the existing `ErrInvalidObservationRecord`.
+Equivalent duplicate evidence canonicalizes into one fact instead of selecting
+a value.
+
+### Normalization and package boundary
+
+Normalized engineering facts extend the existing observation record family as
+`fact`-kind entries inside `observation.facts[]`, keyed by the fact kind; no
+separate record family exists. Fact emission merges into the single
+observation record, preserving ordinary observation facts and the occurrence
+summary. Normalized fact ordering follows the requested bindings; raw evidence
+ordering does not influence acceptance or output, and relocation does not
+change normalized fact identity. Every fact carries shared provenance — source
+kind `fact-evidence`, source reference `raw/fact/prm.fact-evidence.json`, and
+the SHA-256 digest of the exact evidence bytes. Raw fact evidence is preserved
+at `raw/fact/prm.fact-evidence.json`, classified as raw runtime evidence; the
+request sidecar is not packaged. The existing exactly-one-eligible-verified
+CAD-outcome projection boundary applies; there is no general multi-outcome
+aggregation.
+
+### Bounds
+
+This bounded contract does not support physical mass, density, or material
+inference; material catalogs or an Engine material database; heuristic or
+universal native-property observation; target-scoped metadata mutation; or any
+universal unit framework. No FreeCAD-native fact producer exists yet: permanent
+verification uses controlled Engine evidence, not real FreeCAD-native property
+observation, and native runtime version tokens in evidence are provenance only.
+The contracts are intended to be sufficient for a later FreeCAD-native
+implementation of bounded fact observation without redesigning Engine
+normalization; see the
+[test matrix](docs/test-matrix.md#bounded-engineering-fact-observation-contract-coverage).
 
 ## Target actions
 

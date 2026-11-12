@@ -46,6 +46,11 @@ func RawRuntimeOccurrenceEvidenceContractPath() string {
 	return mustJoinContractPath(RawEvidenceDirectoryName, rawRuntimeDirectoryName, "prm.occurrence-evidence.json")
 }
 
+// RawFactEvidenceContractPath returns the canonical raw fact evidence contract path.
+func RawFactEvidenceContractPath() string {
+	return mustJoinContractPath(RawEvidenceDirectoryName, "fact", "prm.fact-evidence.json")
+}
+
 // RawHandoffDirectoryContractPath returns the canonical raw handoff directory contract path.
 func RawHandoffDirectoryContractPath() string {
 	return mustJoinContractPath(RawEvidenceDirectoryName, rawHandoffDirectoryName)
@@ -158,9 +163,10 @@ func IsRawRuntimeEvidenceContractPath(path string) bool {
 }
 
 func entryForValidatedContractPath(path string) (Entry, bool) {
-	// Optional occurrence evidence extends classification without changing the
-	// established core layout returned for runs that request no occurrences.
-	if path == RawRuntimeOccurrenceEvidenceContractPath() {
+	// Optional occurrence and fact evidence extend classification without
+	// changing the established core layout returned for runs that request
+	// neither sidecar.
+	if path == RawRuntimeOccurrenceEvidenceContractPath() || path == RawFactEvidenceContractPath() {
 		return Entry{ContractPath: path, Kind: EntryKindFile, Role: EntryRoleRawEvidence}, true
 	}
 	for _, entry := range Entries() {
