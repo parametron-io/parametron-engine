@@ -31,7 +31,7 @@ its core architectural layers.
 | **Artifact Store & Serving** | In-memory and filesystem artifact registry, deterministic SHA-256 artifact IDs, batch acceptance, HTTP serving | `go test ./internal/engine/artifact/...` | Dual-class (`execution_output`, `verified_artifact`) handling |
 | **Execution Reporting** | `prm.report.json` construction, step timing, structured error serialization, deterministic formatting | `go test ./internal/engine/report/...` | Atomic report writing and skipped step visibility |
 | **Run Metadata** | `prm.metadata.json` generation, toolchain info, product summaries, table input provenance | `go test ./internal/engine/metadata/...` | Deterministic key sorting and fingerprint recording |
-| **Normalized Record Contracts** | Record schemas for execution, artifact, observation, reference, failure, and verification families | `go test ./internal/engine/recordcontract/...` | Covers schema versioning and provenance models, including the `target_state` observation kind, `target_state` verification category, and target-state verification failure vocabulary within the existing record families. Reference contract tests cover declared resource/native endpoint identity, canonical relationship keys, nullable property/mechanism discrimination, strict qualification/resolution/completeness validation, copy safety, and the unchanged shared record identity algorithm |
+| **Normalized Record Contracts** | Record schemas for execution, artifact, observation, reference, failure, and verification families | `go test ./internal/engine/recordcontract/...` | Covers schema versioning and provenance models, including the `target_state` observation kind, the bounded `fact` observation kind contract (see [fact coverage](#bounded-engineering-fact-observation-contract-coverage)), `target_state` verification category, and target-state verification failure vocabulary within the existing record families. Reference contract tests cover declared resource/native endpoint identity, canonical relationship keys, nullable property/mechanism discrimination, strict qualification/resolution/completeness validation, copy safety, and the unchanged shared record identity algorithm |
 | **Operational Record Mapping** | Deterministic mapping of reports, metadata, artifacts, typed observations, traversals, Engine verification results, and generic CAD runtime failure outcomes to normalized records | `go test ./internal/engine/recordmap/...` | Covers target-state material within the existing observation and verification families and adapter-neutral `MapCADRuntimeFailure` mapping after runtime-specific interpretation; verifies stable identity, semantic class/stage mapping, Engine operational context, and exact-evidence provenance without treating raw bytes as semantic truth. Reference traversal tests separately prove cross-resource joins, selected-source correlation and aliases, same-name native entities, independent property-only/mechanism-only distinctions, null versus observed values, exact duplicate canonicalization, deterministic conflict rejection before projection, all five native resolution states, unsupported/undeclared targets, and scope-bearing empty traversals |
 | **Record Package Emission** | Normal-run emission, local package writing and manifest indexing, plural identity-addressed artifact records, and preservation of exact attempt evidence at `raw/runtime/prm.result.json`, `raw/verification/prm.verification.json`, `raw/observed/prm.observed.json`, and `raw/runtime/prm.reference-traversal.json` | `go test ./internal/engine/recordpackage/... ./internal/engine/recordemit/... ./cmd/parametron/...` | Proves zero/one/many artifact records at `records/artifacts/<identityId>/prm.artifact-record.json`, identity ordering and duplicate rejection; observation, verification, and target-state emission from typed Engine material; runtime-native failure precedence with report-derived fallback and one failure record; deterministic repeated output; source-byte preservation and exact-byte SHA-256 provenance; and deterministic fallback when terminal failed-outcome correlation is absent or ambiguous. Traversal emission tests validate complete zero-edge records, exact raw traversal bytes and SHA-256 provenance, strict JSON/discriminator rejection, and coexistence with artifact, observation, and verification records; normal CLI candidate tests preserve zero/one/many eligibility behavior |
 | **HTTP API & Endpoints** | `POST /job`, `GET /job/{id}`, `GET /job/{id}/artifacts`, `GET /artifacts`, `GET /artifacts/{id}`, `GET /healthz` | `go test ./internal/engine/api/...` | Validates transport limits, idempotency, and status |
@@ -149,6 +149,66 @@ Focused verification uses the existing package test interface:
 ```bash
 go test ./internal/engine/recordcontract/... ./internal/engine/cadruntime/... ./internal/engine/executor/... ./internal/engine/recordemit/... ./cmd/parametron/... -run 'Test.*Occurrence'
 ```
+
+## Bounded engineering fact observation contract coverage
+
+The [bounded fact observation summary](../README.md#bounded-engineering-fact-observation)
+describes the bounded `bound_property` fact contract. These permanent tests use
+controlled Engine evidence; none proves real FreeCAD-native fact observation,
+because no native fact producer exists yet. Occurrence proof above stays
+separate from fact proof below.
+
+| Permanent test file | Test identifiers | Verification responsibility |
+|:--------------------|:-----------------|:----------------------------|
+| `internal/engine/recordcontract/fact_test.go` | `TestCanonicalFactScalarAcceptsFiniteTypedValues`; `TestCanonicalFactScalarCanonicalizesEquivalentNumbersToOneIdentity`; `TestCanonicalFactScalarRejectsNonFiniteAndMalformedValues`; `TestFactVocabularyIsClosed` | Finite typed scalar acceptance, canonical numeric identity collapsing `42`, `42.0`, and `4.2e1`, non-finite and malformed value rejection, and closed kind/availability/requirement/value-kind vocabularies |
+| Same file | `TestValidateFactBindingAcceptsBoundedContract`; `TestValidateFactBindingRejectsInvalidContract`; `TestValidateFactRequestRejectsInvalidContract`; `TestFactBindingKeyExcludesNonIdentityMaterial` | Bounded binding and request acceptance and rejection, and fact slot keying that excludes semantic annotations and observed value material |
+| Same file | `TestBuildObservationRecordFactKindPreservesQualifiedSubject`; `TestBuildObservationRecordUnavailableFactIsExplicitAndValid`; `TestValidateObservationRecordRejectsInvalidFacts`; `TestBuildObservationRecordFactConflictSemantics` | Resource-qualified `fact`-kind subject preservation, explicit unavailable facts without empty-record fabrication, record-level invalid and conflicting fact rejection |
+| Same file | `TestBuildObservationRecordFactIdentityAndOrderingAreDeterministic`; `TestParameterObservationRecordIdentityMatchesPreChangeGolden` | Deterministic fact identity and ordering, and pre-change `parameter` observation record identity preservation against `internal/engine/recordcontract/testdata/parameter-observation-record.golden.json` |
+| `internal/engine/cadruntime/fact_request_test.go` | `TestDecodeFactRequestAcceptsVersionedContract`; `TestDecodeFactRequestRejectsInvalidContent`; `TestCloneFactRequestIsIndependent`; `TestWriteFactRequestMaterializesExactVersionedIntent` | Strict versioned request sidecar decoding, invalid-content rejection, request cloning independence, and exact request materialization in the prepared attempt working directory |
+| `internal/engine/cadruntime/fact_evidence_test.go` | `TestMapFactEvidenceObservedValues`; `TestMapFactEvidenceNumericCanonicalizationCollapsesEquivalentEvidence`; `TestMapFactEvidenceUnits` | Observed typed values, numeric canonicalization collapsing equivalent duplicate evidence, and explicit unit agreement with requested bindings |
+| Same file | `TestMapFactEvidenceSubjectQualification`; `TestMapFactEvidenceAvailabilityStates` | Declared-resource and materialized-coordinate subject joins, and observed/unavailable/unsupported presence strictness per binding |
+| Same file | `TestMapFactEvidenceDuplicateAndConflictSemantics`; `TestMapFactEvidenceDeterminismUnderShuffledEvidence` | Equivalent duplicate canonicalization, deterministic conflict rejection, and order-independent normalized acceptance and output |
+| Same file | `TestMapFactEvidenceRejectsMalformedAndUnsolicitedEvidence`; `TestMapFactEvidenceRuntimeVersionIsProvenanceOnly`; `TestFactEvidenceProvenanceCoversUnobservedFactsFromPresentEvidence` | Malformed and unsolicited evidence rejection, provenance-only native runtime version tokens, and shared evidence provenance covering unobserved facts from present evidence |
+| `internal/engine/cadruntime/fact_run_test.go` | `TestLoadFactRunAbsentEvidenceIsExplicitUnavailability`; `TestLoadFactRunPresentEvidencePreservesExactBytes`; `TestLoadFactRunRejectsUnconfinedOrEmptyEvidence` | Omitted evidence file as explicit unavailability, exact confined evidence byte retention, and unconfined or empty evidence rejection |
+| `internal/engine/recordemit/fact_test.go` | `TestEmitRunPackageFactMergesIntoExistingObservationFamily`; `TestEmitRunPackageFactDoesNotAlterExistingFamilies`; `TestEmitRunPackageFactAvailabilityAndFailures`; `TestEmitRunPackageFactIsDeterministicAndRelocationIndependent` | Fact merge into the existing observation record family, preservation of other record families, optional omission versus required failure, and deterministic repeated emission with relocation-independent normalized facts |
+| `internal/engine/recordpackage/fact_evidence_classification_test.go` | `TestRawFactEvidenceContractPathAndClassification`; `TestRawFactEvidenceRejectsUnknownAndUnsafePaths` | `raw/fact/prm.fact-evidence.json` contract path and raw-runtime-evidence classification; rejection of unknown and unsafe raw-evidence paths |
+| `cmd/parametron/fact_evidence_test.go` | `TestCADRuntimeRunEvidenceFactCardinalityAndCopy` | Zero/one/multiple eligible outcome projection boundary, exact evidence transport, defensive copying, unsolicited evidence transported unchanged for Engine-owned rejection, and failed-overall-execution exclusion |
+
+Fact observations normalize into the existing observation record family as
+`observation.facts[]` material of the `fact` kind; no separate record family
+exists. Raw fact evidence is preserved at `raw/fact/prm.fact-evidence.json`,
+classified as raw runtime evidence, and the request sidecar is not packaged.
+Invalid contracts fail with `ErrInvalidFact`; required unavailable or
+unsupported bindings fail with `ErrRequiredFactUnavailable`; record-level
+conflicting facts fail with `ErrInvalidObservationRecord`. Intake failures
+surface at the `outcome_validation` consumption stage. Fact observation is
+separate from target-state mutation verification, and quantity remains
+#50 occurrence-derived semantics, not a CAD fact.
+
+As with occurrence proof, fact observation is not authored through public CLI
+flags or DSL: opt-in intent is `ExecutePackageWithOptions` with
+`PackageExecutionOptions.FactObservation` only. No native FreeCAD fact
+observation, unit conversion, material inference, or physical mass is claimed
+by these tests.
+
+Focused verification uses the existing package test interface:
+
+```bash
+go test ./internal/engine/recordcontract/... ./internal/engine/cadruntime/... ./internal/engine/recordemit/... ./internal/engine/recordpackage/... ./cmd/parametron/... -run 'Fact|TestParameterObservationRecordIdentityMatchesPreChangeGolden'
+```
+
+## Known pre-existing test-order limitation
+
+`go test -shuffle=on ./cmd/parametron/...` can intermittently fail the
+`TestLoadPlannedRun_ProjectMode*` tests in `cmd/parametron/harness_cmd_test.go`
+with table I/O errors resolving a fixture inside another test's temporary
+working directory, indicating a pre-existing order coupling through shared
+process working-directory state that relative project entrypoints depend on.
+This failure is pre-existing: it was identified while adding #51 fact coverage
+and reproduced on the parent commit before fact changes; it does not involve
+any fact observation test. Plain `go test ./...` has not been observed to
+trigger it in fresh Nix runs. It is recorded here so it is not mistaken for a
+#51 regression; no fix is claimed or covered by any current test.
 
 ## Integration and End-to-End Proof
 
