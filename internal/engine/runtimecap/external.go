@@ -87,12 +87,11 @@ func NormalizeRequest(req Request) (Request, error) {
 }
 
 // integrityRequestEnv applies the Engine-owned integrity request entry over the
-// inherited environment, dropping any inherited value for the same key so the
-// Engine-supplied location is authoritative.
+// inherited environment. An Engine-supplied path drops any inherited entry for
+// the key and appends the Engine-supplied location. No Engine-supplied path also
+// drops inherited entries, so the variable reaches the runtime only when the
+// Engine authors a request for the invocation.
 func integrityRequestEnv(base []string, integrityRequestPath string) []string {
-	if integrityRequestPath == "" {
-		return base
-	}
 	prefix := IntegrityRequestEnvVar + "="
 	out := make([]string, 0, len(base)+1)
 	for _, entry := range base {
@@ -100,6 +99,9 @@ func integrityRequestEnv(base []string, integrityRequestPath string) []string {
 			continue
 		}
 		out = append(out, entry)
+	}
+	if integrityRequestPath == "" {
+		return out
 	}
 	return append(out, prefix+integrityRequestPath)
 }
