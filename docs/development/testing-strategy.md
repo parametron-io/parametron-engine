@@ -99,8 +99,12 @@ record packaging.
   Ensures pure, deterministic projection of execution manifests, verification
   requests (`prm.verification.json`) including optional request-scoped target-state
   observation contracts (`suppression`, `visibility`, `existence`) derived from
-  canonical mutation intent, and reference traversal requests
-  (`prm.reference-traversal-request.json`). Validates deterministic canonical
+  canonical mutation intent, reference traversal requests
+  (`prm.reference-traversal-request.json`), and Engine-authored integrity
+  requests (`prm.integrity-request.json`) composed from verified materialized
+  baselines, published at the attempt-scoped path under the run's integrity
+  root, and delivered only through the `PARAMETRON_RUNTIME_INTEGRITY_REQUEST`
+  environment variable. Validates deterministic canonical
   serialization (`destination` then `object`) and schema 1.0 preservation.
   Capture-backed native-target tests carry `Body01` through the runtime manifest,
   observation request, in-memory expected state, and controlled returned evidence
@@ -108,7 +112,12 @@ record packaging.
 - **Evidence Intake Validation (`internal/engine/cadruntime`, `internal/engine/observed`)**:
   Validates raw `prm.result.json` loading, strict artifact containment checks,
   `prm.observed.json` working copy fingerprint correlation, strict target-state
-  evidence parsing and canonical serialization preserving distinct boolean evidence states (`observed`, `target_missing`, `unavailable`) and existence evidence states (`exists`, `absent`, `unavailable`) independently from mutation intent, and `prm.reference-traversal.json` intake.
+  evidence parsing and canonical serialization preserving distinct boolean evidence states (`observed`, `target_missing`, `unavailable`) and existence evidence states (`exists`, `absent`, `unavailable`) independently from mutation intent, `prm.reference-traversal.json` intake, and
+  `prm.integrity-evidence.json` intake validated strictly against the
+  Engine-authored integrity request: malformed digests, duplicate or unordered
+  resources, evidence for unrequested coordinates, and non-observed primary
+  resources are rejected, while non-observed statuses are accepted for
+  secondary resources.
 
 ### 3. Verification and Normalized Records
 
