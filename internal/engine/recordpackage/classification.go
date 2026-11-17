@@ -42,8 +42,16 @@ func RawRuntimeReferenceTraversalContractPath() string {
 	return mustJoinContractPath(RawEvidenceDirectoryName, rawRuntimeDirectoryName, rawRuntimeReferenceTraversalFileName)
 }
 
+// RawRuntimeOccurrenceEvidenceContractPath returns the canonical raw occurrence
+// evidence contract path.
 func RawRuntimeOccurrenceEvidenceContractPath() string {
 	return mustJoinContractPath(RawEvidenceDirectoryName, rawRuntimeDirectoryName, "prm.occurrence-evidence.json")
+}
+
+// RawRuntimeIntegrityEvidenceContractPath returns the canonical raw runtime
+// integrity evidence contract path.
+func RawRuntimeIntegrityEvidenceContractPath() string {
+	return mustJoinContractPath(RawEvidenceDirectoryName, rawRuntimeDirectoryName, "prm.integrity-evidence.json")
 }
 
 // RawFactEvidenceContractPath returns the canonical raw fact evidence contract path.
@@ -163,10 +171,11 @@ func IsRawRuntimeEvidenceContractPath(path string) bool {
 }
 
 func entryForValidatedContractPath(path string) (Entry, bool) {
-	// Optional occurrence and fact evidence extend classification without
-	// changing the established core layout returned for runs that request
-	// neither sidecar.
-	if path == RawRuntimeOccurrenceEvidenceContractPath() || path == RawFactEvidenceContractPath() {
+	// Optional occurrence, fact, and integrity evidence extend classification
+	// without changing the established core layout returned for runs that
+	// request none of them.
+	if path == RawRuntimeOccurrenceEvidenceContractPath() || path == RawFactEvidenceContractPath() ||
+		path == RawRuntimeIntegrityEvidenceContractPath() {
 		return Entry{ContractPath: path, Kind: EntryKindFile, Role: EntryRoleRawEvidence}, true
 	}
 	for _, entry := range Entries() {

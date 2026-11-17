@@ -36,11 +36,16 @@ func invalid(id, field, message string) error { return &Error{id, field, errors.
 
 // Binding is a value snapshot. Empty MaterializedCoordinate means no completed
 // materialization. Source access paths are deliberately absent from this value.
+//
+// SourceDigest, when set, is the path-free content identity of the actual
+// project source bytes for this declared resource. It is evidence about the
+// resource, not part of its identity keys or coordinates.
 type Binding struct {
 	ProjectID              string
 	Kind                   ResourceKind
 	LogicalID              string
 	SourceCoordinate       string
+	SourceDigest           string
 	MaterializedCoordinate string
 }
 
@@ -105,6 +110,11 @@ func New(bindings []Binding) (Inventory, error) {
 		if err := ValidateCoordinate(b.SourceCoordinate); err != nil {
 			return Inventory{}, &Error{b.LogicalID, "sourceCoordinate", err}
 		}
+		if b.SourceDigest != "" {
+			if err := validateSourceDigest(b.SourceDigest); err != nil {
+				return Inventory{}, &Error{b.LogicalID, "sourceDigest", err}
+			}
+		}
 		if b.MaterializedCoordinate != "" {
 			if err := ValidateCoordinate(b.MaterializedCoordinate); err != nil {
 				return Inventory{}, &Error{b.LogicalID, "materializedCoordinate", err}
@@ -127,6 +137,24 @@ func New(bindings []Binding) (Inventory, error) {
 func ValidateCoordinate(c string) error {
 	if c == "" || strings.TrimSpace(c) != c || strings.ContainsAny(c, "\\\x00") || path.IsAbs(c) || path.Clean(c) != c || c == "." || c == ".." || strings.HasPrefix(c, "../") || (len(c) >= 3 && c[1] == ':' && c[2] == '/') {
 		return fmt.Errorf("invalid canonical relative coordinate %q", c)
+	}
+	return nil
+}
+
+// sourceDigestHexLength is the canonical SHA-256 digest length in hexadecimal
+// characters, matching the repository's digest encoding.
+const sourceDigestHexLength = 64
+
+// validateSourceDigest rejects content identities that are not canonical
+// lowercase hexadecimal SHA-256 digests.
+func validateSourceDigest(digest string) error {
+	if len(digest) != sourceDigestHexLength {
+		return fmt.Errorf("invalid canonical SHA-256 digest %q", digest)
+	}
+	for _, ch := range digest {
+		if (ch < '0' || ch > '9') && (ch < 'a' || ch > 'f') {
+			return fmt.Errorf("invalid canonical SHA-256 digest %q", digest)
+		}
 	}
 	return nil
 }

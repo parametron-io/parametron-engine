@@ -2,6 +2,12 @@ package runtimecap
 
 import "context"
 
+// IntegrityRequestEnvVar names the Engine-owned environment variable that tells an
+// external runtime where the per-resource integrity request document for this
+// attempt is located. The variable is transport only: the contract itself is the
+// versioned JSON document it points at.
+const IntegrityRequestEnvVar = "PARAMETRON_RUNTIME_INTEGRITY_REQUEST"
+
 // Capability defines the Engine-owned contract for external runtime invocation.
 type Capability interface {
 	Invoke(ctx context.Context, req Request) (*Result, error)
@@ -16,6 +22,11 @@ type Request struct {
 	OutputDir                     string
 	ObservationRequestPath        string
 	ReferenceTraversalRequestPath string
+	// IntegrityRequestPath optionally locates the Engine-authored per-resource
+	// integrity request for this invocation. It is transported to the runtime as
+	// the Engine-owned environment entry named by
+	// IntegrityRequestEnvVar; the aligned argv contract is unchanged.
+	IntegrityRequestPath string
 }
 
 // Command captures the resolved external runtime subprocess invocation.

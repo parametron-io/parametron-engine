@@ -19,9 +19,14 @@ const (
 	FailureClassRuntime      FailureClass = "runtime"
 	FailureClassExport       FailureClass = "export"
 	FailureClassVerification FailureClass = "verification"
-	FailureClassTimeout      FailureClass = "timeout"
-	FailureClassCanceled     FailureClass = "canceled"
-	FailureClassInternal     FailureClass = "internal"
+	// FailureClassIntegrity reports an Engine-owned resource integrity violation:
+	// source lock, materialization, runtime baseline, or persisted-result
+	// identity. It is deliberately distinct from runtime and verification
+	// failures.
+	FailureClassIntegrity FailureClass = "integrity"
+	FailureClassTimeout   FailureClass = "timeout"
+	FailureClassCanceled  FailureClass = "canceled"
+	FailureClassInternal  FailureClass = "internal"
 )
 
 // FailureSeverity is a normalized failure severity vocabulary value.
@@ -44,7 +49,9 @@ const (
 	FailureStageRuntime      FailureStage = "runtime"
 	FailureStageExport       FailureStage = "export"
 	FailureStageVerification FailureStage = "verification"
-	FailureStagePackaging    FailureStage = "packaging"
+	// FailureStageIntegrity reports an Engine-owned resource integrity violation.
+	FailureStageIntegrity FailureStage = "integrity"
+	FailureStagePackaging FailureStage = "packaging"
 )
 
 // FailureLocation captures normalized failure location material.
@@ -314,8 +321,8 @@ func knownFailureClass(class FailureClass) bool {
 	switch NormalizeFailureClass(class) {
 	case FailureClassValidation, FailureClassPlanning, FailureClassExecution,
 		FailureClassAdapter, FailureClassRuntime, FailureClassExport,
-		FailureClassVerification, FailureClassTimeout, FailureClassCanceled,
-		FailureClassInternal:
+		FailureClassVerification, FailureClassIntegrity, FailureClassTimeout,
+		FailureClassCanceled, FailureClassInternal:
 		return true
 	default:
 		return false
@@ -335,7 +342,8 @@ func knownFailureStage(stage FailureStage) bool {
 	switch NormalizeFailureStage(stage) {
 	case FailureStageValidation, FailureStagePlanning, FailureStageScheduling,
 		FailureStageExecution, FailureStageAdapter, FailureStageRuntime,
-		FailureStageExport, FailureStageVerification, FailureStagePackaging:
+		FailureStageExport, FailureStageVerification, FailureStageIntegrity,
+		FailureStagePackaging:
 		return true
 	default:
 		return false

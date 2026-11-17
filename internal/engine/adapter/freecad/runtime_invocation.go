@@ -25,6 +25,11 @@ type FreeCADRuntimeExecutionRequest struct {
 	OutputDir                     string
 	ObservationRequestPath        string
 	ReferenceTraversalRequestPath string
+	// IntegrityRequestPath locates the Engine-authored per-resource integrity
+	// request for this attempt. It is transported to the runtime as the
+	// Engine-owned integrity request environment entry, never as a CLI flag, so
+	// the established argv contract is unchanged.
+	IntegrityRequestPath string
 }
 
 type FreeCADRuntimeCommand struct {
@@ -114,6 +119,7 @@ func freeCADRuntimeExecutionRequestToRuntimecap(req FreeCADRuntimeExecutionReque
 		OutputDir:                     req.OutputDir,
 		ObservationRequestPath:        req.ObservationRequestPath,
 		ReferenceTraversalRequestPath: req.ReferenceTraversalRequestPath,
+		IntegrityRequestPath:          req.IntegrityRequestPath,
 	}
 }
 

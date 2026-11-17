@@ -19,6 +19,12 @@ import (
 const (
 	FileName = "prm.project-lock.json"
 	Version  = "1.0"
+
+	// sha256HexLength is the canonical SHA-256 digest length in hexadecimal
+	// characters. Lock digests must use the repository's canonical encoding so
+	// that a malformed lock is rejected deterministically rather than silently
+	// compared against source content.
+	sha256HexLength = 64
 )
 
 var (
@@ -575,6 +581,9 @@ func normalizeSHA256(field, value string) (string, error) {
 	}
 	if !isLowerHex(value) {
 		return "", fmt.Errorf("%s must be lowercase hexadecimal", field)
+	}
+	if len(value) != sha256HexLength {
+		return "", fmt.Errorf("%s must be a %d-character SHA-256 digest", field, sha256HexLength)
 	}
 	return value, nil
 }

@@ -23,6 +23,29 @@ type canonicalProvenance struct {
 	Linkage        canonicalLinkageProvenance `json:"linkage"`
 	Evidence       []canonicalEvidenceRef     `json:"evidence"`
 	Runtime        canonicalRuntimeProvenance `json:"runtime"`
+	// Integrity is omitted when absent so identities of records without
+	// declared resource integrity provenance are unchanged.
+	Integrity *canonicalIntegrityProvenance `json:"integrity,omitempty"`
+}
+
+type canonicalIntegrityProvenance struct {
+	Lock      string                        `json:"lock"`
+	Resources []canonicalResourceProvenance `json:"resources"`
+}
+
+type canonicalResourceProvenance struct {
+	LogicalID                   string `json:"logicalId"`
+	SourceCoordinate            string `json:"sourceCoordinate"`
+	MaterializedCoordinate      string `json:"materializedCoordinate"`
+	PersistedResultCoordinate   string `json:"persistedResultCoordinate"`
+	SourceDigestSHA256          string `json:"sourceDigestSha256"`
+	LockState                   string `json:"lockState"`
+	BaselineDigestSHA256        string `json:"baselineDigestSha256"`
+	MaterializationStatus       string `json:"materializationStatus"`
+	RuntimeBaselineDigestSHA256 string `json:"runtimeBaselineDigestSha256"`
+	RuntimeBaselineStatus       string `json:"runtimeBaselineStatus"`
+	PersistedResultDigestSHA256 string `json:"persistedResultDigestSha256"`
+	ResultStatus                string `json:"resultStatus"`
 }
 
 type canonicalSourceRevision struct {
@@ -100,7 +123,35 @@ func canonicalProvenanceFromNormalized(p Provenance) canonicalProvenance {
 			RuntimeID: p.Runtime.RuntimeID,
 			Adapter:   p.Runtime.Adapter,
 		},
+		Integrity: canonicalIntegrityProvenanceFromNormalized(p.Integrity),
 	}
+}
+
+func canonicalIntegrityProvenanceFromNormalized(p *IntegrityProvenance) *canonicalIntegrityProvenance {
+	if p == nil {
+		return nil
+	}
+	out := &canonicalIntegrityProvenance{
+		Lock:      string(p.Lock),
+		Resources: make([]canonicalResourceProvenance, 0, len(p.Resources)),
+	}
+	for _, resource := range p.Resources {
+		out.Resources = append(out.Resources, canonicalResourceProvenance{
+			LogicalID:                   resource.LogicalID,
+			SourceCoordinate:            resource.SourceCoordinate,
+			MaterializedCoordinate:      resource.MaterializedCoordinate,
+			PersistedResultCoordinate:   resource.PersistedResultCoordinate,
+			SourceDigestSHA256:          resource.SourceDigestSHA256,
+			LockState:                   string(resource.LockState),
+			BaselineDigestSHA256:        resource.BaselineDigestSHA256,
+			MaterializationStatus:       string(resource.MaterializationStatus),
+			RuntimeBaselineDigestSHA256: resource.RuntimeBaselineDigestSHA256,
+			RuntimeBaselineStatus:       string(resource.RuntimeBaselineStatus),
+			PersistedResultDigestSHA256: resource.PersistedResultDigestSHA256,
+			ResultStatus:                string(resource.ResultStatus),
+		})
+	}
+	return out
 }
 
 func canonicalProvenanceInputsFromNormalized(inputs []ProvenanceInput) []canonicalProvenanceInput {

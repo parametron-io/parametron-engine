@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -128,6 +129,37 @@ func TestInventoryCoordinatesAndKinds(t *testing.T) {
 	}
 	if _, err := New([]Binding{model("a", "models/a.FCStd", "source/a.FCStd")}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestInventoryValidatesSourceDigest(t *testing.T) {
+	canonical := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	b := model("part", "models/part.FCStd", "")
+	b.SourceDigest = canonical
+	if _, err := New([]Binding{b}); err != nil {
+		t.Fatalf("canonical source digest rejected: %v", err)
+	}
+
+	for name, digest := range map[string]string{
+		"too short":           canonical[:63],
+		"too long":            canonical + "0",
+		"uppercase":           strings.ToUpper(canonical),
+		"non hexadecimal":     strings.Repeat("g", 64),
+		"leading whitespace":  " " + canonical,
+		"trailing whitespace": canonical + " ",
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := model("part", "models/part.FCStd", "")
+			invalid.SourceDigest = digest
+			_, err := New([]Binding{invalid})
+			if !errors.Is(err, ErrInvalid) {
+				t.Fatalf("source digest %q was accepted: %v", digest, err)
+			}
+			var bindingErr *Error
+			if !errors.As(err, &bindingErr) || bindingErr.Field != "sourceDigest" {
+				t.Fatalf("source digest error = %#v, want field sourceDigest", err)
+			}
+		})
 	}
 }
 

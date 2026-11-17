@@ -57,6 +57,7 @@ func NormalizeRequest(req Request) (Request, error) {
 		OutputDir:                     strings.TrimSpace(req.OutputDir),
 		ObservationRequestPath:        strings.TrimSpace(req.ObservationRequestPath),
 		ReferenceTraversalRequestPath: strings.TrimSpace(req.ReferenceTraversalRequestPath),
+		IntegrityRequestPath:          strings.TrimSpace(req.IntegrityRequestPath),
 	}
 
 	switch {
@@ -78,9 +79,31 @@ func NormalizeRequest(req Request) (Request, error) {
 		return Request{}, fmt.Errorf("reference traversal request path must be non-empty when provided")
 	case normalized.ReferenceTraversalRequestPath != "" && normalized.OutputDir == "":
 		return Request{}, fmt.Errorf("reference traversal request requires an output directory")
+	case req.IntegrityRequestPath != "" && normalized.IntegrityRequestPath == "":
+		return Request{}, fmt.Errorf("integrity request path must be non-empty when provided")
 	}
 
 	return normalized, nil
+}
+
+// integrityRequestEnv applies the Engine-owned integrity request entry over the
+// inherited environment. An Engine-supplied path drops any inherited entry for
+// the key and appends the Engine-supplied location. No Engine-supplied path also
+// drops inherited entries, so the variable reaches the runtime only when the
+// Engine authors a request for the invocation.
+func integrityRequestEnv(base []string, integrityRequestPath string) []string {
+	prefix := IntegrityRequestEnvVar + "="
+	out := make([]string, 0, len(base)+1)
+	for _, entry := range base {
+		if strings.HasPrefix(entry, prefix) {
+			continue
+		}
+		out = append(out, entry)
+	}
+	if integrityRequestPath == "" {
+		return out
+	}
+	return append(out, prefix+integrityRequestPath)
 }
 
 // FilterLegacyEnvVars removes legacy runtime environment variables from aligned invocation.
@@ -108,7 +131,16 @@ func (ExternalCapability) Invoke(ctx context.Context, req Request) (*Result, err
 		}
 	}
 
-	command, err := BuildCommand(req)
+	normalized, err := NormalizeRequest(req)
+	if err != nil {
+		return nil, &Error{
+			Kind:    ErrorInvalid,
+			Message: "invalid runtime capability invocation request",
+			Err:     err,
+		}
+	}
+
+	command, err := BuildCommand(normalized)
 	if err != nil {
 		return nil, &Error{
 			Kind:    ErrorInvalid,
@@ -118,7 +150,7 @@ func (ExternalCapability) Invoke(ctx context.Context, req Request) (*Result, err
 	}
 
 	cmd := exec.CommandContext(ctx, command.Path, command.Args...)
-	cmd.Env = FilterLegacyEnvVars(os.Environ())
+	cmd.Env = integrityRequestEnv(FilterLegacyEnvVars(os.Environ()), normalized.IntegrityRequestPath)
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

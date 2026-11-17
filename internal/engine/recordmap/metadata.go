@@ -428,6 +428,7 @@ func copyProvenance(p recordcontract.Provenance) recordcontract.Provenance {
 		Linkage:        p.Linkage,
 		Evidence:       copyEvidenceReferences(p.Evidence),
 		Runtime:        p.Runtime,
+		Integrity:      copyIntegrityProvenance(p.Integrity),
 	}
 }
 

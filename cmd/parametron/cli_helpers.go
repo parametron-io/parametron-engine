@@ -25,6 +25,7 @@ import (
 	"parametron/internal/engine/cad"
 	"parametron/internal/engine/cadruntime"
 	"parametron/internal/engine/executor"
+	"parametron/internal/engine/integrity"
 	"parametron/internal/engine/metadata"
 	"parametron/internal/engine/projectinput"
 	"parametron/internal/engine/recordcontract"
@@ -55,6 +56,9 @@ type plannedRun struct {
 	ProfileSettings  map[string]any
 	TableInputs      []metadata.TableInputMetadata
 	ProjectInputs    *projectinput.CapturedResources
+	// SourceIntegrity is the project-scoped declared-resource source identity and
+	// lock verification state. It is nil when the run declares no CAD resources.
+	SourceIntegrity *integrity.ProjectIntegrity
 }
 
 type executionOptions struct {
@@ -245,6 +249,18 @@ func loadPlannedRun(dslPath string, overrides map[string]string, args []string) 
 		return nil, err
 	}
 
+	// Attach the path-free source content identity of every declared resource to
+	// the #48 inventory so materialization and lock enforcement share one
+	// resource namespace.
+	if projectInput != nil && projectResources != nil {
+		enriched, attachErr := projectinput.AttachSourceIdentities(projectInput, projectResources)
+		if attachErr != nil {
+			slog.Error("Failed to attach declared resource source identities", "path", dslPath, "error", attachErr)
+			return nil, attachErr
+		}
+		projectInput.ModelInventory = enriched
+	}
+
 	if len(loadedTables) == 0 {
 		slog.Info("Validating AST")
 		if err := dsl.Validate(ast); err != nil {
@@ -353,6 +369,7 @@ func loadPlannedRun(dslPath string, overrides map[string]string, args []string) 
 		ProfileSettings:  profileSettings,
 		TableInputs:      tableMetadata,
 		ProjectInputs:    projectResources,
+		SourceIntegrity:  evaluateProjectSourceIntegrity(projectInput),
 	}, nil
 }
 
@@ -413,7 +430,10 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 		if wrapErr != nil {
 			panic(wrapErr)
 		}
-		return executor.NewWithArtifactsAndCADRuntimeConsumption(aligned, store, resolver, productDir)
+		productExecutor := executor.NewWithArtifactsAndCADRuntimeConsumption(aligned, store, resolver, productDir)
+		productExecutor.SetSourceIntegrity(opts.Planned.SourceIntegrity)
+		productExecutor.SetIntegrityRequestDir(runRoot)
+		return productExecutor
 	}).WithResourceContexts(opts.Planned.ResourceContexts)
 
 	startedAt := time.Now().UTC()
@@ -447,6 +467,10 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 	}
 
 	var runMetadata *metadata.Metadata
+	mergedRunIntegrity, mergeErr := integrity.MergeRunIntegrity(opts.Planned.SourceIntegrity, operationIntegrityEvidence(schedulerResult))
+	if mergeErr != nil {
+		return nil, fmt.Errorf("merge integrity provenance: %w", mergeErr)
+	}
 	if executionErr == nil {
 		if err := store.WriteManifest(); err != nil {
 			slog.Warn("Failed to write artifact manifest", "error", err)
@@ -465,6 +489,7 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 			ProfileSettings:   opts.Planned.ProfileSettings,
 			Tables:            opts.Planned.TableInputs,
 			ProjectInputs:     opts.Planned.ProjectInputs,
+			SourceIntegrity:   metadata.IntegrityFromRun(mergedRunIntegrity),
 			Artifacts:         artifacts,
 			StartedAt:         startedAt,
 			EndedAt:           endedAt,
@@ -489,11 +514,15 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 			Metadata:           runMetadata,
 			Artifacts:          artifacts,
 			ReferenceTraversal: referenceTraversalRunEvidence(schedulerResult, executionErr == nil),
+			SourceIntegrity:    opts.Planned.SourceIntegrity,
 		}
 		if executionErr == nil {
 			emitInput.CADRuntime, packageEmitErr = cadRuntimeRunEvidence(schedulerResult, true)
 		} else {
 			emitInput.CADRuntime, packageEmitErr = cadRuntimeFailureRunEvidence(schedulerResult, runReport)
+			if packageEmitErr == nil {
+				packageEmitErr = attachIntegrityFailureEvidence(&emitInput, schedulerResult, runReport)
+			}
 		}
 		if packageEmitErr == nil {
 			packageEmitErr = recordemit.EmitRunPackage(emitInput)
@@ -531,6 +560,27 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 	return result, nil
 }
 
+// attachIntegrityFailureEvidence preserves the raw integrity evidence of a failed
+// integrity attempt without claiming a runtime-native failure record.
+func attachIntegrityFailureEvidence(input *recordemit.RunEmitInput, execution scheduler.ExecutionResult, runReport report.Report) error {
+	if input.CADRuntime != nil && len(input.CADRuntime.IntegrityEvidence) > 0 {
+		return nil
+	}
+	evidence, err := integrityFailureRunEvidence(execution, runReport)
+	if err != nil {
+		return err
+	}
+	if evidence == nil {
+		return nil
+	}
+	if input.CADRuntime == nil {
+		input.CADRuntime = evidence
+		return nil
+	}
+	input.CADRuntime.IntegrityEvidence = evidence.IntegrityEvidence
+	return nil
+}
+
 func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecutionSucceeded bool) (*recordemit.CADRuntimeRunEvidence, error) {
 	if !overallExecutionSucceeded {
 		return nil, nil
@@ -563,6 +613,7 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 	}
 	evidence.ObservedValue = candidate.Observed
 	evidence.VerificationResult = candidate.VerificationResult
+	evidence.Integrity = candidate.Integrity.Copy()
 	evidence.JobID = candidate.JobID
 	evidence.ProductKey = candidate.ProductKey
 	evidence.StepRef = candidate.StepID
@@ -573,6 +624,7 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 		{candidate.ResultPath, &evidence.Result},
 		{candidate.ObservationRequestPath, &evidence.Verification},
 		{candidate.ObservedPath, &evidence.Observed},
+		{candidate.IntegrityEvidencePath, &evidence.IntegrityEvidence},
 	} {
 		content, err := cadruntime.ReadOptionalFreeCADRuntimeEvidence(candidate.WorkingCopyDir, source.path)
 		if err != nil {
@@ -583,6 +635,9 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 	return evidence, nil
 }
 
+// cadRuntimeFailureRunEvidence returns the raw attempt evidence for a failed run
+// that reported a runtime-native failure. Engine-owned integrity failures are
+// carried separately so they never claim a runtime-native failure record.
 func cadRuntimeFailureRunEvidence(execution scheduler.ExecutionResult, runReport report.Report) (*recordemit.CADRuntimeRunEvidence, error) {
 	if runReport.Error == nil || runReport.Status == report.StatusSuccess {
 		return nil, nil
@@ -614,21 +669,78 @@ func cadRuntimeFailureRunEvidence(execution scheduler.ExecutionResult, runReport
 	if candidate == nil {
 		return nil, nil
 	}
-	result, err := cadruntime.ReadOptionalFreeCADRuntimeEvidence(candidate.WorkingCopyDir, candidate.ResultPath)
-	if err != nil {
-		return nil, fmt.Errorf("read CAD runtime evidence %q: %w", candidate.ResultPath, err)
-	}
-	if len(result) == 0 {
-		return nil, nil
-	}
-	failure := *candidate.Failure
-	return &recordemit.CADRuntimeRunEvidence{
-		Result:     result,
-		Failure:    &failure,
+
+	evidence := &recordemit.CADRuntimeRunEvidence{
 		JobID:      candidate.JobID,
 		ProductKey: candidate.ProductKey,
 		StepRef:    candidate.StepID,
-	}, nil
+		Integrity:  candidate.Integrity.Copy(),
+	}
+	for _, source := range []struct {
+		path    string
+		content *[]byte
+	}{
+		{candidate.ResultPath, &evidence.Result},
+		{candidate.IntegrityEvidencePath, &evidence.IntegrityEvidence},
+	} {
+		content, err := cadruntime.ReadOptionalFreeCADRuntimeEvidence(candidate.WorkingCopyDir, source.path)
+		if err != nil {
+			return nil, fmt.Errorf("read CAD runtime evidence %q: %w", source.path, err)
+		}
+		*source.content = content
+	}
+	if len(evidence.Result) == 0 {
+		return nil, nil
+	}
+
+	failure := *candidate.Failure
+	evidence.Failure = &failure
+	return evidence, nil
+}
+
+// integrityFailureRunEvidence returns the raw integrity evidence of the single
+// failed attempt that produced it. It adds no failure record, so an
+// Engine-owned integrity failure keeps its own classification.
+func integrityFailureRunEvidence(execution scheduler.ExecutionResult, runReport report.Report) (*recordemit.CADRuntimeRunEvidence, error) {
+	if runReport.Error == nil || runReport.Status == report.StatusSuccess {
+		return nil, nil
+	}
+
+	wantProduct := strings.TrimSpace(runReport.Error.ProductID)
+	wantStep := strings.TrimSpace(runReport.Error.StepID)
+	wantJob := reportFailureJobID(runReport.Jobs, wantProduct)
+	var candidate *executor.CADRuntimeOutcome
+	for _, jobExecution := range execution.Jobs {
+		outcome := jobExecution.CADRuntimeOutcome
+		if outcome == nil || outcome.IntegrityEvidencePath == "" {
+			continue
+		}
+		if wantProduct != "" && outcome.ProductKey != wantProduct {
+			continue
+		}
+		if wantStep != "" && outcome.StepID != wantStep {
+			continue
+		}
+		if wantJob != "" && outcome.JobID != wantJob {
+			continue
+		}
+		if candidate != nil {
+			return nil, nil
+		}
+		candidate = outcome
+	}
+	if candidate == nil {
+		return nil, nil
+	}
+
+	content, err := cadruntime.ReadOptionalFreeCADRuntimeEvidence(candidate.WorkingCopyDir, candidate.IntegrityEvidencePath)
+	if err != nil {
+		return nil, fmt.Errorf("read CAD runtime integrity evidence %q: %w", candidate.IntegrityEvidencePath, err)
+	}
+	if len(content) == 0 {
+		return nil, nil
+	}
+	return &recordemit.CADRuntimeRunEvidence{IntegrityEvidence: content, Integrity: candidate.Integrity.Copy()}, nil
 }
 
 func reportFailureJobID(jobs []report.JobReport, productKey string) string {
@@ -1068,4 +1180,104 @@ func projectResourceContexts(resolved *resolvedProjectInput) map[string]*resourc
 		contexts[key] = value.Clone()
 	}
 	return contexts
+}
+
+// evaluateProjectSourceIntegrity joins declared-resource source content identity
+// to the project lock, if one is present.
+//
+// Enforcement is active whenever a project lock exists at the project root. An
+// absent lock leaves the workflow unlocked: the provenance records that lock
+// verification was not performed and never claims verification.
+func evaluateProjectSourceIntegrity(resolved *resolvedProjectInput) *integrity.ProjectIntegrity {
+	if resolved == nil {
+		return nil
+	}
+
+	bindings := resolved.ModelInventory.Bindings()
+	if len(bindings) == 0 {
+		return nil
+	}
+
+	sources := make([]integrity.ResourceSource, 0, len(bindings))
+	for _, binding := range bindings {
+		sources = append(sources, integrity.ResourceSource{
+			LogicalID:        binding.LogicalID,
+			SourceCoordinate: binding.SourceCoordinate,
+			SourceDigest:     integrity.Digest(binding.SourceDigest),
+		})
+	}
+
+	return integrity.EvaluateLock(projectLockScope(resolved.ProjectRoot), sources)
+}
+
+// operationIntegrityEvidence returns the single attempt-scoped integrity record
+// carried by the executed jobs, or nil when the bounded singular package cannot
+// represent the outcome.
+func operationIntegrityEvidence(execution scheduler.ExecutionResult) *integrity.OperationIntegrity {
+	var candidate *integrity.OperationIntegrity
+	for _, jobExecution := range execution.Jobs {
+		outcome := jobExecution.CADRuntimeOutcome
+		if outcome == nil || outcome.Integrity == nil || len(outcome.Integrity.Resources) == 0 {
+			continue
+		}
+		if candidate != nil {
+			return nil
+		}
+		candidate = outcome.Integrity.Copy()
+	}
+	return candidate
+}
+
+// projectLockScope adapts the project lock contract to the integrity lock scope.
+// A missing lock is an unlocked workflow; an unreadable or invalid lock is an
+// enforcement failure, never a silently unlocked run.
+func projectLockScope(projectRoot string) integrity.LockScope {
+	if strings.TrimSpace(projectRoot) == "" {
+		return integrity.LockScope{}
+	}
+
+	lockPath := filepath.Join(projectRoot, projectlock.FileName)
+	if _, err := os.Stat(lockPath); err != nil {
+		if os.IsNotExist(err) {
+			return integrity.LockScope{}
+		}
+		return integrity.LockScope{Present: true, Invalid: true}
+	}
+
+	lock, err := projectlock.Load(lockPath)
+	if err != nil {
+		return integrity.LockScope{Present: true, Invalid: true, Models: scanProjectLockModelDigests(lockPath)}
+	}
+
+	models := make([]integrity.LockEntry, 0, len(lock.Resources.Models))
+	for logicalID, entry := range lock.Resources.Models {
+		models = append(models, integrity.LockEntry{LogicalID: logicalID, Digest: entry.SHA256})
+	}
+	return integrity.LockScope{Present: true, Models: models}
+}
+
+// scanProjectLockModelDigests reads model entries from a lock file that failed
+// contract validation, so a non-canonical digest stays distinguishable from an
+// unreadable lock. It performs no validation of its own.
+func scanProjectLockModelDigests(lockPath string) []integrity.LockEntry {
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return nil
+	}
+	var scan struct {
+		Resources struct {
+			Models map[string]struct {
+				SHA256 string `json:"sha256"`
+			} `json:"models"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &scan); err != nil {
+		return nil
+	}
+
+	entries := make([]integrity.LockEntry, 0, len(scan.Resources.Models))
+	for logicalID, model := range scan.Resources.Models {
+		entries = append(entries, integrity.LockEntry{LogicalID: logicalID, Digest: model.SHA256})
+	}
+	return entries
 }

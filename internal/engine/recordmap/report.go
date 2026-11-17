@@ -15,6 +15,9 @@ const (
 	reportEvidenceKind     = "report"
 	reportEvidenceRef      = "raw/" + report.FileName
 	failureRecordKeySuffix = ":failure"
+	// failureCategoryIntegrity is the report error category Engine uses for
+	// Engine-owned resource integrity violations.
+	failureCategoryIntegrity = "integrity"
 )
 
 // ReportMappingInput carries operational report material and caller-supplied record identity.
@@ -338,6 +341,13 @@ func mapFailureClassAndStage(errSummary *report.ErrorSummary) (recordcontract.Fa
 	}
 	if errSummary.Canceled {
 		return recordcontract.FailureClassCanceled, recordcontract.FailureStageExecution
+	}
+	// Engine-owned integrity violations are classified by their explicit
+	// category, so they never collapse into execution, runtime, or
+	// verification failures. The specific integrity code is preserved as the
+	// failure code.
+	if strings.TrimSpace(errSummary.Category) == failureCategoryIntegrity {
+		return recordcontract.FailureClassIntegrity, recordcontract.FailureStageIntegrity
 	}
 
 	if class, stage, ok := mapVerificationClassification(errSummary.Classification); ok {

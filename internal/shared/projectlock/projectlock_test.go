@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"parametron/internal/engine/projectinput"
@@ -373,6 +374,21 @@ func TestValidate_InvalidForms(t *testing.T) {
 			entry.SHA256 = ""
 			lock.Resources.Models["box_model"] = entry
 		}, message: `resources.models["box_model"].sha256 is required`},
+		{name: "short_model_hash", mutate: func(lock *LockFile) {
+			entry := lock.Resources.Models["box_model"]
+			entry.SHA256 = repeatHex('b')[:63]
+			lock.Resources.Models["box_model"] = entry
+		}, message: `resources.models["box_model"].sha256 must be a 64-character SHA-256 digest`},
+		{name: "long_model_hash", mutate: func(lock *LockFile) {
+			entry := lock.Resources.Models["box_model"]
+			entry.SHA256 = repeatHex('b') + "0"
+			lock.Resources.Models["box_model"] = entry
+		}, message: `resources.models["box_model"].sha256 must be a 64-character SHA-256 digest`},
+		{name: "uppercase_model_hash", mutate: func(lock *LockFile) {
+			entry := lock.Resources.Models["box_model"]
+			entry.SHA256 = strings.ToUpper(repeatHex('b'))
+			lock.Resources.Models["box_model"] = entry
+		}, message: `resources.models["box_model"].sha256 must be lowercase hexadecimal`},
 		{name: "empty_table_fingerprint", mutate: func(lock *LockFile) {
 			entry := lock.Tables["fasteners"]
 			entry.Fingerprint = ""
