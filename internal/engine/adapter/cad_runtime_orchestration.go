@@ -32,6 +32,10 @@ type CADRuntimeOrchestrationRequest struct {
 	ProductDir string
 	StepID     string
 	Attempt    int
+	// IntegrityRequestDir is the Engine-owned orchestration root under which the
+	// per-attempt integrity request document is written. It is outside the
+	// attempt workspace so the established attempt layout is unchanged.
+	IntegrityRequestDir string
 
 	CSV        planner.WriteCSVPayload
 	Manifest   planner.WriteExportManifestPayload
@@ -157,6 +161,14 @@ func ValidateCADRuntimeOrchestrationRequest(req CADRuntimeOrchestrationRequest) 
 		return &CADRuntimeOrchestrationRequestError{
 			Field: "ProductDir",
 			Err:   fmt.Errorf("must be non-empty"),
+		}
+	}
+	if req.IntegrityRequestDir != "" {
+		if !filepath.IsAbs(req.IntegrityRequestDir) || filepath.Clean(req.IntegrityRequestDir) != req.IntegrityRequestDir {
+			return &CADRuntimeOrchestrationRequestError{
+				Field: "IntegrityRequestDir",
+				Err:   fmt.Errorf("must be absolute and clean when provided"),
+			}
 		}
 	}
 	if strings.TrimSpace(req.StepID) == "" {

@@ -14,6 +14,7 @@ import (
 	"parametron/internal/engine/artifact"
 	"parametron/internal/engine/cache"
 	"parametron/internal/engine/handoff"
+	"parametron/internal/engine/integrity"
 	"parametron/internal/engine/job"
 	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/resourcebinding"
@@ -35,6 +36,9 @@ type Executor struct {
 	cadRuntime            *cadRuntimeExecutionDependencies
 	cadRuntimeConsumption bool
 	cadRuntimeOutcome     *CADRuntimeOutcome
+	sourceIntegrity       *integrity.ProjectIntegrity
+	pendingIntegrity      *integrity.OperationIntegrity
+	integrityRequestDir   string
 }
 
 // PackageExecutionOptions carries explicit execution intent independently of
@@ -133,6 +137,26 @@ func (e *Executor) SetStrategy(strategy cache.CacheKeyStrategy) {
 	e.strategy = strategy
 }
 
+// SetSourceIntegrity supplies the project-scoped source identity and lock state
+// that must be verified before any CAD runtime execution is accepted. A nil
+// value preserves existing behavior for callers without declared resources.
+func (e *Executor) SetSourceIntegrity(project *integrity.ProjectIntegrity) {
+	if e == nil {
+		return
+	}
+	e.sourceIntegrity = project.Copy()
+}
+
+// SetIntegrityRequestDir supplies the Engine-owned orchestration root under which
+// the per-attempt integrity request document is published for the runtime. An
+// empty value disables request publication without changing evidence validation.
+func (e *Executor) SetIntegrityRequestDir(dir string) {
+	if e == nil {
+		return
+	}
+	e.integrityRequestDir = dir
+}
+
 // Strategy returns the current cache key strategy.
 func (e *Executor) Strategy() cache.CacheKeyStrategy {
 	if e.strategy == nil {
@@ -173,6 +197,7 @@ func (e *Executor) ArtifactAcceptanceContext() artifact.AcceptanceContext {
 func (e *Executor) Execute(ctx context.Context, plan *planner.ExecutionPlan) error {
 	e.packageOptions = PackageExecutionOptions{}
 	e.cadRuntimeOutcome = nil
+	e.pendingIntegrity = nil
 	e.jobID = ""
 	e.pkg = nil
 	return e.execute(ctx, plan)
@@ -310,6 +335,7 @@ func (e *Executor) ExecutePackageWithOptions(ctx context.Context, pkg *handoff.P
 	}
 	defer func() { e.packageOptions = PackageExecutionOptions{} }()
 	e.cadRuntimeOutcome = nil
+	e.pendingIntegrity = nil
 	if pkg == nil {
 		e.states = nil
 		e.pkg = nil

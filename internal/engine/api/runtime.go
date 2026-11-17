@@ -464,7 +464,11 @@ func defaultExecutorFactory(store artifact.Store, runRoot string) (func(*handoff
 		if wrapErr != nil {
 			panic(wrapErr)
 		}
-		return executor.NewWithCADRuntimeConsumption(aligned, resolver, productDir)
+		productExecutor := executor.NewWithCADRuntimeConsumption(aligned, resolver, productDir)
+		if absoluteRoot, absErr := filepath.Abs(root); absErr == nil {
+			productExecutor.SetIntegrityRequestDir(absoluteRoot)
+		}
+		return productExecutor
 	}, nil
 }
 

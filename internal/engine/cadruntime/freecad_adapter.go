@@ -9,6 +9,7 @@ import (
 	"parametron/internal/authoring/planner"
 	"parametron/internal/engine/adapter"
 	"parametron/internal/engine/adapter/freecad"
+	"parametron/internal/engine/integrity"
 	"parametron/internal/engine/observed"
 	"parametron/internal/engine/runtimecap"
 	"parametron/internal/engine/verification"
@@ -23,6 +24,7 @@ type FreeCADRuntimeAdapter struct {
 	mu            sync.RWMutex
 	orchestrateMu sync.Mutex
 	verified      FreeCADRuntimeVerifiedRun
+	integrity     *integrity.OperationIntegrity
 	available     bool
 }
 
@@ -45,12 +47,15 @@ func (a *FreeCADRuntimeAdapter) OrchestrateCADRuntime(ctx context.Context, req a
 	defer a.orchestrateMu.Unlock()
 	a.mu.Lock()
 	a.verified = FreeCADRuntimeVerifiedRun{}
+	a.integrity = nil
 	a.available = false
 	a.mu.Unlock()
 
-	run, err := InvokeAndVerifyFreeCADRuntime(ctx, a.capability, req)
+	sink := &freeCADRuntimeIntegritySink{}
+	run, err := InvokeAndVerifyFreeCADRuntime(ctx, a.capability, req, sink)
 	a.mu.Lock()
 	a.verified = deepCopyVerifiedRun(run)
+	a.integrity = sink.Operation.Copy()
 	a.available = true
 	a.mu.Unlock()
 	return err
@@ -63,6 +68,17 @@ func (a *FreeCADRuntimeAdapter) CADRuntimeVerifiedRun() (FreeCADRuntimeVerifiedR
 		return FreeCADRuntimeVerifiedRun{}, false
 	}
 	return deepCopyVerifiedRun(a.verified), true
+}
+
+// CADRuntimeIntegrity returns the per-resource integrity provenance of the most
+// recent attempt.
+func (a *FreeCADRuntimeAdapter) CADRuntimeIntegrity() (*integrity.OperationIntegrity, bool) {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if !a.available || a.integrity == nil {
+		return nil, false
+	}
+	return a.integrity.Copy(), true
 }
 
 func nilInterface(value any) bool {

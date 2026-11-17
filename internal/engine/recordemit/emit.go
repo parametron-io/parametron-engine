@@ -13,6 +13,7 @@ import (
 
 	"parametron/internal/engine/artifact"
 	"parametron/internal/engine/executor"
+	"parametron/internal/engine/integrity"
 	"parametron/internal/engine/metadata"
 	"parametron/internal/engine/observed"
 	"parametron/internal/engine/recordcontract"
@@ -25,6 +26,10 @@ import (
 
 const packageKeyPrefix = "engine-run:"
 
+// integrityEvidenceKind is the normalized provenance evidence kind for preserved
+// raw runtime integrity evidence.
+const integrityEvidenceKind = "integrity-evidence"
+
 // RunEmitInput carries material for emitting a local record package from a normal Engine run.
 type RunEmitInput struct {
 	RunRoot            string
@@ -34,6 +39,8 @@ type RunEmitInput struct {
 	Artifacts          []artifact.Artifact
 	ReferenceTraversal *ReferenceTraversalRunEvidence
 	CADRuntime         *CADRuntimeRunEvidence
+	// SourceIntegrity is the project-scoped source identity and lock state.
+	SourceIntegrity *integrity.ProjectIntegrity
 }
 
 // CADRuntimeRunEvidence carries unchanged bytes read from one execution attempt.
@@ -43,12 +50,16 @@ type CADRuntimeRunEvidence struct {
 	Result             []byte
 	Verification       []byte
 	Observed           []byte
+	IntegrityEvidence  []byte
 	ObservedValue      *observed.Observed
 	VerificationResult *verification.Result
-	Failure            *executor.CADRuntimeFailureOutcome
-	JobID              string
-	ProductKey         string
-	StepRef            string
+	// Integrity is the attempt-scoped identity chain for the declared resource
+	// inventory of this attempt.
+	Integrity  *integrity.OperationIntegrity
+	Failure    *executor.CADRuntimeFailureOutcome
+	JobID      string
+	ProductKey string
+	StepRef    string
 }
 
 type ReferenceTraversalRunEvidence struct {
@@ -88,6 +99,24 @@ func EmitRunPackage(input RunEmitInput) error {
 		}
 		provenance = mapped.Provenance
 	}
+
+	mergedIntegrity, err := resolvedRunIntegrity(input)
+	if err != nil {
+		return fmt.Errorf("recordemit: merge integrity provenance: %w", err)
+	}
+	mappedIntegrity, err := recordmap.MapIntegrityProvenance(mergedIntegrity)
+	if err != nil {
+		return fmt.Errorf("recordemit: map integrity provenance: %w", err)
+	}
+	provenance.Integrity = mappedIntegrity
+	if input.CADRuntime != nil && len(input.CADRuntime.IntegrityEvidence) > 0 {
+		provenance.Evidence = append(provenance.Evidence, recordcontract.EvidenceReference{
+			Kind:         integrityEvidenceKind,
+			Ref:          recordpackage.RawRuntimeIntegrityEvidenceContractPath(),
+			DigestSHA256: evidenceDigest(input.CADRuntime.IntegrityEvidence),
+		})
+	}
+	provenance = recordcontract.NormalizeProvenance(provenance)
 
 	recordKey := recordKeyForPlanHash(planHash)
 	mappedReport, err := recordmap.MapReport(recordmap.ReportMappingInput{
@@ -232,6 +261,33 @@ func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey, planHash s
 	return records, failureRecord, nil
 }
 
+// resolvedRunIntegrity restores the joined integrity chain.
+//
+// Run metadata is authoritative when present because it preserves the identity
+// chain of the executed attempt, so re-emission from a persisted run root
+// reproduces the same normalized provenance. Otherwise the chain is rebuilt from
+// caller-supplied project integrity and attempt evidence.
+func resolvedRunIntegrity(input RunEmitInput) (*integrity.RunIntegrity, error) {
+	if input.Metadata != nil && input.Metadata.Integrity != nil {
+		return metadata.RunIntegrityFromMetadata(input.Metadata.Integrity), nil
+	}
+	// Without the declared source identity Engine cannot attribute attempt
+	// evidence to declared resources, so no integrity provenance is emitted.
+	if input.SourceIntegrity == nil {
+		return nil, nil
+	}
+	return integrity.MergeRunIntegrity(input.SourceIntegrity, operationIntegrity(input))
+}
+
+// operationIntegrity returns the attempt-scoped integrity chain supplied with the
+// attempt evidence.
+func operationIntegrity(input RunEmitInput) *integrity.OperationIntegrity {
+	if input.CADRuntime == nil {
+		return nil
+	}
+	return input.CADRuntime.Integrity
+}
+
 func evidenceDigest(content []byte) string {
 	if len(content) == 0 {
 		return ""
@@ -324,6 +380,7 @@ func collectRawEvidence(runRoot string, input RunEmitInput) ([]recordpackage.Raw
 			out = append(out, recordpackage.RawEvidenceFile{ContractPath: recordpackage.RawFactEvidenceContractPath(), Content: append([]byte(nil), input.CADRuntime.Fact.Input.Content...)})
 		}
 		for _, evidence := range []recordpackage.RawEvidenceFile{
+			{ContractPath: recordpackage.RawRuntimeIntegrityEvidenceContractPath(), Content: input.CADRuntime.IntegrityEvidence},
 			{ContractPath: recordpackage.RawRuntimeResultContractPath(), Content: input.CADRuntime.Result},
 			{ContractPath: recordpackage.RawVerificationContractPath(), Content: input.CADRuntime.Verification},
 			{ContractPath: recordpackage.RawObservedContractPath(), Content: input.CADRuntime.Observed},

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"parametron/internal/engine/artifact"
+	"parametron/internal/engine/integrity"
 	"parametron/internal/engine/projectinput"
 )
 
@@ -27,9 +28,84 @@ type Metadata struct {
 	Profile       ProfileMetadata                 `json:"profile,omitempty"`
 	Tables        []TableInputMetadata            `json:"tables,omitempty"`
 	ProjectInputs *projectinput.CapturedResources `json:"projectInputs,omitempty"`
+	Integrity     *IntegrityMetadata              `json:"integrity,omitempty"`
 	Products      []ProductMetadata               `json:"products"`
 	Runtime       RuntimeMetadata                 `json:"runtime"`
 	Toolchain     ToolchainMetadata               `json:"toolchain"`
+}
+
+// IntegrityMetadata records the per-resource content-identity chain of a run. It
+// is operational run metadata, not a normalized record contract.
+type IntegrityMetadata struct {
+	Lock      string                      `json:"lock"`
+	Resources []IntegrityResourceMetadata `json:"resources,omitempty"`
+}
+
+// IntegrityResourceMetadata is one declared resource's content-identity chain.
+type IntegrityResourceMetadata struct {
+	LogicalID                   string `json:"logicalId"`
+	SourceCoordinate            string `json:"sourceCoordinate"`
+	MaterializedCoordinate      string `json:"materializedCoordinate,omitempty"`
+	PersistedResultCoordinate   string `json:"persistedResultCoordinate,omitempty"`
+	SourceDigestSHA256          string `json:"sourceDigestSha256"`
+	LockState                   string `json:"lockState"`
+	BaselineDigestSHA256        string `json:"baselineDigestSha256,omitempty"`
+	MaterializationStatus       string `json:"materializationStatus"`
+	RuntimeBaselineDigestSHA256 string `json:"runtimeBaselineDigestSha256,omitempty"`
+	RuntimeBaselineStatus       string `json:"runtimeBaselineStatus"`
+	PersistedResultDigestSHA256 string `json:"persistedResultDigestSha256,omitempty"`
+	ResultStatus                string `json:"resultStatus"`
+}
+
+// IntegrityFromRun converts joined run integrity into operational metadata.
+func IntegrityFromRun(run *integrity.RunIntegrity) *IntegrityMetadata {
+	if run == nil {
+		return nil
+	}
+	normalized := integrity.NormalizeRunIntegrity(run)
+	out := &IntegrityMetadata{Lock: string(normalized.Lock)}
+	for _, resource := range normalized.Resources {
+		out.Resources = append(out.Resources, IntegrityResourceMetadata{
+			LogicalID:                   resource.LogicalID,
+			SourceCoordinate:            resource.SourceCoordinate,
+			MaterializedCoordinate:      resource.MaterializedCoordinate,
+			PersistedResultCoordinate:   resource.PersistedResultCoordinate,
+			SourceDigestSHA256:          resource.SourceDigest.String(),
+			LockState:                   string(resource.LockState),
+			BaselineDigestSHA256:        resource.MaterializedBaselineDigest.String(),
+			MaterializationStatus:       string(resource.MaterializationStatus),
+			RuntimeBaselineDigestSHA256: resource.RuntimeBaselineDigest.String(),
+			RuntimeBaselineStatus:       string(resource.RuntimeBaselineStatus),
+			PersistedResultDigestSHA256: resource.PersistedResultDigest.String(),
+			ResultStatus:                string(resource.ResultStatus),
+		})
+	}
+	return out
+}
+
+// RunIntegrityFromMetadata restores joined run integrity from operational metadata.
+func RunIntegrityFromMetadata(metadata *IntegrityMetadata) *integrity.RunIntegrity {
+	if metadata == nil {
+		return nil
+	}
+	out := &integrity.RunIntegrity{Lock: integrity.LockState(metadata.Lock)}
+	for _, resource := range metadata.Resources {
+		out.Resources = append(out.Resources, integrity.ResourceIntegrity{
+			LogicalID:                  resource.LogicalID,
+			SourceCoordinate:           resource.SourceCoordinate,
+			MaterializedCoordinate:     resource.MaterializedCoordinate,
+			PersistedResultCoordinate:  resource.PersistedResultCoordinate,
+			SourceDigest:               integrity.Digest(resource.SourceDigestSHA256),
+			LockState:                  integrity.LockState(resource.LockState),
+			MaterializedBaselineDigest: integrity.Digest(resource.BaselineDigestSHA256),
+			MaterializationStatus:      integrity.Status(resource.MaterializationStatus),
+			RuntimeBaselineDigest:      integrity.Digest(resource.RuntimeBaselineDigestSHA256),
+			RuntimeBaselineStatus:      integrity.Status(resource.RuntimeBaselineStatus),
+			PersistedResultDigest:      integrity.Digest(resource.PersistedResultDigestSHA256),
+			ResultStatus:               integrity.Status(resource.ResultStatus),
+		})
+	}
+	return out
 }
 
 func (m Metadata) MarshalJSON() ([]byte, error) {
@@ -40,6 +116,7 @@ func (m Metadata) MarshalJSON() ([]byte, error) {
 		Profile       *ProfileMetadata                `json:"profile,omitempty"`
 		Tables        []TableInputMetadata            `json:"tables,omitempty"`
 		ProjectInputs *projectinput.CapturedResources `json:"projectInputs,omitempty"`
+		Integrity     *IntegrityMetadata              `json:"integrity,omitempty"`
 		Products      []ProductMetadata               `json:"products"`
 		Runtime       RuntimeMetadata                 `json:"runtime"`
 		Toolchain     ToolchainMetadata               `json:"toolchain"`
@@ -51,6 +128,7 @@ func (m Metadata) MarshalJSON() ([]byte, error) {
 		DSLHash:       m.DSLHash,
 		Tables:        m.Tables,
 		ProjectInputs: m.ProjectInputs,
+		Integrity:     m.Integrity,
 		Products:      m.Products,
 		Runtime:       m.Runtime,
 		Toolchain:     m.Toolchain,
@@ -139,6 +217,7 @@ type BuildInput struct {
 	Tables            []TableInputMetadata
 	Artifacts         []artifact.Artifact
 	ProjectInputs     *projectinput.CapturedResources
+	SourceIntegrity   *IntegrityMetadata
 	StartedAt         time.Time
 	EndedAt           time.Time
 	WorkerCount       int
@@ -186,7 +265,19 @@ func Build(input BuildInput) Metadata {
 	if input.ProjectInputs != nil {
 		out.ProjectInputs = projectinput.CloneCapturedResources(input.ProjectInputs)
 	}
+	if input.SourceIntegrity != nil {
+		out.Integrity = cloneIntegrityMetadata(input.SourceIntegrity)
+	}
 
+	return out
+}
+
+func cloneIntegrityMetadata(in *IntegrityMetadata) *IntegrityMetadata {
+	if in == nil {
+		return nil
+	}
+	out := &IntegrityMetadata{Lock: in.Lock, Resources: make([]IntegrityResourceMetadata, len(in.Resources))}
+	copy(out.Resources, in.Resources)
 	return out
 }
 

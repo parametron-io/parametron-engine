@@ -11,6 +11,7 @@ import (
 	"parametron/internal/engine/adapter/freecad"
 	"parametron/internal/engine/artifact"
 	"parametron/internal/engine/cadruntime"
+	"parametron/internal/engine/integrity"
 	"parametron/internal/engine/observed"
 	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/resourcebinding"
@@ -24,10 +25,18 @@ const (
 	CADRuntimeConsumptionStageVerificationFailure = "verification_failure"
 	CADRuntimeConsumptionStageVerificationResult  = "verification_result"
 	CADRuntimeConsumptionStageArtifactProjection  = "artifact_projection"
+	CADRuntimeConsumptionStageIntegrityFailure    = "integrity_failure"
 )
 
 type CADRuntimeVerifiedRunProvider interface {
 	CADRuntimeVerifiedRun() (cadruntime.FreeCADRuntimeVerifiedRun, bool)
+}
+
+// CADRuntimeIntegrityProvider exposes the per-resource integrity provenance of
+// the most recent attempt. The bounded singular package emits this provenance
+// only when a single attempt outcome is representable.
+type CADRuntimeIntegrityProvider interface {
+	CADRuntimeIntegrity() (*integrity.OperationIntegrity, bool)
 }
 
 type CADRuntimeArtifactOutcome struct {
@@ -68,6 +77,7 @@ type CADRuntimeOutcome struct {
 	ResultPath             string
 	ReferenceTraversalPath string
 	ReferenceTraversalJSON []byte
+	IntegrityEvidencePath  string
 	OccurrenceRequest      *recordcontract.OccurrenceRequest
 	OccurrencePath         string
 	OccurrenceJSON         []byte
@@ -76,10 +86,13 @@ type CADRuntimeOutcome struct {
 	FactJSON               []byte
 	Artifacts              []CADRuntimeArtifactOutcome
 	Observed               *observed.Observed
-	VerificationResult     *verification.Result
-	Verification           artifact.VerificationOutcome
-	VerificationClass      verification.FailureClass
-	Failure                *CADRuntimeFailureOutcome
+	// Integrity is the validated per-resource identity chain for the declared
+	// resource inventory of this attempt.
+	Integrity          *integrity.OperationIntegrity
+	VerificationResult *verification.Result
+	Verification       artifact.VerificationOutcome
+	VerificationClass  verification.FailureClass
+	Failure            *CADRuntimeFailureOutcome
 }
 
 type CADRuntimeConsumptionError struct {
@@ -159,6 +172,7 @@ func cloneCADRuntimeOutcome(in *CADRuntimeOutcome) *CADRuntimeOutcome {
 	out.FactRequest = recordcontract.CloneFactRequest(in.FactRequest)
 	out.FactJSON = append([]byte(nil), in.FactJSON...)
 	out.ReferenceTraversalJSON = append([]byte(nil), in.ReferenceTraversalJSON...)
+	out.Integrity = in.Integrity.Copy()
 	out.Observed = cloneObserved(in.Observed)
 	if in.VerificationResult != nil {
 		result := *in.VerificationResult
@@ -174,6 +188,10 @@ func cloneCADRuntimeOutcome(in *CADRuntimeOutcome) *CADRuntimeOutcome {
 func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRequest, run cadruntime.FreeCADRuntimeVerifiedRun, orchestrationErr error) error {
 	attempt := run.Runtime.ObservationRequest.Manifest.Attempt
 	identity := attempt.Identity
+	integrityEvidencePath := ""
+	if len(attempt.Resources.Bindings()) > 0 {
+		integrityEvidencePath = cadruntime.FreeCADIntegrityEvidencePath(attempt.Layout)
+	}
 	outcome := &CADRuntimeOutcome{
 		Resources:      attempt.Resources,
 		SourceDocument: attempt.Layout.SourceDocument,
@@ -185,6 +203,8 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 		ResultPath:             run.Runtime.ExecutionRequest.ResultPath,
 		ReferenceTraversalPath: run.Runtime.ReferenceTraversalPath,
 		ReferenceTraversalJSON: append([]byte(nil), run.Runtime.ReferenceTraversalJSON...),
+		IntegrityEvidencePath:  integrityEvidencePath,
+		Integrity:              e.pendingIntegrity.Copy(),
 		Observed:               cloneObserved(run.Runtime.Observed),
 		VerificationResult:     cloneVerificationResult(run.Verification),
 		Verification:           artifact.VerificationOutcomeUnknown,
@@ -218,6 +238,24 @@ func (e *Executor) consumeCADRuntimeResult(req adapter.CADRuntimeOrchestrationRe
 		})
 	}
 	e.cadRuntimeOutcome = cloneCADRuntimeOutcome(outcome)
+
+	var integrityFailure *integrity.Failure
+	if orchestrationErr != nil && errors.As(orchestrationErr, &integrityFailure) {
+		// Engine-owned integrity violations never claim verification and never
+		// degrade into runtime-native failures.
+		outcome.Verification = artifact.VerificationOutcomeNotRun
+		outcome.Failure = &CADRuntimeFailureOutcome{
+			Classification: integrityFailure.Code,
+			Boundary:       "engine",
+			Category:       "integrity",
+			Code:           integrityFailure.Code,
+			Stage:          "integrity",
+			Message:        integrityFailure.Error(),
+		}
+		e.cadRuntimeOutcome = cloneCADRuntimeOutcome(outcome)
+		e.acceptance.VerificationOutcome = artifact.VerificationOutcomeNotRun
+		return e.integrityConsumptionError(CADRuntimeConsumptionStageIntegrityFailure, req, identity.ID, integrityFailure)
+	}
 
 	var verificationErr *cadruntime.FreeCADRuntimeVerificationError
 	if orchestrationErr == nil {
@@ -482,6 +520,32 @@ func artifactPaths(items []cadruntime.FreeCADRuntimeValidatedArtifact) []string 
 		out = append(out, item.Path)
 	}
 	return out
+}
+
+// sourceIntegrityFailure returns the deterministic lock/source integrity failure
+// for this executor, or nil when execution may proceed. Unlocked workflows are
+// not failures; their provenance records that lock verification did not run.
+func (e *Executor) sourceIntegrityFailure() *integrity.Failure {
+	if e == nil {
+		return nil
+	}
+	return e.sourceIntegrity.Failure()
+}
+
+// integrityConsumptionError classifies an Engine-owned integrity failure with an
+// integrity category and code, keeping it distinguishable from runtime-native
+// and verification failures.
+func (e *Executor) integrityConsumptionError(
+	stage string,
+	req adapter.CADRuntimeOrchestrationRequest,
+	attemptID string,
+	failure *integrity.Failure,
+) error {
+	if failure == nil {
+		return nil
+	}
+	return e.consumptionError(stage, req, attemptID,
+		failure.Code, "engine", "integrity", failure.Code, "integrity", failure, failure)
 }
 
 func (e *Executor) consumptionError(stage string, req adapter.CADRuntimeOrchestrationRequest, attemptID, classification, boundary, category, code, nativeStage string, args ...error) error {

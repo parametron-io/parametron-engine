@@ -13,6 +13,7 @@ import (
 
 	"parametron/internal/engine/adapter"
 	"parametron/internal/engine/adapter/freecad"
+	"parametron/internal/engine/integrity"
 	"parametron/internal/engine/observed"
 	"parametron/internal/engine/runtimecap"
 )
@@ -24,6 +25,7 @@ const (
 	FreeCADRuntimeRunStageRequestMaterialization   = "request_materialization"
 	FreeCADRuntimeRunStageExecutionRequest         = "execution_request"
 	FreeCADRuntimeRunStageOutputPreparation        = "output_preparation"
+	FreeCADRuntimeRunStageMaterializationIntegrity = "materialization_integrity"
 	FreeCADRuntimeRunStageProcessInvocation        = "process_invocation"
 	FreeCADRuntimeRunStageResultLoad               = "result_load"
 	FreeCADRuntimeRunStageProcessResultCorrelation = "process_result_correlation"
@@ -31,6 +33,8 @@ const (
 	FreeCADRuntimeRunStageArtifactValidation       = "artifact_validation"
 	FreeCADRuntimeRunStageObservedLoad             = "observed_load"
 	FreeCADRuntimeRunStageObservedCorrelation      = "observed_correlation"
+	FreeCADRuntimeRunStageIntegrityEvidenceLoad    = "integrity_evidence_load"
+	FreeCADRuntimeRunStageIntegrityValidation      = "integrity_validation"
 	FreeCADRuntimeRunStageReferenceTraversalLoad   = "reference_traversal_load"
 )
 
@@ -56,6 +60,14 @@ type FreeCADRuntimeRun struct {
 	ReferenceTraversalPath    string
 	ReferenceTraversalJSON    []byte
 	Artifacts                 []FreeCADRuntimeValidatedArtifact
+}
+
+// freeCADRuntimeIntegritySink is the internal return channel for the integrity
+// provenance produced by one attempt. The raw run type is a frozen contract of
+// raw runtime state, so the evaluated provenance is reported separately rather
+// than added as a run field.
+type freeCADRuntimeIntegritySink struct {
+	Operation *integrity.OperationIntegrity
 }
 
 // FreeCADRuntimeRunError is a typed Task 10 failure with attempt and process
@@ -121,6 +133,23 @@ func InvokeAndValidateFreeCADRuntime(
 	capability runtimecap.Capability,
 	req adapter.CADRuntimeOrchestrationRequest,
 ) (FreeCADRuntimeRun, error) {
+	return invokeAndValidateFreeCADRuntime(ctx, capability, req, nil)
+}
+
+// invokeAndValidateFreeCADRuntime performs the raw runtime run. When sink is not
+// nil it receives the integrity provenance the run established, including on
+// failure, because a rejected run still reports the identity chain it reached.
+func invokeAndValidateFreeCADRuntime(
+	ctx context.Context,
+	capability runtimecap.Capability,
+	req adapter.CADRuntimeOrchestrationRequest,
+	sink *freeCADRuntimeIntegritySink,
+) (FreeCADRuntimeRun, error) {
+	report := func(operation *integrity.OperationIntegrity) {
+		if sink != nil {
+			sink.Operation = operation
+		}
+	}
 	var run FreeCADRuntimeRun
 	if ctx == nil {
 		return run, runError(FreeCADRuntimeRunStageExecutionRequest, "Context", "", "", nil,
@@ -148,6 +177,29 @@ func InvokeAndValidateFreeCADRuntime(
 	attempt := materialization.Manifest.Attempt
 	layout := attempt.Layout
 
+	// Byte-preserving materialization is proven before any runtime write: the
+	// materialized baseline content identity must equal the accepted source
+	// content identity for every declared resource.
+	baselines, err := freecad.VerifyFreeCADRuntimeMaterializedBaselines(attempt)
+	if err != nil {
+		report(operationIntegrityForMaterializationFailure(baselines, integrity.AsFailure(err)))
+		return run, runError(FreeCADRuntimeRunStageMaterializationIntegrity, "MaterializedBaseline", attempt.Identity.ID, "", nil, err)
+	}
+	report(operationIntegrityFromBaselines(baselines))
+
+	// The integrity request is the Engine-authored description of what the
+	// runtime may report for this attempt. It is always composed; it is published
+	// for the runtime only when the orchestrator supplied an integrity root.
+	integrityRequest := FreeCADIntegrityRequest{}
+	var integrityRequestJSON []byte
+	if len(baselines) > 0 {
+		composed, composedJSON, composeErr := ComposeFreeCADIntegrityRequest(baselines, layout.SourceDocument)
+		if composeErr != nil {
+			return run, runError(FreeCADRuntimeRunStageRequestMaterialization, "IntegrityRequest", attempt.Identity.ID, "", nil, composeErr)
+		}
+		integrityRequest, integrityRequestJSON = composed, composedJSON
+	}
+
 	executionRequest := freecad.FreeCADRuntimeExecutionRequest{
 		RuntimeCommand:                req.Executable.Path,
 		WorkingCopyDir:                layout.WorkingCopyDir,
@@ -156,6 +208,13 @@ func InvokeAndValidateFreeCADRuntime(
 		OutputDir:                     layout.OutputDir,
 		ObservationRequestPath:        materialization.Path,
 		ReferenceTraversalRequestPath: traversalMaterialization.Path,
+	}
+	if len(baselines) > 0 && req.IntegrityRequestDir != "" {
+		requestPath, writeErr := WriteFreeCADIntegrityRequest(req.IntegrityRequestDir, attempt.Identity.ID, integrityRequestJSON)
+		if writeErr != nil {
+			return run, runError(FreeCADRuntimeRunStageRequestMaterialization, "IntegrityRequest", attempt.Identity.ID, "", nil, writeErr)
+		}
+		executionRequest.IntegrityRequestPath = requestPath
 	}
 	run.ExecutionRequest = executionRequest
 
@@ -169,8 +228,9 @@ func InvokeAndValidateFreeCADRuntime(
 		return run, runError(FreeCADRuntimeRunStageExecutionRequest, field, attempt.Identity.ID, "", nil, err)
 	}
 
-	ownedPaths := make([]string, 0, len(expectedArtifacts)+3)
+	ownedPaths := make([]string, 0, len(expectedArtifacts)+4)
 	ownedPaths = append(ownedPaths, executionRequest.ResultPath, observedPath, referenceTraversalPath)
+	ownedPaths = append(ownedPaths, FreeCADIntegrityEvidencePath(layout))
 	for _, artifact := range expectedArtifacts {
 		ownedPaths = append(ownedPaths, artifact.Path)
 	}
@@ -263,6 +323,19 @@ func InvokeAndValidateFreeCADRuntime(
 	}
 	run.ReferenceTraversalJSON = traversalJSON
 
+	if len(baselines) > 0 {
+		evidencePath := FreeCADIntegrityEvidencePath(layout)
+		evidence, _, evidenceErr := LoadFreeCADIntegrityEvidence(layout.WorkingCopyDir, evidencePath)
+		if evidenceErr != nil {
+			return run, runError(FreeCADRuntimeRunStageIntegrityEvidenceLoad, "IntegrityEvidence", attempt.Identity.ID, "", nil, evidenceErr)
+		}
+		operation, integrityErr := EvaluateFreeCADRuntimeIntegrity(attempt, &integrityRequest, evidence)
+		report(operation)
+		if integrityErr != nil {
+			return run, runError(FreeCADRuntimeRunStageIntegrityValidation, "IntegrityEvidence", attempt.Identity.ID, "", nil, integrityErr)
+		}
+	}
+
 	return run, nil
 }
 
@@ -340,6 +413,9 @@ func validateFreeCADRuntimeExecutionRequest(
 	if req.OutputDir != wantOutputDir {
 		return "", nil, "OutputDir", fmt.Errorf("does not equal the expected output directory: got=%q want=%q", req.OutputDir, wantOutputDir)
 	}
+	if err := requireStrictPathContainment(req.WorkingCopyDir, FreeCADIntegrityEvidencePath(layout)); err != nil {
+		return "", nil, "IntegrityEvidencePath", err
+	}
 
 	observedPath := filepath.Join(req.OutputDir, FreeCADRuntimeObservedFilename)
 	if err := requireCanonicalAbsolutePath("ObservedPath", observedPath); err != nil {
@@ -360,16 +436,17 @@ func validateFreeCADRuntimeExecutionRequest(
 	}
 
 	reserved := map[string]string{
-		req.ManifestPath:                  "ManifestPath",
-		req.ResultPath:                    "ResultPath",
-		req.ObservationRequestPath:        "ObservationRequestPath",
-		req.ReferenceTraversalRequestPath: "ReferenceTraversalRequestPath",
-		layout.SourceDocumentPath:         "SourceDocumentPath",
-		req.OutputDir:                     "OutputDir",
-		observedPath:                      "ObservedPath",
-		referenceTraversalPath:            "ReferenceTraversalPath",
+		req.ManifestPath:                     "ManifestPath",
+		req.ResultPath:                       "ResultPath",
+		req.ObservationRequestPath:           "ObservationRequestPath",
+		req.ReferenceTraversalRequestPath:    "ReferenceTraversalRequestPath",
+		layout.SourceDocumentPath:            "SourceDocumentPath",
+		req.OutputDir:                        "OutputDir",
+		observedPath:                         "ObservedPath",
+		referenceTraversalPath:               "ReferenceTraversalPath",
+		FreeCADIntegrityEvidencePath(layout): "IntegrityEvidencePath",
 	}
-	if len(reserved) != 8 {
+	if len(reserved) != 9 {
 		return observedPath, nil, "Paths", fmt.Errorf("authoritative runtime paths collide")
 	}
 

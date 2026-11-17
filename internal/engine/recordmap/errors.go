@@ -10,4 +10,5 @@ var (
 	ErrInvalidVerificationMapping       = errors.New("invalid verification mapping")
 	ErrInvalidCADRuntimeFailureMapping  = errors.New("invalid CAD runtime failure mapping")
 	ErrInvalidReferenceTraversalMapping = errors.New("invalid reference traversal mapping")
+	ErrInvalidIntegrityMapping          = errors.New("invalid integrity mapping")
 )

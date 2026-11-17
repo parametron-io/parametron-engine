@@ -17,6 +17,7 @@ const (
 	cadRuntimeDispatchStagePreflight            = "preflight"
 	cadRuntimeDispatchStageExecutableSelection  = "executable_selection"
 	cadRuntimeDispatchStageRequestValidation    = "request_validation"
+	cadRuntimeDispatchStageSourceLock           = "source_lock"
 	cadRuntimeDispatchStageAdapterOrchestration = "adapter_orchestration"
 )
 
@@ -147,6 +148,7 @@ func (e *Executor) prepareCADRuntimeDispatch(plan *planner.ExecutionPlan) (*cadR
 		ProductDir:            e.productDir,
 		StepID:                stepID,
 		Attempt:               1,
+		IntegrityRequestDir:   e.integrityRequestDir,
 		CSV:                   cloneWriteCSVPayload(e.pkg.CSV),
 		Manifest:              cloneManifestPayload(e.pkg.Manifest),
 		CADRuntime:            cloneRunCADRuntimePayload(payload),
@@ -154,6 +156,11 @@ func (e *Executor) prepareCADRuntimeDispatch(plan *planner.ExecutionPlan) (*cadR
 	}
 	if err := adapter.ValidateCADRuntimeOrchestrationRequest(base); err != nil {
 		return nil, e.wrapCADRuntimeDispatchError(cadRuntimeDispatchStageRequestValidation, e.pkg.JobID, e.pkg.ProductKey, payload.Adapter, stepID, 0, err)
+	}
+	// Declared-resource source identity is verified before any plan step runs, so
+	// a changed or malformed source lock never reaches native CAD execution.
+	if failure := e.sourceIntegrityFailure(); failure != nil {
+		return nil, e.integrityConsumptionError(cadRuntimeDispatchStageSourceLock, base, "", failure)
 	}
 	var provider CADRuntimeVerifiedRunProvider
 	if e.cadRuntimeConsumption {
@@ -213,6 +220,7 @@ func (e *Executor) executeStep(
 				err,
 			)
 		}
+		e.pendingIntegrity = nil
 		orchestrationErr := cad.orchestrator.OrchestrateCADRuntime(ctx, req)
 		if cad.consume {
 			run, available := cad.provider.CADRuntimeVerifiedRun()
@@ -222,6 +230,11 @@ func (e *Executor) executeStep(
 					cause = errors.New("verified-run provider returned no snapshot")
 				}
 				return e.consumptionError(CADRuntimeConsumptionStageOutcomeUnavailable, req, "", "", "", "", "", "", cause)
+			}
+			if provider, ok := e.adapter.(CADRuntimeIntegrityProvider); ok {
+				if operation, ok := provider.CADRuntimeIntegrity(); ok {
+					e.pendingIntegrity = operation
+				}
 			}
 			return e.consumeCADRuntimeResult(req, run, orchestrationErr)
 		}
@@ -254,6 +267,7 @@ func (e *Executor) buildCADRuntimeOrchestrationRequest(
 		ProductDir:            cad.base.ProductDir,
 		StepID:                cad.base.StepID,
 		Attempt:               attempt,
+		IntegrityRequestDir:   cad.base.IntegrityRequestDir,
 		CSV:                   cloneWriteCSVPayload(cad.base.CSV),
 		Manifest:              cloneManifestPayload(cad.base.Manifest),
 		CADRuntime:            cloneRunCADRuntimePayload(cad.base.CADRuntime),

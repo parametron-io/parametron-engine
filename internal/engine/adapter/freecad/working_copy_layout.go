@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"parametron/internal/authoring/planner"
+	"parametron/internal/engine/resourcebinding"
 )
 
 const (
@@ -484,6 +485,23 @@ func (layout FreeCADRuntimeWorkingCopyLayout) ExecutionRequest(runtimeCommand st
 		ResultPath:     layout.ResultPath,
 		OutputDir:      layout.OutputDir,
 	}
+}
+
+// ResourcePath resolves an attempt-relative materialized coordinate to its host
+// access path inside the prepared working copy. The coordinate, not the host
+// path, is the stable identity.
+func (layout FreeCADRuntimeWorkingCopyLayout) ResourcePath(coordinate string) (string, error) {
+	if err := resourcebinding.ValidateCoordinate(coordinate); err != nil {
+		return "", err
+	}
+	if coordinate == layout.SourceDocument {
+		return layout.SourceDocumentPath, nil
+	}
+	path := filepath.Join(layout.WorkingCopyDir, filepath.FromSlash(coordinate))
+	if err := requireFreeCADRuntimePathContained(layout.WorkingCopyDir, path); err != nil {
+		return "", fmt.Errorf("materialized coordinate: %w", err)
+	}
+	return path, nil
 }
 
 func validateFreeCADRuntimeWorkingCopyPreparationLayout(layout FreeCADRuntimeWorkingCopyLayout) error {

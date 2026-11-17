@@ -68,12 +68,22 @@ func (e *FreeCADRuntimeVerificationError) Unwrap() error {
 // InvokeAndVerifyFreeCADRuntime invokes and validates the aligned runtime once,
 // then compares Task 9's in-memory contract with Task 10's in-memory observed
 // state.
+//
+// An optional integrity sink receives the per-resource integrity provenance of
+// the attempt, including on failure. The verified-run type is a frozen contract
+// of raw runtime state plus the verification result, so the provenance is
+// reported through this explicit channel instead.
 func InvokeAndVerifyFreeCADRuntime(
 	ctx context.Context,
 	capability runtimecap.Capability,
 	req adapter.CADRuntimeOrchestrationRequest,
+	sinks ...*freeCADRuntimeIntegritySink,
 ) (FreeCADRuntimeVerifiedRun, error) {
-	runtimeRun, err := InvokeAndValidateFreeCADRuntime(ctx, capability, req)
+	sink := &freeCADRuntimeIntegritySink{}
+	if len(sinks) > 0 && sinks[0] != nil {
+		sink = sinks[0]
+	}
+	runtimeRun, err := invokeAndValidateFreeCADRuntime(ctx, capability, req, sink)
 	if err != nil {
 		return FreeCADRuntimeVerifiedRun{Runtime: runtimeRun}, &FreeCADRuntimeVerificationError{
 			Stage:     FreeCADRuntimeVerificationStageRuntimeExecution,
