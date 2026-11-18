@@ -49,10 +49,13 @@ type ReferenceEndpoint struct {
 	Resolution    ReferenceResolutionState `json:"resolution,omitempty"`
 	ID            string                   `json:"id,omitempty"`
 	Name          string                   `json:"name,omitempty"`
-	Path          string                   `json:"path,omitempty"`
-	AssetID       string                   `json:"assetId,omitempty"`
-	RevisionID    string                   `json:"revisionId,omitempty"`
-	DigestSHA256  string                   `json:"digestSha256,omitempty"`
+	// Path and DigestSHA256 are evidence-sensitive endpoint descriptors. Generic
+	// reference records retain them, but neither participates in record identity.
+	// Native traversal endpoints use only contract-relative paths and no digest.
+	Path         string `json:"path,omitempty"`
+	AssetID      string `json:"assetId,omitempty"`
+	RevisionID   string `json:"revisionId,omitempty"`
+	DigestSHA256 string `json:"digestSha256,omitempty"`
 }
 
 // ReferenceLinkage captures normalized job/product/step linkage material.
@@ -505,7 +508,7 @@ func deriveReferenceIdentity(input normalizedReferenceRecordInput) (Identity, er
 }
 
 func referenceIdentityParts(input normalizedReferenceRecordInput) ([]IdentityPart, error) {
-	referenceJSON, err := json.Marshal(canonicalReferenceSummaryFromNormalized(input.Reference))
+	referenceJSON, err := json.Marshal(canonicalReferenceIdentitySummaryFromNormalized(input.Reference))
 	if err != nil {
 		return nil, fmt.Errorf("%w: marshal reference identity material: %v", ErrInvalidReferenceRecord, err)
 	}
@@ -515,17 +518,40 @@ func referenceIdentityParts(input normalizedReferenceRecordInput) ([]IdentityPar
 	}, nil
 }
 
-func canonicalReferenceSummaryFromNormalized(summary ReferenceSummary) canonicalReferenceSummary {
+// canonicalReferenceIdentitySummaryFromNormalized excludes evidence-sensitive
+// endpoint material from record identity while preserving the canonical
+// relationship structure. Generic reference endpoints retain operational paths
+// and runtime-reported digests in the normalized record and raw evidence, but
+// those materials do not participate in identity. Native traversal endpoints
+// keep their accepted contract-relative fallback coordinates because those are
+// canonical identity coordinates rather than operational file locations.
+func canonicalReferenceIdentitySummaryFromNormalized(summary ReferenceSummary) canonicalReferenceSummary {
 	return canonicalReferenceSummary{
 		Status: summary.Status, Completeness: summary.Completeness, Unsupported: summary.Unsupported, Source: cloneReferenceEndpoint(summary.Source),
-		Edges: canonicalReferenceEdgesFromNormalized(summary.Edges),
+		Edges: canonicalReferenceIdentityEdgesFromNormalized(summary.Edges),
 	}
 }
 
-func canonicalReferenceEdgesFromNormalized(edges []ReferenceEdge) []canonicalReferenceEdge {
+func canonicalReferenceIdentityEdgesFromNormalized(edges []ReferenceEdge) []canonicalReferenceEdge {
 	out := make([]canonicalReferenceEdge, len(edges))
 	for i, edge := range edges {
-		out[i] = canonicalReferenceEdgeFromNormalized(edge)
+		out[i] = canonicalReferenceIdentityEdgeFromNormalized(edge)
+	}
+	return out
+}
+
+func canonicalReferenceIdentityEdgeFromNormalized(edge ReferenceEdge) canonicalReferenceEdge {
+	out := canonicalReferenceEdgeFromNormalized(edge)
+	out.Source = canonicalReferenceIdentityEndpointFromNormalized(edge.Source)
+	out.Target = canonicalReferenceIdentityEndpointFromNormalized(edge.Target)
+	return out
+}
+
+func canonicalReferenceIdentityEndpointFromNormalized(endpoint ReferenceEndpoint) canonicalReferenceEndpoint {
+	out := canonicalReferenceEndpointFromNormalized(endpoint)
+	if endpoint.NativeKind == "" {
+		out.Path = ""
+		out.DigestSHA256 = ""
 	}
 	return out
 }

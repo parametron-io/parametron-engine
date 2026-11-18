@@ -133,6 +133,64 @@ func TestMapObservedToReferenceRecordMapsObservedReferences(t *testing.T) {
 	}
 }
 
+func TestMapObservedReferenceIdentityIgnoresOperationalWorkingCopyMaterial(t *testing.T) {
+	firstInput := observedMapInput(observedMapObserved())
+	first, err := MapObservedToReferenceRecord(firstInput)
+	if err != nil {
+		t.Fatalf("MapObservedToReferenceRecord(first) returned error: %v", err)
+	}
+
+	relocated := observedMapObserved()
+	relocated.WorkingCopy.Path = "/relocated/workspace/model.FCStd"
+	relocated.WorkingCopy.SHA256 = observedMapDigestC()
+	second, err := MapObservedToReferenceRecord(observedMapInput(relocated))
+	if err != nil {
+		t.Fatalf("MapObservedToReferenceRecord(relocated) returned error: %v", err)
+	}
+
+	if first.Identity != second.Identity {
+		t.Fatalf("working-copy location or digest changed reference identity: %q != %q", first.Identity.ID, second.Identity.ID)
+	}
+	for _, edge := range first.Reference.Edges {
+		if edge.Source.Path != firstInput.Observed.WorkingCopy.Path || edge.Source.DigestSHA256 != firstInput.Observed.WorkingCopy.SHA256 {
+			t.Fatalf("first record lost working-copy endpoint material: %+v", edge.Source)
+		}
+	}
+	for _, edge := range second.Reference.Edges {
+		if edge.Source.Path != relocated.WorkingCopy.Path || edge.Source.DigestSHA256 != relocated.WorkingCopy.SHA256 {
+			t.Fatalf("relocated record lost working-copy endpoint material: %+v", edge.Source)
+		}
+	}
+}
+
+func TestMapObservedReferenceIdentityIncludesReferenceMaterial(t *testing.T) {
+	base, err := MapObservedToReferenceRecord(observedMapInput(observedMapObserved()))
+	if err != nil {
+		t.Fatalf("MapObservedToReferenceRecord(base) returned error: %v", err)
+	}
+
+	changedObserved := observedMapObserved()
+	changedObserved.Observation.References[0].Name = "renamed-fastener-library"
+	changed, err := MapObservedToReferenceRecord(observedMapInput(changedObserved))
+	if err != nil {
+		t.Fatalf("MapObservedToReferenceRecord(changed) returned error: %v", err)
+	}
+
+	if base.Identity == changed.Identity {
+		t.Fatal("reference material stopped participating in reference identity")
+	}
+}
+
+func TestMapObservedReferenceRecordRejectsDuplicateReferences(t *testing.T) {
+	obs := observedMapObserved()
+	obs.Observation.References = append(obs.Observation.References, obs.Observation.References[0])
+
+	_, err := MapObservedToReferenceRecord(observedMapInput(obs))
+	if !errors.Is(err, ErrInvalidObservedMapping) || !errors.Is(err, recordcontract.ErrInvalidReferenceRecord) {
+		t.Fatalf("MapObservedToReferenceRecord duplicate error = %v, want invalid observed mapping wrapping invalid reference record", err)
+	}
+}
+
 func TestMapObservedReturnsObservationAndReferenceRecords(t *testing.T) {
 	output, err := MapObserved(observedMapInput(observedMapObserved()))
 	if err != nil {
