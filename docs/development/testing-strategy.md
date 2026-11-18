@@ -255,6 +255,18 @@ record packaging.
   evidence without arbitrary selection. These are Engine contract proofs, not
   real FreeCAD execution or proof of occurrence identity, quantities, recursive
   discovery, or automatic external mapping population.
+- **Coordinated Engineering-Observation Closure
+  (`cmd/parametron/coordinated_closure_rehearsal_test.go`)**: Drives two
+  products over primary, aliased, and zero-reference declared resources through
+  planning, attempt preparation, the controlled external runtime boundary,
+  occurrence/fact sidecars, reference traversal, integrity request/evidence,
+  Engine verification, and outcome-scoped package emission. Proves cross-resource
+  references, declared/undeclared/unsupported targets, complete quantity rollup,
+  nested fact context, unit-bearing and unavailable facts, locked source/baseline/
+  result provenance, no cross-outcome aggregation, repeat-run normalized
+  determinism, unsupported-version rejection, and surface isolation when
+  occurrence scope is incomplete. This is the #45 closure rehearsal; it does not
+  execute real FreeCAD.
 - **Opt-in Real FreeCAD Integration (`scripts/cad_runtime_integration_proof.py --mode real`)**:
   Executes live CAD mutation, recompute, export, and verification against
   `parametron-freecad` and FreeCAD binaries.

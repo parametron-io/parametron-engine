@@ -150,6 +150,38 @@ closure or assembly occurrence coverage. Automatic external mapping population,
 general multi-outcome aggregation, occurrence identity, and quantity/BOM inference
 remain outside this proof.
 
+## Coordinated engineering-observation closure coverage
+
+`cmd/parametron/coordinated_closure_rehearsal_test.go` is the permanent #45
+closure rehearsal. It drives planning, handoff, per-product attempt preparation,
+the controlled external `runtimecap` process boundary, occurrence/fact sidecars,
+reference traversal, integrity request/evidence, Engine verification, and
+normal package emission without real FreeCAD.
+
+| Test identifier | Verification responsibility |
+|:----------------|:----------------------------|
+| `TestCoordinatedClosure_MultiResourceMultiOutcomeRehearsal` | Two products over one primary source plus an aliased resource and a zero-reference standalone resource; cross-resource generic references; declared, undeclared, and unsupported targets; explicit occurrences with complete quantity rollup and cross-resource targets; bounded material/property, unit-bearing numeric, context-scoped, and unavailable facts; locked source/baseline/result provenance; outcome-scoped raw and normalized package evidence; no cross-outcome overwrite or aggregation |
+| `TestCoordinatedClosure_RepeatRunDeterministicSurfaces` | Repeated fresh controlled executions preserve deterministic Engine-owned normalized record paths, manifest bytes, and normalized record bytes for identical controlled evidence |
+| `TestCoordinatedClosure_UnsupportedVersionContractsAreRejected` | Observed, occurrence request, fact request, integrity request/evidence, reference traversal, and normalized record version surfaces reject unsupported schema versions |
+| `TestCoordinatedClosure_NegativeSurfaceIsolation` | Incomplete occurrence scope retains explicit incomplete state with no quantity while otherwise valid facts remain observable, proving one surface does not silently corrupt another |
+
+The closure matrix below maps the parent #45 requirements to current evidence.
+Canonical cross-repository descriptions remain owned by `parametron-docs`.
+
+| Parent requirement | Closure evidence |
+|:-------------------|:-----------------|
+| Versioned Engine-owned request/evidence contracts with strict version behavior | `internal/engine/observed`, `internal/engine/cadruntime` integrity/occurrence/fact tests, `internal/engine/recordmap` traversal tests, and `TestCoordinatedClosure_UnsupportedVersionContractsAreRejected` |
+| Explicit resource/source/materialization joins | `internal/shared/projectmap`, `internal/engine/resourcebinding`, `internal/engine/projectinput`, `internal/engine/adapter/freecad` materialization tests, and the coordinated rehearsal |
+| Explicit occurrence identity/cardinality and complete-only quantity | `internal/engine/recordcontract/occurrence_test.go`, `internal/engine/cadruntime/occurrence_evidence_test.go`, `internal/engine/recordemit/occurrence_test.go`, and the coordinated rehearsal |
+| Generic reference distinctions without occurrence fabrication | `internal/engine/recordmap/reference_structure_test.go`, `internal/engine/recordcontract/reference_structure_test.go`, `cmd/parametron/reference_structure_test.go`, and the coordinated rehearsal |
+| Bounded facts, explicit availability, and unit representation | `internal/engine/cadruntime/fact_evidence_test.go`, `internal/engine/recordemit/fact_test.go`, `docs/test-matrix.md` fact coverage, and the coordinated rehearsal |
+| Source lock, materialized baseline, runtime baseline, and persisted-result separation | `internal/engine/integrity`, `internal/engine/cadruntime` integrity tests, `cmd/parametron/integrity_run_test.go`, and the coordinated rehearsal |
+| Engine integrity enforcement and independent persisted-result validation | Integrity failure tests plus `TestIntegrityNormalRunLockedVerifiesSourceAndPersistedResult` and persisted-result mismatch coverage |
+| Zero-reference/standalone resources | Declared-resource tests, integrity coverage, and the coordinated rehearsal |
+| Multi-outcome evidence retention without aggregation | Multi-outcome coverage above and the coordinated rehearsal |
+| Raw evidence versus normalized records and adapter-native vocabulary boundary | Raw-evidence classification tests, record-package emission tests, and the coordinated rehearsal |
+| FreeCAD adapter handoff sufficiency | README FreeCAD handoff section plus the canonical `parametron-docs` contracts |
+
 ## Explicit occurrence contract coverage
 
 The [local contract summary](../README.md#explicit-occurrence-observation)
