@@ -70,12 +70,25 @@ Reference guarantees are anchored in these permanent tests:
 
 - `internal/engine/recordcontract/reference_record_test.go` retains generic record
   normalization, identity, validation, and copy-safety coverage.
+  `TestReferenceRecordIdentityExcludesOperationalEndpointMaterials` proves that
+  generic endpoint paths and runtime-reported digests do not participate in
+  record identity while remaining present in the normalized record.
   `reference_structure_test.go` adds
   `TestNativeReferenceRelationshipKeyContract`,
-  `TestNativeReferenceRecordRejectsInvalidContract`, and
+  `TestNativeReferenceRecordRejectsInvalidContract`,
+  `TestNativeReferenceRecordIdentityRetainsContractRelativeCoordinate`, and
   `TestNativeReferenceRecordSerializationCopyAndSharedIdentity` for native keys,
-  null/observed discriminators, qualification, summary validation, and shared
-  evidence-sensitive record identity.
+  null/observed discriminators, qualification, summary validation, retained
+  contract-relative identity coordinates, and shared evidence-sensitive record
+  identity.
+- `internal/engine/recordmap/observed_test.go` proves generic observed reference
+  semantics through
+  `TestMapObservedReferenceIdentityIgnoresOperationalWorkingCopyMaterial`,
+  `TestMapObservedReferenceIdentityIncludesReferenceMaterial`, and
+  `TestMapObservedReferenceRecordRejectsDuplicateReferences`: working-copy
+  relocation and digest changes preserve reference identity, endpoint material is
+  retained, semantic reference changes still alter identity, and duplicate
+  references remain rejected.
 - `internal/engine/recordmap/reference_traversal_test.go` covers native kind and
   five-state resolution matrices, linkage/provenance reconciliation, discriminator
   preservation, conflicting states, and complete zero-edge records.
@@ -103,6 +116,12 @@ Reference guarantees are anchored in these permanent tests:
   of cross-resource normalization and all three empty-scope completeness states.
   Raw bytes and SHA-256 provenance are preserved; equivalent relationship keys
   and ordering do not require identical containing record identities or bytes.
+
+Generic observed reference identity is independent of operational working-copy
+locations and runtime-reported working-copy digests. Those materials remain in
+the normalized record and raw evidence. Native traversal identity keeps accepted
+contract-relative fallback coordinates, while relationship keys and ordering are
+unchanged.
 
 These Engine tests use controlled traversal evidence, not real FreeCAD execution.
 The finite declared inventory need not have a native edge for each member.

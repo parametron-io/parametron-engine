@@ -169,10 +169,14 @@ occurrences, quantities, or BOM totals.
 Resource-qualified relationship keys and ordering are stable for equivalent
 accepted relationships, including declared-resource relocation. The containing
 `ReferenceRecord.Identity` remains evidence-sensitive: differing exact raw
-traversal bytes can change SHA-256 provenance and record identity. Exact bytes
-remain separate at `raw/runtime/prm.reference-traversal.json`. Normal successful
-execution adds traversal material only for exactly one eligible verified outcome;
-zero or multiple candidates add none.
+bytes can change SHA-256 provenance and record identity. Operational working-copy
+locations and runtime-reported working-copy digests do not participate in
+reference identity; generic observed references retain them in the normalized
+record and raw evidence. Accepted contract-relative native traversal coordinates
+remain identity material. Exact bytes remain separate at
+`raw/runtime/prm.reference-traversal.json` and `raw/observed/prm.observed.json`.
+Normal successful execution adds traversal material only for exactly one eligible
+verified outcome; zero or multiple candidates add none.
 
 Adapter-native CAD failures are interpreted by the adapter/runtime boundary as
 a generic Engine CAD runtime failure outcome before `MapCADRuntimeFailure`

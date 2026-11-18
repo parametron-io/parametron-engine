@@ -12,7 +12,11 @@ record packaging.
   accepted relationships, including relocation and evidence reordering.
   `ReferenceRecord.Identity` remains evidence-sensitive under the shared
   `DeriveIdentity` contract: differing exact raw evidence digests can change
-  record identity and bytes even when relationship keys are identical.
+  record identity and bytes even when relationship keys are identical. Endpoint
+  operational paths and runtime-reported working-copy digests are excluded from
+  reference identity while remaining present in normalized records and raw
+  evidence; accepted contract-relative native traversal coordinates remain
+  identity material.
 - **Contract boundary isolation**: Package boundaries (such as verification,
   record mapping, and runtime capability) are tested with unit suites using typed
   models rather than live subprocesses.
@@ -136,13 +140,20 @@ record packaging.
   artifact, observation, reference, failure, and verification record families,
   including normalized target-state observation facts and target-state
   verification category and failure vocabulary within those existing families.
+  Reference identity tests prove that legacy endpoint operational paths and
+  runtime-reported digests do not participate in identity while remaining in the
+  normalized record, and that native contract-relative fallback coordinates
+  remain identity material.
 - **Record Mapping (`internal/engine/recordmap`)**: Tests mapping from operational
   reports, metadata, artifacts, typed observed state, traversals, Engine
   verification results, and generic CAD runtime failure outcomes to normalized
   record structures. Target-state tests cover deterministic observation and
   verification mapping within the existing record families, stable record
   identity, and verification provenance linking the raw verification request and
-  observed evidence. CAD failure tests prove that runtime-specific
+  observed evidence. Observed-reference tests prove relocation and
+  working-copy-digest invariance for reference identity, retention of that
+  material on endpoints, semantic-reference sensitivity, and legacy duplicate
+  rejection. CAD failure tests prove that runtime-specific
   interpretation occurs before the adapter-neutral `MapCADRuntimeFailure`
   boundary and that exact raw result bytes supply digest provenance. Current
   FreeCAD vocabulary maps validation failures to `validation / validation`,

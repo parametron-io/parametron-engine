@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"sort"
 	"testing"
 )
@@ -118,6 +119,60 @@ func TestReferenceRecordIdentityChangesWithSemanticMaterial(t *testing.T) {
 			}
 			if got.Identity.ID == baseRecord.Identity.ID {
 				t.Fatalf("identity ID did not change after %s changed: %q", tc.name, got.Identity.ID)
+			}
+		})
+	}
+}
+
+func TestReferenceRecordIdentityExcludesOperationalEndpointMaterials(t *testing.T) {
+	base := validReferenceRecordInput()
+	baseRecord := mustBuildReferenceRecord(t, base)
+
+	tests := []struct {
+		name     string
+		mutate   func(*ReferenceRecordInput)
+		retained func(ReferenceEdge) bool
+	}{
+		{
+			name: "source path",
+			mutate: func(input *ReferenceRecordInput) {
+				input.Reference.Edges[0].Source.Path = "/relocated/assemblies/root.FCStd"
+			},
+			retained: func(edge ReferenceEdge) bool { return edge.Source.Path == "/relocated/assemblies/root.FCStd" },
+		},
+		{
+			name: "target path",
+			mutate: func(input *ReferenceRecordInput) {
+				input.Reference.Edges[0].Target.Path = "/relocated/parts/body.FCStd"
+			},
+			retained: func(edge ReferenceEdge) bool { return edge.Target.Path == "/relocated/parts/body.FCStd" },
+		},
+		{
+			name:     "source digest",
+			mutate:   func(input *ReferenceRecordInput) { input.Reference.Edges[0].Source.DigestSHA256 = digestC() },
+			retained: func(edge ReferenceEdge) bool { return edge.Source.DigestSHA256 == digestC() },
+		},
+		{
+			name:     "target digest",
+			mutate:   func(input *ReferenceRecordInput) { input.Reference.Edges[0].Target.DigestSHA256 = digestD() },
+			retained: func(edge ReferenceEdge) bool { return edge.Target.DigestSHA256 == digestD() },
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			changed := cloneReferenceRecordInput(base)
+			tc.mutate(&changed)
+
+			got, err := BuildReferenceRecord(changed)
+			if err != nil {
+				t.Fatalf("BuildReferenceRecord(changed) returned error: %v", err)
+			}
+			if got.Identity != baseRecord.Identity {
+				t.Fatalf("identity changed after %s changed: %q != %q", tc.name, got.Identity.ID, baseRecord.Identity.ID)
+			}
+			if !slices.ContainsFunc(got.Reference.Edges, tc.retained) {
+				t.Fatalf("%s was not retained in the normalized record", tc.name)
 			}
 		})
 	}

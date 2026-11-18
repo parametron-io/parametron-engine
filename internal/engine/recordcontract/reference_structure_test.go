@@ -72,6 +72,33 @@ func TestNativeReferenceRelationshipKeyContract(t *testing.T) {
 	}
 }
 
+func TestNativeReferenceRecordIdentityRetainsContractRelativeCoordinate(t *testing.T) {
+	build := func(coordinate string) ReferenceRecord {
+		input := nativeReferenceInput()
+		edge := &input.Reference.Edges[0]
+		edge.NativeKind = "external_document_reference"
+		edge.Kind = ReferenceKindExternal
+		edge.Target = ReferenceEndpoint{
+			NativeKind:    "external_document",
+			Qualification: "undeclared",
+			Resolution:    ReferenceResolutionResolved,
+			Path:          coordinate,
+		}
+		input.Reference.Completeness = "incomplete"
+		record, err := BuildReferenceRecord(input)
+		if err != nil {
+			t.Fatalf("BuildReferenceRecord(%q) returned error: %v", coordinate, err)
+		}
+		return record
+	}
+
+	first := build("resources/first.FCStd")
+	second := build("resources/second.FCStd")
+	if first.Identity == second.Identity {
+		t.Fatal("native contract-relative coordinate stopped participating in record identity")
+	}
+}
+
 func TestNativeReferenceRecordRejectsInvalidContract(t *testing.T) {
 	for name, mutate := range map[string]func(*ReferenceRecordInput){
 		"fabricated role": func(i *ReferenceRecordInput) { i.Reference.Edges[0].Role = "assembly-child" },
