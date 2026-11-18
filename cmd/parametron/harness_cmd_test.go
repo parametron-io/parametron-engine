@@ -2095,7 +2095,7 @@ func buildExpectedProjectLockBytes(t *testing.T, entryPath string) (*projectlock
 
 func executeHarnessCommand(t *testing.T, args []string) (string, error) {
 	t.Helper()
-	resetGlobals()
+	resetGlobalsForTest(t)
 
 	cmd := newHarnessRootCmd()
 	var stdout bytes.Buffer
