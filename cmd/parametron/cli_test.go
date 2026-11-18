@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"parametron/internal/authoring/dsl"
 	"parametron/internal/authoring/planner"
 	"parametron/internal/engine/artifact"
@@ -176,10 +178,8 @@ product Test {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Reset global flags to defaults to ensure determinism
-			resetGlobals()
-
-			cmd := newRootCmd()
+			// Isolate global flag state for this subtest and restore it on exit.
+			cmd := newRootCmdForTest(t)
 			var bufOut, bufErr bytes.Buffer
 			cmd.SetOut(&bufOut)
 			cmd.SetErr(&bufErr)
@@ -230,11 +230,28 @@ func resetGlobals() {
 	printAST = false
 }
 
-func executeRootCommand(t *testing.T, args []string) (string, error) {
+// resetGlobalsForTest resets the package-level CLI flag state bound to the
+// shared cobra command tree and restores the defaults when the test finishes.
+// Command execution and direct flag assignment mutate these globals, so without
+// cleanup one test's arguments leak into later tests and make shuffled runs
+// order-dependent.
+func resetGlobalsForTest(t *testing.T) {
 	t.Helper()
 	resetGlobals()
+	t.Cleanup(resetGlobals)
+}
 
-	cmd := newRootCmd()
+// newRootCmdForTest builds the production root command with isolated test flag
+// state that is restored when the test finishes.
+func newRootCmdForTest(t *testing.T) *cobra.Command {
+	t.Helper()
+	resetGlobalsForTest(t)
+	return newRootCmd()
+}
+
+func executeRootCommand(t *testing.T, args []string) (string, error) {
+	t.Helper()
+	cmd := newRootCmdForTest(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -247,9 +264,7 @@ func executeRootCommand(t *testing.T, args []string) (string, error) {
 
 func executeRootCommandWithVisibleError(t *testing.T, args []string) (string, string, error) {
 	t.Helper()
-	resetGlobals()
-
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.SetOut(&stdout)
@@ -368,7 +383,7 @@ product Widget {
 	}
 
 	outDir := t.TempDir()
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -441,7 +456,7 @@ product Widget {
 `)
 
 	outDir := t.TempDir()
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -571,7 +586,7 @@ product P {
 	outDir := t.TempDir()
 	installControlledAlignedRuntime(t, "failure")
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -808,7 +823,7 @@ func TestCLI_CommentExamples(t *testing.T) {
 	smokePath := filepath.Join("..", "..", "testdata", "dsl", "smoke", "smoke_comments.dsl")
 
 	t.Run("smoke comments print ast", func(t *testing.T) {
-		cmd := newRootCmd()
+		cmd := newRootCmdForTest(t)
 		var bufOut, bufErr bytes.Buffer
 		cmd.SetOut(&bufOut)
 		cmd.SetErr(&bufErr)
@@ -824,7 +839,7 @@ func TestCLI_CommentExamples(t *testing.T) {
 
 	resetGlobals()
 	t.Run("smoke comments print plan", func(t *testing.T) {
-		cmd := newRootCmd()
+		cmd := newRootCmdForTest(t)
 		var bufOut, bufErr bytes.Buffer
 		cmd.SetOut(&bufOut)
 		cmd.SetErr(&bufErr)
@@ -844,7 +859,7 @@ func TestCLI_UnclosedBlockCommentExample(t *testing.T) {
 	resetGlobals()
 	breakPath := filepath.Join("..", "..", "testdata", "dsl", "break", "break_unclosed_block_comment.dsl")
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -863,7 +878,7 @@ func TestCLI_BooleanEqualitySmokeExample(t *testing.T) {
 	resetGlobals()
 	smokePath := filepath.Join("..", "..", "testdata", "dsl", "smoke", "smoke_boolean_equality.dsl")
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -883,7 +898,7 @@ func TestCLI_BooleanEqualityTypeMismatchBreakExample(t *testing.T) {
 	resetGlobals()
 	breakPath := filepath.Join("..", "..", "testdata", "dsl", "break", "break_equality_type_mismatch.dsl")
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -902,7 +917,7 @@ func TestCLI_StringConcatenationSmokeExample(t *testing.T) {
 	resetGlobals()
 	smokePath := filepath.Join("..", "..", "testdata", "dsl", "smoke", "smoke_string_concat.dsl")
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -922,7 +937,7 @@ func TestCLI_StringConcatenationTypeMismatchBreakExample(t *testing.T) {
 	resetGlobals()
 	breakPath := filepath.Join("..", "..", "testdata", "dsl", "break", "break_string_concat_type_mismatch.dsl")
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -941,7 +956,7 @@ func TestCLI_StringInterpolationSmokeExample(t *testing.T) {
 	resetGlobals()
 	smokePath := filepath.Join("..", "..", "testdata", "dsl", "smoke", "smoke_string_interpolation.dsl")
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -961,7 +976,7 @@ func TestCLI_StringInterpolationTypeMismatchBreakExample(t *testing.T) {
 	resetGlobals()
 	breakPath := filepath.Join("..", "..", "testdata", "dsl", "break", "break_string_interpolation_type_mismatch.dsl")
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -979,7 +994,7 @@ func TestCLI_StringInterpolationTypeMismatchBreakExample(t *testing.T) {
 func TestCLI_SuggestsQuotedFilePathWhenSplitBySpaces(t *testing.T) {
 	resetGlobals()
 
-	cmd := newRootCmd()
+	cmd := newRootCmdForTest(t)
 	var bufOut, bufErr bytes.Buffer
 	cmd.SetOut(&bufOut)
 	cmd.SetErr(&bufErr)
@@ -2421,7 +2436,7 @@ type failedCLIProjectExecution struct {
 func runCLIExecutionWithTables(t *testing.T, dslPath string, outDir string, tables []string) cliExecutionWithTables {
 	t.Helper()
 
-	resetGlobals()
+	resetGlobalsForTest(t)
 	tableInputs = append([]string(nil), tables...)
 
 	planned, err := loadPlannedRun(dslPath, map[string]string{}, nil)
@@ -3505,6 +3520,29 @@ func TestLoadPlannedRun_ProjectModeCaptureProjectionFailsBeforeManifestGeneratio
 	}
 	if !strings.Contains(err.Error(), `semanticToManifest.outputs must include manifestType "pdf"`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+// The shared command helpers must not leak cobra flag state into later tests.
+// Without cleanup, a test that passes --table leaves tableInputs pointing at its
+// own temporary fixture and changes unrelated standalone planning.
+func TestCommandHelpersDoNotLeakFlagState(t *testing.T) {
+	staleTable := filepath.Join(t.TempDir(), "fixture.table.json")
+	t.Run("run command with table flag", func(t *testing.T) {
+		if _, err := executeRootCommand(t, []string{"--table", "fasteners=" + staleTable}); err == nil {
+			t.Fatal("expected a missing file or project error")
+		}
+	})
+
+	dslPath := writeDSLFixture(t, `
+product Box {
+    adapter = "freecad"
+    source_model = "input/box.FCStd"
+    outputs = ["step"]
+}
+`)
+	if _, err := loadPlannedRun(dslPath, map[string]string{}, nil); err != nil {
+		t.Fatalf("package flag state leaked from the previous command: %v", err)
 	}
 }
 
