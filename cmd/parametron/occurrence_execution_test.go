@@ -176,16 +176,16 @@ func (f *occurrenceExecutionFixture) execute() (scheduler.ExecutionResult, error
 
 func (f *occurrenceExecutionFixture) emit(execution scheduler.ExecutionResult) map[string][]byte {
 	f.t.Helper()
-	cad, err := cadRuntimeRunEvidence(execution, true)
-	if err != nil || cad == nil {
-		f.t.Fatalf("eligible projection: %+v %v", cad, err)
+	outcomes, err := runOutcomeEvidences(execution)
+	if err != nil || len(outcomes) != 1 {
+		f.t.Fatalf("eligible projection: %+v %v", outcomes, err)
 	}
 	stamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	rep, err := report.Build(report.BuildInput{PlanHash: f.planned.PlanHash, DSLHash: f.planned.DSLHash, Execution: execution, StartedAt: stamp, EndedAt: stamp, WorkerCount: 1})
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{RunRoot: f.root, PlanHash: f.planned.PlanHash, Report: rep, CADRuntime: cad, ReferenceTraversal: referenceTraversalRunEvidence(execution, true)}); err != nil {
+	if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{RunRoot: f.root, PlanHash: f.planned.PlanHash, Report: rep, Outcomes: outcomes}); err != nil {
 		f.t.Fatal(err)
 	}
 	return readRecordPackageFiles(f.t, recordPackageRoot(f.root))
@@ -283,10 +283,8 @@ func TestOccurrenceExecutionEvidenceStatesAndFailures(t *testing.T) {
 					if !errors.As(err, &classified) || classified.Stage != "occurrence_validation" {
 						t.Fatalf("wrong rejection boundary: %v", err)
 					}
-					for _, overallSucceeded := range []bool{false, true} {
-						if got, projectionErr := cadRuntimeRunEvidence(execution, overallSucceeded); projectionErr != nil || got != nil {
-							t.Fatal("failed evidence projected")
-						}
+					if got, projectionErr := runOutcomeEvidences(execution); projectionErr != nil || len(got) != 0 {
+						t.Fatal("failed evidence projected")
 					}
 					if out := f.e.CADRuntimeOutcome(); out != nil && out.Verification == artifact.VerificationOutcomePassed {
 						t.Fatal("rejected occurrence evidence marked eligible")

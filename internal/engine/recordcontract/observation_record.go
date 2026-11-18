@@ -626,7 +626,7 @@ func validateObservationFactFactKind(fact ObservationFact, index int) error {
 		}
 	}
 	if fact.Evidence.SourceKind != "" || fact.Evidence.SourceRef != "" || fact.Evidence.DigestSHA256 != "" {
-		if fact.Evidence.SourceKind != FactEvidenceSourceKind || fact.Evidence.SourceRef != FactEvidenceSourceRef || fact.Evidence.DigestSHA256 == "" {
+		if fact.Evidence.SourceKind != FactEvidenceSourceKind || !isOutcomeScopedEvidenceRef(fact.Evidence.SourceRef, FactEvidenceSourceRef, "fact/prm.fact-evidence.json") || fact.Evidence.DigestSHA256 == "" {
 			return fmt.Errorf("%w: fact %d canonical fact evidence is required", ErrInvalidObservationRecord, index)
 		}
 	} else if fact.Availability == FactAvailabilityObserved {

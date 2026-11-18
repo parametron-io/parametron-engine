@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -32,15 +33,35 @@ const integrityEvidenceKind = "integrity-evidence"
 
 // RunEmitInput carries material for emitting a local record package from a normal Engine run.
 type RunEmitInput struct {
-	RunRoot            string
-	PlanHash           string
-	Report             report.Report
-	Metadata           *metadata.Metadata
-	Artifacts          []artifact.Artifact
+	RunRoot   string
+	PlanHash  string
+	Report    report.Report
+	Metadata  *metadata.Metadata
+	Artifacts []artifact.Artifact
+	// ReferenceTraversal and CADRuntime are retained for single-outcome callers.
+	// When Outcomes is non-empty, ReferenceTraversal is ignored. CADRuntime is
+	// also ignored for successful observation emission, but a selected runtime
+	// failure on CADRuntime remains the failure-evidence input.
 	ReferenceTraversal *ReferenceTraversalRunEvidence
 	CADRuntime         *CADRuntimeRunEvidence
+	// Outcomes carries every eligible CAD outcome's engineering-observation
+	// material. Multiple outcomes emit outcome-scoped records and raw evidence.
+	Outcomes []RunOutcomeEvidence
 	// SourceIntegrity is the project-scoped source identity and lock state.
 	SourceIntegrity *integrity.ProjectIntegrity
+}
+
+// RunOutcomeEvidence groups the engineering-observation material produced by one
+// eligible CAD outcome. Coordinates must agree with any embedded evidence.
+type RunOutcomeEvidence struct {
+	JobID      string
+	ProductKey string
+	StepRef    string
+	Attempt    int
+	AttemptID  string
+
+	CADRuntime         *CADRuntimeRunEvidence
+	ReferenceTraversal *ReferenceTraversalRunEvidence
 }
 
 // CADRuntimeRunEvidence carries unchanged bytes read from one execution attempt.
@@ -60,6 +81,8 @@ type CADRuntimeRunEvidence struct {
 	JobID      string
 	ProductKey string
 	StepRef    string
+	Attempt    int
+	AttemptID  string
 }
 
 type ReferenceTraversalRunEvidence struct {
@@ -69,6 +92,8 @@ type ReferenceTraversalRunEvidence struct {
 	JobID                  string
 	ProductKey             string
 	StepRef                string
+	Attempt                int
+	AttemptID              string
 }
 
 type rawEvidenceSource struct {
@@ -88,41 +113,49 @@ func EmitRunPackage(input RunEmitInput) error {
 		return fmt.Errorf("recordemit: plan hash is required")
 	}
 
-	provenance := recordcontract.Provenance{}
+	outcomes, scoped, err := resolveEmitOutcomes(input)
+	if err != nil {
+		return err
+	}
+
+	baseProvenance := recordcontract.Provenance{}
 	if input.Metadata != nil {
 		mapped, err := recordmap.MapMetadata(recordmap.MetadataMappingInput{
 			Metadata:   *input.Metadata,
-			Provenance: provenance,
+			Provenance: baseProvenance,
 		})
 		if err != nil {
 			return fmt.Errorf("recordemit: map metadata: %w", err)
 		}
-		provenance = mapped.Provenance
+		baseProvenance = mapped.Provenance
 	}
 
-	mergedIntegrity, err := resolvedRunIntegrity(input)
+	runIntegrity, err := resolvedRunIntegrity(input, outcomes, scoped)
 	if err != nil {
 		return fmt.Errorf("recordemit: merge integrity provenance: %w", err)
 	}
-	mappedIntegrity, err := recordmap.MapIntegrityProvenance(mergedIntegrity)
+	mappedRunIntegrity, err := recordmap.MapIntegrityProvenance(runIntegrity)
 	if err != nil {
 		return fmt.Errorf("recordemit: map integrity provenance: %w", err)
 	}
-	provenance.Integrity = mappedIntegrity
-	if input.CADRuntime != nil && len(input.CADRuntime.IntegrityEvidence) > 0 {
-		provenance.Evidence = append(provenance.Evidence, recordcontract.EvidenceReference{
-			Kind:         integrityEvidenceKind,
-			Ref:          recordpackage.RawRuntimeIntegrityEvidenceContractPath(),
-			DigestSHA256: evidenceDigest(input.CADRuntime.IntegrityEvidence),
-		})
+	runProvenance := baseProvenance
+	runProvenance.Integrity = mappedRunIntegrity
+	if !scoped {
+		if evidence := legacyIntegrityEvidence(input, outcomes); len(evidence) > 0 {
+			runProvenance.Evidence = append(runProvenance.Evidence, recordcontract.EvidenceReference{
+				Kind:         integrityEvidenceKind,
+				Ref:          recordpackage.RawRuntimeIntegrityEvidenceContractPath(),
+				DigestSHA256: evidenceDigest(evidence),
+			})
+		}
 	}
-	provenance = recordcontract.NormalizeProvenance(provenance)
+	runProvenance = recordcontract.NormalizeProvenance(runProvenance)
 
 	recordKey := recordKeyForPlanHash(planHash)
 	mappedReport, err := recordmap.MapReport(recordmap.ReportMappingInput{
 		Report:     deterministicReportForRecords(input.Report),
 		RecordKey:  recordKey,
-		Provenance: provenance,
+		Provenance: runProvenance,
 	})
 	if err != nil {
 		return fmt.Errorf("recordemit: map report: %w", err)
@@ -135,7 +168,7 @@ func EmitRunPackage(input RunEmitInput) error {
 	mappedArtifacts, err := recordmap.MapArtifactStoreRecords(recordmap.ArtifactMappingInput{
 		Artifacts:       input.Artifacts,
 		RecordKeyPrefix: recordKey,
-		Provenance:      provenance,
+		Provenance:      runProvenance,
 	})
 	if err != nil {
 		return fmt.Errorf("recordemit: map artifacts: %w", err)
@@ -143,29 +176,52 @@ func EmitRunPackage(input RunEmitInput) error {
 	for _, artifactRecord := range mappedArtifacts.ArtifactRecords {
 		records = append(records, recordpackage.ArtifactRecord(artifactRecord))
 	}
-	if input.CADRuntime != nil {
-		runtimeRecords, runtimeFailure, err := mapCADRuntimeRecords(input.CADRuntime, recordKey, planHash, provenance, failureRecord)
+
+	var outcomeRaw []recordpackage.RawEvidenceFile
+	for _, outcome := range outcomes {
+		refs, err := evidenceRefsForOutcome(outcome, scoped)
 		if err != nil {
 			return err
 		}
-		records = append(records, runtimeRecords...)
-		if runtimeFailure != nil {
-			failureRecord = runtimeFailure
+		outcomeProvenance := runProvenance
+		if scoped {
+			outcomeProvenance, err = buildOutcomeProvenance(input, outcome, baseProvenance, runIntegrity, refs)
+			if err != nil {
+				return err
+			}
 		}
+		outcomeRecords, err := mapOutcomeRecords(outcome, scoped, recordKey, outcomeProvenance, refs)
+		if err != nil {
+			return err
+		}
+		records = append(records, outcomeRecords...)
+
+		if outcome.cad != nil {
+			outcomeRaw = append(outcomeRaw, rawEvidenceForOutcomeCAD(outcome.cad, refs)...)
+		}
+		if outcome.traversal != nil {
+			scope := ""
+			if scoped {
+				scope = outcome.key
+			}
+			mappedTraversal, raw, err := mapReferenceTraversal(outcome.traversal, outcomeRecordKey(recordKey, scope, ":reference"), refs.traversal, scoped, outcomeProvenance)
+			if err != nil {
+				return err
+			}
+			outcomeRaw = append(outcomeRaw, raw)
+			if mappedTraversal.ReferenceRecord != nil {
+				rec := recordpackage.ReferenceRecord(*mappedTraversal.ReferenceRecord)
+				rec.OutcomeKey = scope
+				records = append(records, rec)
+			}
+		}
+	}
+
+	if failureRecord, err = mapRuntimeFailureRecord(input, outcomes, planHash, baseProvenance, runProvenance, failureRecord); err != nil {
+		return err
 	}
 	if failureRecord != nil {
 		records = append(records, recordpackage.FailureRecord(*failureRecord))
-	}
-	var traversalRaw *recordpackage.RawEvidenceFile
-	if input.ReferenceTraversal != nil {
-		mappedTraversal, raw, err := mapReferenceTraversal(input.ReferenceTraversal, planHash, provenance)
-		if err != nil {
-			return err
-		}
-		traversalRaw = &raw
-		if mappedTraversal.ReferenceRecord != nil {
-			records = append(records, recordpackage.ReferenceRecord(*mappedTraversal.ReferenceRecord))
-		}
 	}
 
 	rawEvidence, err := collectRawEvidence(runRoot, input)
@@ -175,9 +231,13 @@ func EmitRunPackage(input RunEmitInput) error {
 	if !hasRawEvidence(rawEvidence, recordpackage.RawReportContractPath()) {
 		return fmt.Errorf("recordemit: raw report evidence is required")
 	}
-	if traversalRaw != nil {
-		rawEvidence = append(rawEvidence, *traversalRaw)
+	if legacy := input.CADRuntime; legacy != nil && (len(input.Outcomes) > 0 || legacy.Failure != nil) {
+		// A selected runtime failure or integrity failure keeps its established
+		// raw paths; it is failure evidence, not a successful
+		// engineering-observation outcome.
+		rawEvidence = append(rawEvidence, rawEvidenceForOutcomeCAD(legacy, canonicalOutcomeEvidenceRefs())...)
 	}
+	rawEvidence = append(rawEvidence, outcomeRaw...)
 
 	return recordpackage.WritePackage(recordpackage.PackageInput{
 		PackageRoot:               runRoot,
@@ -189,103 +249,439 @@ func EmitRunPackage(input RunEmitInput) error {
 	})
 }
 
-func mapCADRuntimeRecords(evidence *CADRuntimeRunEvidence, recordKey, planHash string, provenance recordcontract.Provenance, reportFailure *recordcontract.FailureRecord) ([]recordpackage.Record, *recordcontract.FailureRecord, error) {
-	if evidence == nil {
-		return nil, nil, nil
+type emitOutcome struct {
+	key       string
+	coords    outcomeCoordinates
+	cad       *CADRuntimeRunEvidence
+	traversal *ReferenceTraversalRunEvidence
+}
+
+type outcomeCoordinates struct {
+	JobID      string
+	ProductKey string
+	StepRef    string
+	Attempt    int
+	AttemptID  string
+}
+
+type outcomeEvidenceRefs struct {
+	observed     string
+	verification string
+	occurrence   string
+	fact         string
+	traversal    string
+	integrity    string
+	result       string
+}
+
+func canonicalOutcomeEvidenceRefs() outcomeEvidenceRefs {
+	return outcomeEvidenceRefs{
+		observed:     recordpackage.RawObservedContractPath(),
+		verification: recordpackage.RawVerificationContractPath(),
+		occurrence:   recordpackage.RawRuntimeOccurrenceEvidenceContractPath(),
+		fact:         recordpackage.RawFactEvidenceContractPath(),
+		traversal:    recordpackage.RawRuntimeReferenceTraversalContractPath(),
+		integrity:    recordpackage.RawRuntimeIntegrityEvidenceContractPath(),
+		result:       recordpackage.RawRuntimeResultContractPath(),
 	}
+}
+
+func rawEvidenceForOutcomeCAD(evidence *CADRuntimeRunEvidence, refs outcomeEvidenceRefs) []recordpackage.RawEvidenceFile {
+	if evidence == nil {
+		return nil
+	}
+	out := make([]recordpackage.RawEvidenceFile, 0, 6)
+	if evidence.Occurrence != nil && len(evidence.Occurrence.Input.Content) > 0 {
+		out = append(out, recordpackage.RawEvidenceFile{ContractPath: refs.occurrence, Content: append([]byte(nil), evidence.Occurrence.Input.Content...)})
+	}
+	if evidence.Fact != nil && len(evidence.Fact.Input.Content) > 0 {
+		out = append(out, recordpackage.RawEvidenceFile{ContractPath: refs.fact, Content: append([]byte(nil), evidence.Fact.Input.Content...)})
+	}
+	for _, item := range []recordpackage.RawEvidenceFile{
+		{ContractPath: refs.integrity, Content: evidence.IntegrityEvidence},
+		{ContractPath: refs.result, Content: evidence.Result},
+		{ContractPath: refs.observed, Content: evidence.Observed},
+		{ContractPath: refs.verification, Content: evidence.Verification},
+	} {
+		if len(item.Content) > 0 {
+			out = append(out, recordpackage.RawEvidenceFile{ContractPath: item.ContractPath, Content: append([]byte(nil), item.Content...)})
+		}
+	}
+	return out
+}
+
+func cadString(evidence *CADRuntimeRunEvidence, value func(*CADRuntimeRunEvidence) string) string {
+	if evidence == nil {
+		return ""
+	}
+	return value(evidence)
+}
+
+func cadInt(evidence *CADRuntimeRunEvidence, value func(*CADRuntimeRunEvidence) int) int {
+	if evidence == nil {
+		return 0
+	}
+	return value(evidence)
+}
+
+func traversalString(evidence *ReferenceTraversalRunEvidence, value func(*ReferenceTraversalRunEvidence) string) string {
+	if evidence == nil {
+		return ""
+	}
+	return value(evidence)
+}
+
+func traversalInt(evidence *ReferenceTraversalRunEvidence, value func(*ReferenceTraversalRunEvidence) int) int {
+	if evidence == nil {
+		return 0
+	}
+	return value(evidence)
+}
+
+func canonicalExecutionLink(value string) bool {
+	return value != "" && strings.TrimSpace(value) == value && !strings.ContainsRune(value, '\x00')
+}
+
+func resolveEmitOutcomes(input RunEmitInput) ([]emitOutcome, bool, error) {
+	if len(input.Outcomes) == 0 {
+		var out []emitOutcome
+		cad := input.CADRuntime
+		if cad != nil && cad.Failure != nil {
+			cad = nil
+		}
+		if cad != nil || input.ReferenceTraversal != nil {
+			out = append(out, emitOutcome{cad: cad, traversal: input.ReferenceTraversal})
+		}
+		return out, false, nil
+	}
+
+	outcomes := make([]emitOutcome, 0, len(input.Outcomes))
+	coordinates := make([]outcomeCoordinates, 0, len(input.Outcomes))
+	seen := make(map[string]struct{}, len(input.Outcomes))
+	for i, raw := range input.Outcomes {
+		if raw.CADRuntime != nil && raw.CADRuntime.Failure != nil {
+			return nil, false, fmt.Errorf("recordemit: outcomes[%d] carries a runtime failure and is not eligible for engineering-observation emission", i)
+		}
+		coords, err := resolveOutcomeCoordinates(raw)
+		if err != nil {
+			return nil, false, fmt.Errorf("recordemit: outcomes[%d]: %w", i, err)
+		}
+		key, err := outcomeKeyFor(coords)
+		if err != nil {
+			return nil, false, fmt.Errorf("recordemit: outcomes[%d]: %w", i, err)
+		}
+		if _, exists := seen[key]; exists {
+			return nil, false, fmt.Errorf("recordemit: outcomes[%d]: duplicate outcome identity %q", i, key)
+		}
+		seen[key] = struct{}{}
+		outcomes = append(outcomes, emitOutcome{key: key, coords: coords, cad: raw.CADRuntime, traversal: raw.ReferenceTraversal})
+		coordinates = append(coordinates, coords)
+	}
+	sort.SliceStable(outcomes, func(i, j int) bool { return outcomes[i].key < outcomes[j].key })
+	if len(outcomes) > 1 {
+		for i, coords := range coordinates {
+			if !canonicalExecutionLink(coords.JobID) || !canonicalExecutionLink(coords.ProductKey) || !canonicalExecutionLink(coords.StepRef) {
+				return nil, false, fmt.Errorf("recordemit: outcomes[%d]: job, product, and step identity are required for multi-outcome emission", i)
+			}
+		}
+	}
+	return outcomes, len(outcomes) > 1, nil
+}
+
+func resolveOutcomeCoordinates(outcome RunOutcomeEvidence) (outcomeCoordinates, error) {
+	coords := outcomeCoordinates{JobID: outcome.JobID, ProductKey: outcome.ProductKey, StepRef: outcome.StepRef, Attempt: outcome.Attempt, AttemptID: outcome.AttemptID}
+	for _, embedded := range []outcomeCoordinates{
+		{JobID: cadString(outcome.CADRuntime, func(e *CADRuntimeRunEvidence) string { return e.JobID }), ProductKey: cadString(outcome.CADRuntime, func(e *CADRuntimeRunEvidence) string { return e.ProductKey }), StepRef: cadString(outcome.CADRuntime, func(e *CADRuntimeRunEvidence) string { return e.StepRef }), Attempt: cadInt(outcome.CADRuntime, func(e *CADRuntimeRunEvidence) int { return e.Attempt }), AttemptID: cadString(outcome.CADRuntime, func(e *CADRuntimeRunEvidence) string { return e.AttemptID })},
+		{JobID: traversalString(outcome.ReferenceTraversal, func(e *ReferenceTraversalRunEvidence) string { return e.JobID }), ProductKey: traversalString(outcome.ReferenceTraversal, func(e *ReferenceTraversalRunEvidence) string { return e.ProductKey }), StepRef: traversalString(outcome.ReferenceTraversal, func(e *ReferenceTraversalRunEvidence) string { return e.StepRef }), Attempt: traversalInt(outcome.ReferenceTraversal, func(e *ReferenceTraversalRunEvidence) int { return e.Attempt }), AttemptID: traversalString(outcome.ReferenceTraversal, func(e *ReferenceTraversalRunEvidence) string { return e.AttemptID })},
+	} {
+		if err := mergeOutcomeCoordinates(&coords, embedded); err != nil {
+			return outcomeCoordinates{}, err
+		}
+	}
+	coords.JobID = strings.TrimSpace(coords.JobID)
+	coords.ProductKey = strings.TrimSpace(coords.ProductKey)
+	coords.StepRef = strings.TrimSpace(coords.StepRef)
+	coords.AttemptID = strings.TrimSpace(coords.AttemptID)
+	return coords, nil
+}
+
+func mergeOutcomeCoordinates(target *outcomeCoordinates, other outcomeCoordinates) error {
+	for _, pair := range []struct {
+		name   string
+		target *string
+		value  string
+	}{{"job", &target.JobID, other.JobID}, {"product", &target.ProductKey, other.ProductKey}, {"step", &target.StepRef, other.StepRef}, {"attemptId", &target.AttemptID, other.AttemptID}} {
+		value := strings.TrimSpace(pair.value)
+		if value == "" {
+			continue
+		}
+		if *pair.target != "" && strings.TrimSpace(*pair.target) != value {
+			return fmt.Errorf("conflicting %s outcome identity", pair.name)
+		}
+		*pair.target = value
+	}
+	if other.Attempt != 0 {
+		if target.Attempt != 0 && target.Attempt != other.Attempt {
+			return fmt.Errorf("conflicting attempt outcome identity")
+		}
+		target.Attempt = other.Attempt
+	}
+	return nil
+}
+
+func outcomeKeyFor(coords outcomeCoordinates) (string, error) {
+	if coords.JobID == "" && coords.ProductKey == "" && coords.StepRef == "" && coords.AttemptID == "" && coords.Attempt == 0 {
+		return "", fmt.Errorf("execution outcome identity is required")
+	}
+	data, err := json.Marshal(coords)
+	if err != nil {
+		return "", fmt.Errorf("serialize outcome identity: %w", err)
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(data)), nil
+}
+
+func outcomeRecordKey(base, outcomeKey, suffix string) string {
+	if outcomeKey == "" {
+		return base + suffix
+	}
+	return base + ":" + outcomeKey + suffix
+}
+
+func evidenceRefsForOutcome(outcome emitOutcome, scoped bool) (outcomeEvidenceRefs, error) {
+	refs := canonicalOutcomeEvidenceRefs()
+	if !scoped {
+		return refs, nil
+	}
+	for _, item := range []struct {
+		target    *string
+		canonical string
+	}{{&refs.observed, refs.observed}, {&refs.verification, refs.verification}, {&refs.occurrence, refs.occurrence}, {&refs.fact, refs.fact}, {&refs.traversal, refs.traversal}, {&refs.integrity, refs.integrity}, {&refs.result, refs.result}} {
+		path, err := recordpackage.OutcomeRawEvidenceContractPath(outcome.key, item.canonical)
+		if err != nil {
+			return outcomeEvidenceRefs{}, fmt.Errorf("recordemit: outcome evidence path: %w", err)
+		}
+		*item.target = path
+	}
+	return refs, nil
+}
+
+func mapOutcomeRecords(outcome emitOutcome, scoped bool, baseRecordKey string, provenance recordcontract.Provenance, refs outcomeEvidenceRefs) ([]recordpackage.Record, error) {
+	evidence := outcome.cad
+	if evidence == nil {
+		return nil, nil
+	}
+	scope := ""
+	if scoped {
+		scope = outcome.key
+	}
+	observationKey := outcomeRecordKey(baseRecordKey, scope, ":observation")
 	linkage := recordmap.ObservedMappingLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef}
 	records := make([]recordpackage.Record, 0, 2)
 	if evidence.ObservedValue != nil {
 		mapped, err := recordmap.MapObservedToObservationRecord(recordmap.ObservedMappingInput{
 			Observed:             *evidence.ObservedValue,
-			RecordKey:            recordKey + ":observation",
+			RecordKey:            observationKey,
 			Provenance:           provenance,
 			Linkage:              linkage,
 			EvidenceDigestSHA256: evidenceDigest(evidence.Observed),
+			EvidenceRef:          refs.observed,
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("recordemit: map observed evidence: %w", err)
+			return nil, fmt.Errorf("recordemit: map observed evidence: %w", err)
 		}
-		records = append(records, recordpackage.ObservationRecord(mapped))
+		rec := recordpackage.ObservationRecord(mapped)
+		rec.OutcomeKey = scope
+		records = append(records, rec)
 	}
 	if evidence.VerificationResult != nil {
 		mapped, err := recordmap.MapVerificationToVerificationRecord(recordmap.VerificationMappingInput{
 			Result:                       *evidence.VerificationResult,
-			RecordKey:                    recordKey + ":verification",
+			RecordKey:                    outcomeRecordKey(baseRecordKey, scope, ":verification"),
 			Provenance:                   provenance,
 			Linkage:                      recordmap.VerificationMappingLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
 			EvidenceDigestSHA256:         evidenceDigest(evidence.Verification),
 			ObservedEvidenceDigestSHA256: evidenceDigest(evidence.Observed),
+			EvidenceRef:                  refs.verification,
+			ObservedEvidenceRef:          refs.observed,
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("recordemit: map verification result: %w", err)
+			return nil, fmt.Errorf("recordemit: map verification result: %w", err)
 		}
-		records = append(records, recordpackage.VerificationRecord(mapped))
+		rec := recordpackage.VerificationRecord(mapped)
+		rec.OutcomeKey = scope
+		records = append(records, rec)
 	}
-	var failureRecord *recordcontract.FailureRecord
-	if evidence.Failure != nil {
-		// A failed run has no metadata provenance; like the report-derived
-		// failure record it replaces, the record still names its plan.
-		failureProvenance := provenance
-		if strings.TrimSpace(failureProvenance.Plan.PlanHash) == "" {
-			failureProvenance.Plan.PlanHash = planHash
+	var err error
+	records, err = appendFactRecords(records, evidence, observationKey, provenance, refs.fact, scope)
+	if err != nil {
+		return nil, err
+	}
+	records, err = appendOccurrenceRecords(records, evidence, observationKey, provenance, refs.occurrence, scope)
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+func buildOutcomeProvenance(input RunEmitInput, outcome emitOutcome, base recordcontract.Provenance, runIntegrity *integrity.RunIntegrity, refs outcomeEvidenceRefs) (recordcontract.Provenance, error) {
+	provenance := base
+	linkage := recordcontract.LinkageProvenance{JobID: outcome.coords.JobID, ProductKey: outcome.coords.ProductKey, StepRef: outcome.coords.StepRef}
+	if provenance.Linkage != (recordcontract.LinkageProvenance{}) && provenance.Linkage != linkage {
+		return recordcontract.Provenance{}, fmt.Errorf("recordemit: run provenance linkage conflicts with outcome %q", outcome.key)
+	}
+	provenance.Linkage = linkage
+	if outcome.cad != nil && outcome.cad.Integrity != nil {
+		project := input.SourceIntegrity
+		if project == nil {
+			project = projectIntegrityFromRun(runIntegrity)
 		}
-		mappingInput := recordmap.CADRuntimeFailureMappingInput{
-			Failure:              *evidence.Failure,
-			RecordKey:            recordKey,
-			Provenance:           failureProvenance,
-			Linkage:              recordcontract.FailureLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
-			EvidenceDigestSHA256: evidenceDigest(evidence.Result),
-		}
-		// Only Engine-owned operational context comes from the report-derived
-		// failure; class, stage, code and message stay runtime-native.
-		if reportFailure != nil {
-			mappingInput.RetryCount = reportFailure.Failure.RetryCount
-			mappingInput.OccurredAt = reportFailure.Failure.OccurredAt
-		}
-		mapped, err := recordmap.MapCADRuntimeFailure(mappingInput)
+		merged, err := integrity.MergeRunIntegrity(project, outcome.cad.Integrity)
 		if err != nil {
-			return nil, nil, fmt.Errorf("recordemit: map CAD runtime failure: %w", err)
+			return recordcontract.Provenance{}, fmt.Errorf("recordemit: outcome integrity provenance: %w", err)
 		}
-		failureRecord = &mapped
+		mapped, err := recordmap.MapIntegrityProvenance(merged)
+		if err != nil {
+			return recordcontract.Provenance{}, fmt.Errorf("recordemit: map outcome integrity provenance: %w", err)
+		}
+		provenance.Integrity = mapped
+	} else {
+		mapped, err := recordmap.MapIntegrityProvenance(runIntegrity)
+		if err != nil {
+			return recordcontract.Provenance{}, fmt.Errorf("recordemit: map outcome integrity provenance: %w", err)
+		}
+		provenance.Integrity = mapped
 	}
-	endRecords, err := appendFactRecords(records, evidence, recordKey, provenance)
-	if err != nil {
-		return nil, nil, err
+	if outcome.cad != nil && len(outcome.cad.IntegrityEvidence) > 0 {
+		provenance.Evidence = append(provenance.Evidence, recordcontract.EvidenceReference{
+			Kind:         integrityEvidenceKind,
+			Ref:          refs.integrity,
+			DigestSHA256: evidenceDigest(outcome.cad.IntegrityEvidence),
+		})
 	}
-	records = endRecords
-	records, err = appendOccurrenceRecords(records, evidence, recordKey, provenance)
-	if err != nil {
-		return nil, nil, err
-	}
-	return records, failureRecord, nil
+	return recordcontract.NormalizeProvenance(provenance), nil
 }
 
-// resolvedRunIntegrity restores the joined integrity chain.
-//
-// Run metadata is authoritative when present because it preserves the identity
-// chain of the executed attempt, so re-emission from a persisted run root
-// reproduces the same normalized provenance. Otherwise the chain is rebuilt from
-// caller-supplied project integrity and attempt evidence.
-func resolvedRunIntegrity(input RunEmitInput) (*integrity.RunIntegrity, error) {
-	if input.Metadata != nil && input.Metadata.Integrity != nil {
-		return metadata.RunIntegrityFromMetadata(input.Metadata.Integrity), nil
-	}
-	// Without the declared source identity Engine cannot attribute attempt
-	// evidence to declared resources, so no integrity provenance is emitted.
-	if input.SourceIntegrity == nil {
-		return nil, nil
-	}
-	return integrity.MergeRunIntegrity(input.SourceIntegrity, operationIntegrity(input))
-}
-
-// operationIntegrity returns the attempt-scoped integrity chain supplied with the
-// attempt evidence.
-func operationIntegrity(input RunEmitInput) *integrity.OperationIntegrity {
-	if input.CADRuntime == nil {
+func projectIntegrityFromRun(run *integrity.RunIntegrity) *integrity.ProjectIntegrity {
+	if run == nil {
 		return nil
 	}
-	return input.CADRuntime.Integrity
+	project := &integrity.ProjectIntegrity{Lock: run.Lock}
+	for _, resource := range run.Resources {
+		project.Resources = append(project.Resources, integrity.ResourceSource{
+			LogicalID: resource.LogicalID, SourceCoordinate: resource.SourceCoordinate, SourceDigest: resource.SourceDigest, LockState: resource.LockState,
+		})
+	}
+	return project
+}
+
+func mapRuntimeFailureRecord(input RunEmitInput, outcomes []emitOutcome, planHash string, base, runProvenance recordcontract.Provenance, reportFailure *recordcontract.FailureRecord) (*recordcontract.FailureRecord, error) {
+	evidence := input.CADRuntime
+	if evidence == nil || evidence.Failure == nil {
+		return reportFailure, nil
+	}
+	provenance := runProvenance
+	if len(input.Outcomes) > 0 {
+		// Successful outcome scoping must not absorb the selected failure's
+		// configured-result provenance; the failure record keeps its own chain.
+		merged, err := resolvedLegacyIntegrity(input, outcomes)
+		if err != nil {
+			return nil, fmt.Errorf("recordemit: failure integrity provenance: %w", err)
+		}
+		mapped, err := recordmap.MapIntegrityProvenance(merged)
+		if err != nil {
+			return nil, fmt.Errorf("recordemit: map failure integrity provenance: %w", err)
+		}
+		provenance = base
+		provenance.Integrity = mapped
+		if len(evidence.IntegrityEvidence) > 0 {
+			provenance.Evidence = append(provenance.Evidence, recordcontract.EvidenceReference{
+				Kind: integrityEvidenceKind, Ref: recordpackage.RawRuntimeIntegrityEvidenceContractPath(), DigestSHA256: evidenceDigest(evidence.IntegrityEvidence),
+			})
+		}
+		provenance = recordcontract.NormalizeProvenance(provenance)
+	}
+	if strings.TrimSpace(provenance.Plan.PlanHash) == "" {
+		provenance.Plan.PlanHash = planHash
+	}
+	mappingInput := recordmap.CADRuntimeFailureMappingInput{
+		Failure:              *evidence.Failure,
+		RecordKey:            recordKeyForPlanHash(planHash),
+		Provenance:           provenance,
+		Linkage:              recordcontract.FailureLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
+		EvidenceDigestSHA256: evidenceDigest(evidence.Result),
+	}
+	if reportFailure != nil {
+		mappingInput.RetryCount = reportFailure.Failure.RetryCount
+		mappingInput.OccurredAt = reportFailure.Failure.OccurredAt
+	}
+	mapped, err := recordmap.MapCADRuntimeFailure(mappingInput)
+	if err != nil {
+		return nil, fmt.Errorf("recordemit: map CAD runtime failure: %w", err)
+	}
+	return &mapped, nil
+}
+
+// resolvedRunIntegrity restores the joined integrity chain at the run level.
+//
+// Multi-outcome packages carry run-level source/lock identity only; each
+// successful outcome's configured-result identity belongs to that outcome's
+// records. Single-outcome packages retain the established joined chain.
+func resolvedRunIntegrity(input RunEmitInput, outcomes []emitOutcome, scoped bool) (*integrity.RunIntegrity, error) {
+	if scoped {
+		if input.Metadata != nil && input.Metadata.Integrity != nil {
+			// Run metadata can carry one selected attempt's chain. The run-level
+			// block keeps only the source/lock half; outcome result identity is
+			// emitted per outcome.
+			return integrity.MergeRunIntegrity(projectIntegrityFromRun(metadata.RunIntegrityFromMetadata(input.Metadata.Integrity)), nil)
+		}
+		if input.SourceIntegrity == nil {
+			return nil, nil
+		}
+		return integrity.MergeRunIntegrity(input.SourceIntegrity, nil)
+	}
+	return resolvedLegacyIntegrity(input, outcomes)
+}
+
+// resolvedLegacyIntegrity restores the joined chain for a single selected
+// outcome. Run metadata remains authoritative for re-emission because it
+// preserves the executed attempt's chain.
+func resolvedLegacyIntegrity(input RunEmitInput, outcomes []emitOutcome) (*integrity.RunIntegrity, error) {
+	operation := operationIntegrity(input, outcomes)
+	if input.SourceIntegrity != nil {
+		return integrity.MergeRunIntegrity(input.SourceIntegrity, operation)
+	}
+	if input.Metadata != nil && input.Metadata.Integrity != nil {
+		run := metadata.RunIntegrityFromMetadata(input.Metadata.Integrity)
+		if operation == nil {
+			return run, nil
+		}
+		return integrity.MergeRunIntegrity(projectIntegrityFromRun(run), operation)
+	}
+	return nil, nil
+}
+
+// operationIntegrity returns the single selected attempt-scoped integrity chain.
+func operationIntegrity(input RunEmitInput, outcomes []emitOutcome) *integrity.OperationIntegrity {
+	if input.CADRuntime != nil && input.CADRuntime.Failure != nil {
+		return input.CADRuntime.Integrity
+	}
+	if len(outcomes) == 1 && outcomes[0].cad != nil {
+		return outcomes[0].cad.Integrity
+	}
+	if input.CADRuntime != nil {
+		return input.CADRuntime.Integrity
+	}
+	return nil
+}
+
+func legacyIntegrityEvidence(input RunEmitInput, outcomes []emitOutcome) []byte {
+	if input.CADRuntime != nil && len(input.CADRuntime.IntegrityEvidence) > 0 {
+		return input.CADRuntime.IntegrityEvidence
+	}
+	if len(outcomes) == 1 && outcomes[0].cad != nil {
+		return outcomes[0].cad.IntegrityEvidence
+	}
+	return nil
 }
 
 func evidenceDigest(content []byte) string {
@@ -295,7 +691,7 @@ func evidenceDigest(content []byte) string {
 	return fmt.Sprintf("%x", sha256.Sum256(content))
 }
 
-func mapReferenceTraversal(evidence *ReferenceTraversalRunEvidence, planHash string, provenance recordcontract.Provenance) (recordmap.ReferenceTraversalMappingOutput, recordpackage.RawEvidenceFile, error) {
+func mapReferenceTraversal(evidence *ReferenceTraversalRunEvidence, recordKey, evidenceRef string, scoped bool, provenance recordcontract.Provenance) (recordmap.ReferenceTraversalMappingOutput, recordpackage.RawEvidenceFile, error) {
 	content := append([]byte(nil), evidence.Content...)
 	var traversal recordmap.ReferenceTraversalRuntimeEvidence
 	decoder := json.NewDecoder(bytes.NewReader(content))
@@ -315,15 +711,20 @@ func mapReferenceTraversal(evidence *ReferenceTraversalRunEvidence, planHash str
 		Resources:              evidence.Resources,
 		ExpectedSourceDocument: evidence.ExpectedSourceDocument,
 		Traversal:              traversal,
-		RecordKey:              packageKeyForPlanHash(planHash) + ":reference",
+		RecordKey:              recordKey,
 		Provenance:             provenance,
 		Linkage:                recordmap.ReferenceTraversalMappingLinkage{JobID: evidence.JobID, ProductKey: evidence.ProductKey, StepRef: evidence.StepRef},
 		EvidenceDigestSHA256:   digest,
+		EvidenceRef:            evidenceRef,
 	})
 	if err != nil {
 		return recordmap.ReferenceTraversalMappingOutput{}, recordpackage.RawEvidenceFile{}, fmt.Errorf("recordemit: map reference traversal: %w", err)
 	}
-	return mapped, recordpackage.RawEvidenceFile{ContractPath: recordpackage.RawRuntimeReferenceTraversalContractPath(), Content: content}, nil
+	rawPath := evidenceRef
+	if !scoped {
+		rawPath = recordpackage.RawRuntimeReferenceTraversalContractPath()
+	}
+	return mapped, recordpackage.RawEvidenceFile{ContractPath: rawPath, Content: content}, nil
 }
 
 func deterministicReportForRecords(rep report.Report) report.Report {
@@ -371,24 +772,6 @@ func collectRawEvidence(runRoot string, input RunEmitInput) ([]recordpackage.Raw
 			ContractPath: source.contractPath,
 			Content:      content,
 		})
-	}
-	if input.CADRuntime != nil {
-		if input.CADRuntime.Occurrence != nil && len(input.CADRuntime.Occurrence.Input.Content) > 0 {
-			out = append(out, recordpackage.RawEvidenceFile{ContractPath: recordpackage.RawRuntimeOccurrenceEvidenceContractPath(), Content: append([]byte(nil), input.CADRuntime.Occurrence.Input.Content...)})
-		}
-		if input.CADRuntime.Fact != nil && len(input.CADRuntime.Fact.Input.Content) > 0 {
-			out = append(out, recordpackage.RawEvidenceFile{ContractPath: recordpackage.RawFactEvidenceContractPath(), Content: append([]byte(nil), input.CADRuntime.Fact.Input.Content...)})
-		}
-		for _, evidence := range []recordpackage.RawEvidenceFile{
-			{ContractPath: recordpackage.RawRuntimeIntegrityEvidenceContractPath(), Content: input.CADRuntime.IntegrityEvidence},
-			{ContractPath: recordpackage.RawRuntimeResultContractPath(), Content: input.CADRuntime.Result},
-			{ContractPath: recordpackage.RawVerificationContractPath(), Content: input.CADRuntime.Verification},
-			{ContractPath: recordpackage.RawObservedContractPath(), Content: input.CADRuntime.Observed},
-		} {
-			if len(evidence.Content) > 0 {
-				out = append(out, evidence)
-			}
-		}
 	}
 	return out, nil
 }

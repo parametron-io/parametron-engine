@@ -9,6 +9,11 @@ import (
 
 // Record carries one validated Engine-produced normalized record payload.
 // Exactly one family-specific field must be set.
+//
+// OutcomeKey, when set, scopes a normalized record to one eligible execution
+// outcome. It places the record under records/outcomes/<OutcomeKey>/ so plural
+// outcome-scoped families keep distinct package paths. An empty OutcomeKey keeps
+// the established singular family path.
 type Record struct {
 	Execution    *recordcontract.ExecutionRecord
 	Artifact     *recordcontract.ArtifactRecord
@@ -16,6 +21,7 @@ type Record struct {
 	Reference    *recordcontract.ReferenceRecord
 	Failure      *recordcontract.FailureRecord
 	Verification *recordcontract.VerificationRecord
+	OutcomeKey   string
 }
 
 // ExecutionRecord wraps a normalized execution record payload.
@@ -52,6 +58,7 @@ type validatedRecord struct {
 	family       recordcontract.Family
 	recordKey    string
 	identityID   string
+	outcomeKey   string
 	contractPath string
 	payload      any
 }
@@ -94,6 +101,14 @@ func validateRecord(record Record) (validatedRecord, error) {
 		return validatedRecord{}, fmt.Errorf("%w: exactly one record payload field may be set", ErrInvalidRecord)
 	}
 
+	outcomeKey, err := NormalizeOutcomeKey(record.OutcomeKey)
+	if err != nil {
+		return validatedRecord{}, fmt.Errorf("%w: %w", ErrInvalidRecord, err)
+	}
+	if outcomeKey != "" && family == recordcontract.FamilyArtifact {
+		return validatedRecord{}, fmt.Errorf("%w: artifact records use identity addresses, not outcome scopes", ErrInvalidRecord)
+	}
+
 	normalized, recordKey, identityID, err := normalizeAndValidateRecordPayload(record, family)
 	if err != nil {
 		return validatedRecord{}, err
@@ -102,6 +117,8 @@ func validateRecord(record Record) (validatedRecord, error) {
 	var contractPath string
 	if family == recordcontract.FamilyArtifact {
 		contractPath, err = ArtifactRecordContractPath(identityID)
+	} else if outcomeKey != "" {
+		contractPath, err = OutcomeRecordContractPath(outcomeKey, family)
 	} else {
 		var ok bool
 		contractPath, ok = RecordContractPath(family)
@@ -117,6 +134,7 @@ func validateRecord(record Record) (validatedRecord, error) {
 		family:       family,
 		recordKey:    recordKey,
 		identityID:   identityID,
+		outcomeKey:   outcomeKey,
 		contractPath: contractPath,
 		payload:      normalized,
 	}, nil
@@ -171,7 +189,11 @@ func validateRecords(records []Record) ([]validatedRecord, error) {
 	}
 
 	validated := make([]validatedRecord, 0, len(records))
-	seenFamilies := make(map[recordcontract.Family]struct{}, len(records))
+	type familyScope struct {
+		family     recordcontract.Family
+		outcomeKey string
+	}
+	seenFamilyScopes := make(map[familyScope]struct{}, len(records))
 	seenArtifactIdentities := make(map[string]struct{})
 	seenContractPaths := make(map[string]struct{}, len(records))
 
@@ -186,10 +208,11 @@ func validateRecords(records []Record) ([]validatedRecord, error) {
 			}
 			seenArtifactIdentities[item.identityID] = struct{}{}
 		} else {
-			if _, exists := seenFamilies[item.family]; exists {
-				return nil, fmt.Errorf("records[%d]: %w: duplicate family %q", i, ErrInvalidRecord, item.family)
+			scope := familyScope{family: item.family, outcomeKey: item.outcomeKey}
+			if _, exists := seenFamilyScopes[scope]; exists {
+				return nil, fmt.Errorf("records[%d]: %w: duplicate family %q in outcome scope %q", i, ErrInvalidRecord, item.family, item.outcomeKey)
 			}
-			seenFamilies[item.family] = struct{}{}
+			seenFamilyScopes[scope] = struct{}{}
 		}
 		if _, exists := seenContractPaths[item.contractPath]; exists {
 			return nil, fmt.Errorf("records[%d]: %w: duplicate contract path %q", i, ErrInvalidRecord, item.contractPath)
@@ -215,6 +238,11 @@ func sortValidatedRecords(records []validatedRecord) {
 		}
 		if records[i].family == recordcontract.FamilyArtifact {
 			return records[i].identityID < records[j].identityID
+		}
+		// Outcome-scoped families order by outcome scope and then by canonical
+		// record path. Singleton families keep their established path order.
+		if records[i].outcomeKey != records[j].outcomeKey {
+			return records[i].outcomeKey < records[j].outcomeKey
 		}
 		return records[i].contractPath < records[j].contractPath
 	})

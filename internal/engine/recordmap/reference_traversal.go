@@ -84,6 +84,9 @@ type ReferenceTraversalMappingInput struct {
 	Linkage                ReferenceTraversalMappingLinkage
 	// EvidenceDigestSHA256 is an optional digest of the canonical raw traversal evidence.
 	EvidenceDigestSHA256 string
+	// EvidenceRef optionally overrides the canonical raw traversal evidence path.
+	// Callers use it to attribute evidence to one outcome in a multi-outcome package.
+	EvidenceRef string
 }
 
 // ReferenceTraversalMappingOutput carries an optional normalized reference record.
@@ -403,7 +406,11 @@ func resolveReferenceTraversalMappingContext(input ReferenceTraversalMappingInpu
 	if err != nil {
 		return referenceTraversalMappingContext{}, err
 	}
-	provenance, digest, err := resolveReferenceTraversalProvenance(input.Provenance, input.EvidenceDigestSHA256, linkage)
+	evidenceRef := strings.TrimSpace(input.EvidenceRef)
+	if evidenceRef == "" {
+		evidenceRef = referenceTraversalEvidenceRef
+	}
+	provenance, digest, err := resolveReferenceTraversalProvenance(input.Provenance, evidenceRef, input.EvidenceDigestSHA256, linkage)
 	if err != nil {
 		return referenceTraversalMappingContext{}, err
 	}
@@ -413,7 +420,7 @@ func resolveReferenceTraversalMappingContext(input ReferenceTraversalMappingInpu
 		linkage:    linkage,
 		evidence: recordcontract.ReferenceEvidence{
 			SourceKind:   referenceTraversalEvidenceKind,
-			SourceRef:    referenceTraversalEvidenceRef,
+			SourceRef:    evidenceRef,
 			DigestSHA256: digest,
 		},
 	}, nil
@@ -447,7 +454,7 @@ func resolveReferenceTraversalLinkageField(name, mapping, provenance string) (st
 	return provenance, nil
 }
 
-func resolveReferenceTraversalProvenance(base recordcontract.Provenance, digest string, linkage recordcontract.ReferenceLinkage) (recordcontract.Provenance, string, error) {
+func resolveReferenceTraversalProvenance(base recordcontract.Provenance, evidenceRef, digest string, linkage recordcontract.ReferenceLinkage) (recordcontract.Provenance, string, error) {
 	provenance := copyProvenance(base)
 	provenance.Linkage = recordcontract.LinkageProvenance{
 		JobID: linkage.JobID, ProductKey: linkage.ProductKey, StepRef: linkage.StepRef,
@@ -455,7 +462,7 @@ func resolveReferenceTraversalProvenance(base recordcontract.Provenance, digest 
 	resolvedDigest := strings.TrimSpace(digest)
 	evidence := make([]recordcontract.EvidenceReference, 0, len(provenance.Evidence)+1)
 	for _, item := range provenance.Evidence {
-		if strings.TrimSpace(item.Kind) != referenceTraversalEvidenceKind || strings.TrimSpace(item.Ref) != referenceTraversalEvidenceRef {
+		if strings.TrimSpace(item.Kind) != referenceTraversalEvidenceKind || strings.TrimSpace(item.Ref) != evidenceRef {
 			evidence = append(evidence, item)
 			continue
 		}
@@ -467,7 +474,7 @@ func resolveReferenceTraversalProvenance(base recordcontract.Provenance, digest 
 			resolvedDigest = existing
 		}
 	}
-	evidence = append(evidence, recordcontract.EvidenceReference{Kind: referenceTraversalEvidenceKind, Ref: referenceTraversalEvidenceRef, DigestSHA256: resolvedDigest})
+	evidence = append(evidence, recordcontract.EvidenceReference{Kind: referenceTraversalEvidenceKind, Ref: evidenceRef, DigestSHA256: resolvedDigest})
 	provenance.Evidence = evidence
 	normalized := recordcontract.NormalizeProvenance(provenance)
 	if err := recordcontract.ValidateProvenance(normalized); err != nil {

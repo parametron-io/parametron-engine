@@ -146,13 +146,21 @@ Normal execution emits applicable execution, artifact, observation, reference,
 failure, and verification records through this package. Artifact records are
 plural: each artifact has its own normalized record at
 `records/artifacts/<identityId>/prm.artifact-record.json`, ordered by
-record identity. Other record families remain singular. Duplicate artifact
-identities or resolved record paths are rejected.
+record identity. Engineering-observation families (observation, reference, and
+verification) are outcome-scoped when a run has more than one eligible verified
+CAD outcome: each outcome writes its records under
+`records/outcomes/<outcomeKey>/`, ordered by outcome scope and record identity.
+A single eligible outcome keeps the established singular record paths.
+Execution and failure records remain singular. Duplicate artifact identities,
+duplicate family/outcome scopes, or resolved record paths are rejected.
 
 Typical raw evidence includes runtime results, metadata, verification material,
 observations, manifests, runtime handoff data, and runtime integrity evidence.
-Raw evidence is preserved as evidence and is not treated as equivalent to
-normalized Engine records.
+For multi-outcome runs, attempt-scoped raw evidence is preserved under
+`raw/outcomes/<outcomeKey>/`; run-level report, metadata, and artifact-store
+manifest evidence keep their established paths. A selected runtime failure keeps
+its established canonical raw failure paths. Raw evidence is preserved as
+evidence and is not treated as equivalent to normalized Engine records.
 Observation and verification records come from Engine-owned typed
 interpretation; raw bytes remain independently preserved for provenance.
 
@@ -174,9 +182,11 @@ locations and runtime-reported working-copy digests do not participate in
 reference identity; generic observed references retain them in the normalized
 record and raw evidence. Accepted contract-relative native traversal coordinates
 remain identity material. Exact bytes remain separate at
-`raw/runtime/prm.reference-traversal.json` and `raw/observed/prm.observed.json`.
-Normal successful execution adds traversal material only for exactly one eligible
-verified outcome; zero or multiple candidates add none.
+`raw/runtime/prm.reference-traversal.json` and `raw/observed/prm.observed.json` for
+single-outcome packages, and under `raw/outcomes/<outcomeKey>/` for multi-outcome
+packages. Every eligible verified CAD outcome retains its own reference,
+observation, occurrence, fact, and integrity evidence; zero eligible outcomes add
+none.
 
 Adapter-native CAD failures are interpreted by the adapter/runtime boundary as
 a generic Engine CAD runtime failure outcome before `MapCADRuntimeFailure`
@@ -302,15 +312,18 @@ wrapped by `FreeCADRuntimeVerificationError` at `occurrence_validation`.
 Malformed evidence fails even when observation is optional. Executor outcomes
 retain the request and exact evidence bytes for normalized emission.
 
-The existing exactly-one-eligible-verified-CAD-outcome projection boundary applies;
-there is no general multi-outcome aggregation. Emission integrates the summary as
-`ObservationRecord.observation.occurrences`, preserving ordinary observation facts
-and the separate generic `ReferenceRecord`. Original bytes are preserved at
-`raw/runtime/prm.occurrence-evidence.json`, classified as raw runtime evidence;
-SHA-256 of those original bytes supplies summary evidence and record provenance
-with kind `occurrence-evidence`. Stable normalized semantic keys and rollup do not
-imply stable provenance-bearing record identity when raw evidence bytes differ.
-The shared record identity contract remains unchanged.
+Every eligible verified CAD outcome retains its own observation record; there is
+no cross-outcome quantity aggregation. Emission integrates the summary as
+`ObservationRecord.observation.occurrences` for that outcome, preserving ordinary
+observation facts and the separate generic `ReferenceRecord`. Original bytes are
+preserved at `raw/runtime/prm.occurrence-evidence.json` for single-outcome
+packages and under
+`raw/outcomes/<outcomeKey>/runtime/prm.occurrence-evidence.json` for multi-outcome
+packages, classified as raw runtime evidence. SHA-256 of those original bytes
+supplies summary evidence and record provenance with kind
+`occurrence-evidence`. Stable normalized semantic keys and rollup do not imply
+stable provenance-bearing record identity when raw evidence bytes differ. The
+shared record identity contract remains unchanged.
 
 This bounded contract does not support recursive assembly quantity, recursive
 occurrence or cyclic assembly expansion, link arrays, `App::LinkElement` counting,
@@ -398,17 +411,19 @@ a value.
 
 Normalized engineering facts extend the existing observation record family as
 `fact`-kind entries inside `observation.facts[]`, keyed by the fact kind; no
-separate record family exists. Fact emission merges into the single
+separate record family exists. Fact emission merges into that outcome's
 observation record, preserving ordinary observation facts and the occurrence
-summary. Normalized fact ordering follows the requested bindings; raw evidence
-ordering does not influence acceptance or output, and relocation does not
-change normalized fact identity. Every fact carries shared provenance — source
-kind `fact-evidence`, source reference `raw/fact/prm.fact-evidence.json`, and
-the SHA-256 digest of the exact evidence bytes. Raw fact evidence is preserved
-at `raw/fact/prm.fact-evidence.json`, classified as raw runtime evidence; the
-request sidecar is not packaged. The existing exactly-one-eligible-verified
-CAD-outcome projection boundary applies; there is no general multi-outcome
-aggregation.
+summary. Each eligible verified outcome keeps its own fact material: equal fact
+subjects with different observed values remain distinct outcome-scoped
+observations. Normalized fact ordering follows the requested bindings; raw
+evidence ordering does not influence acceptance or output, and relocation does
+not change normalized fact identity. Every fact carries shared provenance —
+source kind `fact-evidence`, source reference
+`raw/fact/prm.fact-evidence.json` or its
+`raw/outcomes/<outcomeKey>/fact/prm.fact-evidence.json` form, and the SHA-256
+digest of the exact evidence bytes. Raw fact evidence is preserved at the
+corresponding path, classified as raw runtime evidence; the request sidecar is
+not packaged. Facts are not aggregated across CAD outcomes.
 
 ### Bounds
 
@@ -498,13 +513,19 @@ into the source lock and never replaces source identity.
 
 ### Normalization and failures
 
-Normalized run records carry separate source, baseline, and result provenance
+Normalized records carry separate source, baseline, and result provenance
 fields: accepted source digest with lock state, materialized baseline digest,
 runtime-reported baseline digest with status, and persisted-result digest with
 its validation status. Provenance is ordered by declared logical resource
 identity, so equivalent evidence normalizes identically regardless of evidence
-order or host paths. Raw runtime evidence is preserved verbatim at
-`raw/runtime/prm.integrity-evidence.json`, separate from normalized records.
+order or host paths. For multi-outcome packages the run-level execution record
+retains source/lock identity only, while each outcome's engineering-observation
+records retain that outcome's full configured-result chain; separate outcomes
+may share source identity while carrying different persisted-result digests.
+Raw runtime evidence is preserved verbatim at
+`raw/runtime/prm.integrity-evidence.json` for single-outcome packages and under
+`raw/outcomes/<outcomeKey>/runtime/prm.integrity-evidence.json` for multi-outcome
+packages, separate from normalized records.
 
 Integrity failures carry failure class/stage `integrity` with stable,
 path-free codes, so lock, materialization, runtime-baseline, and

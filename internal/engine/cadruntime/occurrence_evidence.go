@@ -71,6 +71,10 @@ type OccurrenceMappingInput struct {
 	Resources              resourcebinding.Inventory
 	ExpectedSourceDocument string
 	Content                []byte
+	// EvidenceRef optionally overrides the canonical raw evidence package path.
+	// Callers use it to attribute evidence to one outcome without changing the
+	// canonical single-outcome path.
+	EvidenceRef string
 }
 
 func occurrenceInvalid(message string) error {
@@ -264,7 +268,11 @@ func MapOccurrenceEvidence(input OccurrenceMappingInput) (*recordcontract.Occurr
 	}
 	s.Completeness = e.Completeness
 	digest := fmt.Sprintf("%x", sha256.Sum256(input.Content))
-	s.Evidence = recordcontract.ObservationEvidence{SourceKind: "occurrence-evidence", SourceRef: OccurrenceEvidenceRef, DigestSHA256: digest}
+	evidenceRef := strings.TrimSpace(input.EvidenceRef)
+	if evidenceRef == "" {
+		evidenceRef = OccurrenceEvidenceRef
+	}
+	s.Evidence = recordcontract.ObservationEvidence{SourceKind: "occurrence-evidence", SourceRef: evidenceRef, DigestSHA256: digest}
 	if e.Completeness == "unavailable" {
 		if e.Parent != nil || e.InspectionCompleted || len(e.Group) != 0 || len(e.Members) != 0 || len(e.Diagnostics) == 0 {
 			return nil, occurrenceInvalid("contradictory unavailable scope")

@@ -57,6 +57,10 @@ type FactMappingInput struct {
 	Resources              resourcebinding.Inventory
 	ExpectedSourceDocument string
 	Content                []byte
+	// EvidenceRef optionally overrides the canonical raw evidence package path.
+	// Callers use it to attribute evidence to one outcome without changing the
+	// canonical single-outcome path.
+	EvidenceRef string
 }
 
 func factInvalid(message string) error {
@@ -335,9 +339,13 @@ func MapFactEvidence(input FactMappingInput) ([]recordcontract.ObservationFact, 
 
 	var factEvidence recordcontract.ObservationEvidence
 	if evidence != nil {
+		evidenceRef := strings.TrimSpace(input.EvidenceRef)
+		if evidenceRef == "" {
+			evidenceRef = recordcontract.FactEvidenceSourceRef
+		}
 		factEvidence = recordcontract.ObservationEvidence{
 			SourceKind:   recordcontract.FactEvidenceSourceKind,
-			SourceRef:    recordcontract.FactEvidenceSourceRef,
+			SourceRef:    evidenceRef,
 			DigestSHA256: digest,
 		}
 	}

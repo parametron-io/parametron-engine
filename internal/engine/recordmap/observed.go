@@ -51,6 +51,11 @@ type ObservedMappingInput struct {
 	// Optional digest of raw/observed/prm.observed.json, if the caller has it.
 	// Must be a lowercase 64-character SHA-256 hex digest if present.
 	EvidenceDigestSHA256 string
+
+	// Optional raw evidence package path override. Empty preserves the canonical
+	// raw/observed/prm.observed.json path. Callers use it to attribute evidence to
+	// one outcome in a multi-outcome package.
+	EvidenceRef string
 }
 
 // ObservedMappingOutput carries normalized observation and optional reference records.
@@ -165,7 +170,7 @@ func validateObservedMappingInput(input ObservedMappingInput) error {
 
 func mapObservationFacts(input ObservedMappingInput) ([]recordcontract.ObservationFact, error) {
 	obs := input.Observed.Observation
-	evidence := observedObservationEvidence(strings.TrimSpace(input.EvidenceDigestSHA256))
+	evidence := observedObservationEvidence(observedEvidencePath(input), strings.TrimSpace(input.EvidenceDigestSHA256))
 	linkage := observedObservationLinkage(input.Linkage)
 
 	targetStateCount := 0
@@ -274,7 +279,7 @@ func mapObservationFacts(input ObservedMappingInput) ([]recordcontract.Observati
 
 func mapReferenceEdges(input ObservedMappingInput) []recordcontract.ReferenceEdge {
 	references := input.Observed.Observation.References
-	evidence := observedReferenceEvidence(strings.TrimSpace(input.EvidenceDigestSHA256))
+	evidence := observedReferenceEvidence(observedEvidencePath(input), strings.TrimSpace(input.EvidenceDigestSHA256))
 	linkage := observedReferenceLinkage(input.Linkage)
 	workingCopy := input.Observed.WorkingCopy
 
@@ -300,7 +305,7 @@ func mapReferenceEdges(input ObservedMappingInput) []recordcontract.ReferenceEdg
 func enrichObservedProvenance(input ObservedMappingInput) (recordcontract.Provenance, error) {
 	provenance := copyProvenance(input.Provenance)
 
-	evidence, err := appendObservedEvidence(provenance.Evidence, strings.TrimSpace(input.EvidenceDigestSHA256))
+	evidence, err := appendObservedEvidence(provenance.Evidence, observedEvidencePath(input), strings.TrimSpace(input.EvidenceDigestSHA256))
 	if err != nil {
 		return recordcontract.Provenance{}, err
 	}
@@ -314,10 +319,10 @@ func enrichObservedProvenance(input ObservedMappingInput) (recordcontract.Proven
 	return normalized, nil
 }
 
-func appendObservedEvidence(existing []recordcontract.EvidenceReference, digest string) ([]recordcontract.EvidenceReference, error) {
+func appendObservedEvidence(existing []recordcontract.EvidenceReference, evidenceRef, digest string) ([]recordcontract.EvidenceReference, error) {
 	out := copyEvidenceReferences(existing)
 	for i, item := range out {
-		if strings.TrimSpace(item.Kind) != observedEvidenceKind || strings.TrimSpace(item.Ref) != observedEvidenceRef {
+		if strings.TrimSpace(item.Kind) != observedEvidenceKind || strings.TrimSpace(item.Ref) != evidenceRef {
 			continue
 		}
 		existingDigest := strings.TrimSpace(item.DigestSHA256)
@@ -332,10 +337,17 @@ func appendObservedEvidence(existing []recordcontract.EvidenceReference, digest 
 
 	out = append(out, recordcontract.EvidenceReference{
 		Kind:         observedEvidenceKind,
-		Ref:          observedEvidenceRef,
+		Ref:          evidenceRef,
 		DigestSHA256: digest,
 	})
 	return out, nil
+}
+
+func observedEvidencePath(input ObservedMappingInput) string {
+	if ref := strings.TrimSpace(input.EvidenceRef); ref != "" {
+		return ref
+	}
+	return observedEvidenceRef
 }
 
 func observedReferenceRecordKey(input ObservedMappingInput) string {
@@ -345,18 +357,18 @@ func observedReferenceRecordKey(input ObservedMappingInput) string {
 	return strings.TrimSpace(input.RecordKey) + observedReferenceRecordKeySuffix
 }
 
-func observedObservationEvidence(digest string) recordcontract.ObservationEvidence {
+func observedObservationEvidence(evidenceRef, digest string) recordcontract.ObservationEvidence {
 	return recordcontract.ObservationEvidence{
 		SourceKind:   observedEvidenceKind,
-		SourceRef:    observedEvidenceRef,
+		SourceRef:    evidenceRef,
 		DigestSHA256: digest,
 	}
 }
 
-func observedReferenceEvidence(digest string) recordcontract.ReferenceEvidence {
+func observedReferenceEvidence(evidenceRef, digest string) recordcontract.ReferenceEvidence {
 	return recordcontract.ReferenceEvidence{
 		SourceKind:   observedEvidenceKind,
-		SourceRef:    observedEvidenceRef,
+		SourceRef:    evidenceRef,
 		DigestSHA256: digest,
 	}
 }

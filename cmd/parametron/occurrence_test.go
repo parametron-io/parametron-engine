@@ -2,10 +2,10 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"testing"
 
-	"parametron/internal/engine/executor"
 	"parametron/internal/engine/recordcontract"
 	"parametron/internal/engine/scheduler"
 )
@@ -20,37 +20,33 @@ func TestCADRuntimeRunEvidenceOccurrenceCardinalityAndCopy(t *testing.T) {
 		t.Run(string(rune('0'+count)), func(t *testing.T) {
 			execution := scheduler.ExecutionResult{}
 			for i := 0; i < count; i++ {
-				outcome := cadRuntimeEvidenceOutcome(t, "job", "widget", "2", []byte("result"), nil, nil)
+				outcome := cadRuntimeEvidenceOutcome(t, fmt.Sprintf("job-%d", i), fmt.Sprintf("widget-%d", i), "2", []byte("result"), nil, nil)
 				outcome.OccurrenceRequest = recordcontract.CloneOccurrenceRequest(request)
 				outcome.OccurrenceJSON = bytes.Clone(raw)
 				outcome.SourceDocument = "source/assembly.FCStd"
 				execution.Jobs = append(execution.Jobs, scheduler.JobExecution{CADRuntimeOutcome: outcome})
 			}
-			got, err := cadRuntimeRunEvidence(execution, true)
+			got, err := runOutcomeEvidences(execution)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if count != 1 {
-				if got != nil {
-					t.Fatal("projected other than exactly one eligible outcome")
+			if len(got) != count {
+				t.Fatalf("outcome groups = %d, want %d", len(got), count)
+			}
+			for _, group := range got {
+				if group.CADRuntime == nil || group.CADRuntime.Occurrence == nil || !bytes.Equal(group.CADRuntime.Occurrence.Input.Content, raw) || !reflect.DeepEqual(group.CADRuntime.Occurrence.Input.Request, request) || group.CADRuntime.Occurrence.Input.ExpectedSourceDocument != "source/assembly.FCStd" {
+					t.Fatalf("occurrence projection lost: %+v", group)
 				}
+			}
+			if count == 0 {
 				return
 			}
-			if got == nil || got.Occurrence == nil || !bytes.Equal(got.Occurrence.Input.Content, raw) || !reflect.DeepEqual(got.Occurrence.Input.Request, request) || got.Occurrence.Input.ExpectedSourceDocument != "source/assembly.FCStd" {
-				t.Fatalf("occurrence projection lost: %+v", got)
-			}
-			got.Occurrence.Input.Request.Requirement = "changed"
-			got.Occurrence.Input.Content[0] = '!'
+			got[0].CADRuntime.Occurrence.Input.Request.Requirement = "changed"
+			got[0].CADRuntime.Occurrence.Input.Content[0] = '!'
 			original := execution.Jobs[0].CADRuntimeOutcome
 			if original.OccurrenceRequest.Requirement != "optional" || !bytes.Equal(original.OccurrenceJSON, raw) {
 				t.Fatal("projection aliases outcome")
 			}
 		})
-	}
-	// A failed overall execution does not expose otherwise eligible occurrence data.
-	outcome := &executor.CADRuntimeOutcome{OccurrenceRequest: request, OccurrenceJSON: raw}
-	got, err := cadRuntimeRunEvidence(scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}, false)
-	if err != nil || got != nil {
-		t.Fatalf("failed execution projected: %+v %v", got, err)
 	}
 }

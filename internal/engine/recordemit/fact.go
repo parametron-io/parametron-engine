@@ -15,14 +15,18 @@ type FactRunEvidence struct {
 	Input cadruntime.FactMappingInput
 }
 
-// appendFactRecords merges normalized facts into the single observation record
-// family. Facts live inside observation.facts, so the occurrence merge that
+// appendFactRecords merges normalized facts into one outcome's observation
+// record. Facts live inside observation.facts, so the occurrence merge that
 // copies the Facts field cannot drop them.
-func appendFactRecords(records []recordpackage.Record, evidence *CADRuntimeRunEvidence, recordKey string, base recordcontract.Provenance) ([]recordpackage.Record, error) {
+func appendFactRecords(records []recordpackage.Record, evidence *CADRuntimeRunEvidence, observationRecordKey string, base recordcontract.Provenance, evidenceRef, scope string) ([]recordpackage.Record, error) {
 	if evidence.Fact == nil {
 		return records, nil
 	}
-	facts, err := cadruntime.MapFactEvidence(evidence.Fact.Input)
+	input := evidence.Fact.Input
+	if evidenceRef != "" {
+		input.EvidenceRef = evidenceRef
+	}
+	facts, err := cadruntime.MapFactEvidence(input)
 	if err != nil {
 		return nil, fmt.Errorf("recordemit: fact evidence: %w", err)
 	}
@@ -71,11 +75,12 @@ func appendFactRecords(records []recordpackage.Record, evidence *CADRuntimeRunEv
 		}
 		provenance.Evidence = append(refs, recordcontract.EvidenceReference{Kind: factEvidence.SourceKind, Ref: factEvidence.SourceRef, DigestSHA256: factEvidence.DigestSHA256})
 	}
-	record, err := recordcontract.BuildObservationRecord(recordcontract.ObservationRecordInput{RecordKey: recordKey + ":observation", Provenance: provenance, Observation: summary})
+	record, err := recordcontract.BuildObservationRecord(recordcontract.ObservationRecordInput{RecordKey: observationRecordKey, Provenance: provenance, Observation: summary})
 	if err != nil {
 		return nil, err
 	}
 	wrapped := recordpackage.ObservationRecord(record)
+	wrapped.OutcomeKey = scope
 	if index >= 0 {
 		records[index] = wrapped
 	} else {

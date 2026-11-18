@@ -1933,21 +1933,21 @@ func TestRecordEmitRunPackage_ReemissionIntoSameRunRootIsIdempotent(t *testing.T
 	// reproducing an equivalent package supplies the same typed inputs it
 	// gets from a normal run -- here the scheduler result for the attempt
 	// evidence and the run's persisted artifact-store manifest for artifacts.
-	cadRuntimeEvidence, err := cadRuntimeRunEvidence(run.result.Execution, true)
-	if err != nil || cadRuntimeEvidence == nil {
-		t.Fatalf("cadRuntimeRunEvidence = %#v, err = %v", cadRuntimeEvidence, err)
+	outcomes, err := runOutcomeEvidences(run.result.Execution)
+	if err != nil || len(outcomes) != 1 || outcomes[0].CADRuntime == nil {
+		t.Fatalf("runOutcomeEvidences = %#v, err = %v", outcomes, err)
 	}
-	if cadRuntimeEvidence.ObservedValue == nil || cadRuntimeEvidence.VerificationResult == nil {
-		t.Fatalf("normal-run CAD evidence lacks typed values: %#v", cadRuntimeEvidence)
+	if outcomes[0].CADRuntime.ObservedValue == nil || outcomes[0].CADRuntime.VerificationResult == nil {
+		t.Fatalf("normal-run CAD evidence lacks typed values: %#v", outcomes[0].CADRuntime)
 	}
 
 	if err := recordemit.EmitRunPackage(recordemit.RunEmitInput{
-		RunRoot:    run.result.RunRoot,
-		PlanHash:   run.planned.PlanHash,
-		Report:     run.report,
-		Metadata:   &run.metadata,
-		Artifacts:  runRootArtifacts(t, run.result.RunRoot),
-		CADRuntime: cadRuntimeEvidence,
+		RunRoot:   run.result.RunRoot,
+		PlanHash:  run.planned.PlanHash,
+		Report:    run.report,
+		Metadata:  &run.metadata,
+		Artifacts: runRootArtifacts(t, run.result.RunRoot),
+		Outcomes:  outcomes,
 	}); err != nil {
 		t.Fatalf("EmitRunPackage(second) failed: %v", err)
 	}
@@ -2139,62 +2139,67 @@ func eligibleCADRuntimeOutcome(jobID, productKey, stepID string, traversal []byt
 	}
 }
 
-func TestReferenceTraversalRunEvidence_ZeroEligibleCandidates(t *testing.T) {
+func TestRunOutcomeEvidences_ZeroEligibleOutcomes(t *testing.T) {
 	cases := map[string]struct {
-		succeeded bool
-		jobs      []scheduler.JobExecution
+		jobs []scheduler.JobExecution
 	}{
-		"no CADRuntimeOutcome": {true, []scheduler.JobExecution{{CADRuntimeOutcome: nil}}},
-		"verification not pass": {true, []scheduler.JobExecution{{CADRuntimeOutcome: &executor.CADRuntimeOutcome{
+		"no CADRuntimeOutcome": {[]scheduler.JobExecution{{CADRuntimeOutcome: nil}}},
+		"verification not pass": {[]scheduler.JobExecution{{CADRuntimeOutcome: &executor.CADRuntimeOutcome{
 			JobID: "job-1", ProductKey: "widget", StepID: "2",
 			Verification: artifact.VerificationOutcomeFailed, ReferenceTraversalJSON: []byte("x"),
 		}}}},
-		"empty traversal bytes": {true, []scheduler.JobExecution{{CADRuntimeOutcome: eligibleCADRuntimeOutcome("job-1", "widget", "2", nil)}}},
-		"job error": {true, []scheduler.JobExecution{{
+		"job error": {[]scheduler.JobExecution{{
 			Err: errors.New("boom"), CADRuntimeOutcome: eligibleCADRuntimeOutcome("job-1", "widget", "2", []byte("x")),
 		}}},
-		"overall execution failure": {false, []scheduler.JobExecution{{CADRuntimeOutcome: eligibleCADRuntimeOutcome("job-1", "widget", "2", []byte("x"))}}},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := referenceTraversalRunEvidence(scheduler.ExecutionResult{Jobs: tc.jobs}, tc.succeeded)
-			if got != nil {
-				t.Fatalf("expected nil evidence, got %#v", got)
+			got, err := runOutcomeEvidences(scheduler.ExecutionResult{Jobs: tc.jobs})
+			if err != nil || len(got) != 0 {
+				t.Fatalf("got=%#v err=%v, want no eligible outcomes", got, err)
 			}
 		})
 	}
 }
 
-func TestReferenceTraversalRunEvidence_ExactlyOneEligibleCandidate(t *testing.T) {
-	traversal := []byte(`{"schemaVersion":"1.0"}`)
-	original := append([]byte(nil), traversal...)
-	outcome := eligibleCADRuntimeOutcome("job-1", "widget", "2", traversal)
-	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}
+func TestRunOutcomeEvidences_ProjectsEveryEligibleOutcome(t *testing.T) {
+	traversalA := []byte(`{"schemaVersion":"1.0","evidence":"a"}`)
+	traversalB := []byte(`{"schemaVersion":"1.0","evidence":"b"}`)
+	outcomeA := cadRuntimeEvidenceOutcome(t, "job-1", "widget-a", "2", []byte("ra"), nil, []byte("oa"))
+	outcomeA.ReferenceTraversalJSON = append([]byte(nil), traversalA...)
+	outcomeA.Verification = artifact.VerificationOutcomePassed
+	outcomeA.Attempt = 1
+	outcomeB := cadRuntimeEvidenceOutcome(t, "job-2", "widget-b", "2", []byte("rb"), nil, []byte("ob"))
+	outcomeB.ReferenceTraversalJSON = append([]byte(nil), traversalB...)
+	outcomeB.Verification = artifact.VerificationOutcomePassed
+	outcomeB.Attempt = 1
+	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcomeA}, {CADRuntimeOutcome: outcomeB}}}
 
-	got := referenceTraversalRunEvidence(execution, true)
-	if got == nil {
-		t.Fatal("expected non-nil evidence for exactly one eligible candidate")
+	got, err := runOutcomeEvidences(execution)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if got.JobID != "job-1" || got.ProductKey != "widget" || got.StepRef != "2" || !bytes.Equal(got.Content, original) {
-		t.Fatalf("evidence=%#v", got)
+	if len(got) != 2 {
+		t.Fatalf("eligible outcome groups = %d, want 2: %#v", len(got), got)
+	}
+	byProduct := map[string]recordemit.RunOutcomeEvidence{}
+	for _, group := range got {
+		byProduct[group.ProductKey] = group
+	}
+	for product, raw := range map[string][]byte{"widget-a": traversalA, "widget-b": traversalB} {
+		group, ok := byProduct[product]
+		if !ok || group.ReferenceTraversal == nil || !bytes.Equal(group.ReferenceTraversal.Content, raw) {
+			t.Fatalf("outcome %s lost traversal evidence: %#v", product, group)
+		}
+		if group.CADRuntime == nil || len(group.CADRuntime.Observed) == 0 {
+			t.Fatalf("outcome %s lost CAD runtime evidence", product)
+		}
 	}
 
-	// Copy safety: mutating the source outcome after projection must not
-	// affect the already-projected evidence.
-	outcome.ReferenceTraversalJSON[0] = 'X'
-	outcome.JobID, outcome.ProductKey, outcome.StepID = "mutated", "mutated", "mutated"
-	if !bytes.Equal(got.Content, original) || got.JobID != "job-1" || got.ProductKey != "widget" || got.StepRef != "2" {
-		t.Fatalf("projected evidence changed after mutating its source: %#v", got)
-	}
-}
-
-func TestReferenceTraversalRunEvidence_MultipleEligibleCandidatesOmitProjection(t *testing.T) {
-	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{
-		{CADRuntimeOutcome: eligibleCADRuntimeOutcome("job-1", "widget-a", "2", []byte("a"))},
-		{CADRuntimeOutcome: eligibleCADRuntimeOutcome("job-1", "widget-b", "2", []byte("b"))},
-	}}
-	if got := referenceTraversalRunEvidence(execution, true); got != nil {
-		t.Fatalf("expected nil projection for multiple eligible candidates (no arbitrary selection), got %#v", got)
+	// Copy safety: mutating the source outcomes must not affect projected evidence.
+	outcomeA.ReferenceTraversalJSON[0] = 'X'
+	if !bytes.Equal(got[0].ReferenceTraversal.Content, traversalA) && !bytes.Equal(got[1].ReferenceTraversal.Content, traversalA) {
+		t.Fatal("projected traversal bytes alias the source outcome")
 	}
 }
 
@@ -2241,96 +2246,100 @@ func cadRuntimeEvidenceOutcome(t *testing.T, jobID, productKey, stepID string, r
 	return outcome
 }
 
-func TestCADRuntimeRunEvidence_ZeroEligibleCandidates(t *testing.T) {
+func TestRunOutcomeEvidences_ZeroCADRuntimeCandidates(t *testing.T) {
 	cases := map[string]struct {
-		succeeded bool
-		jobs      []scheduler.JobExecution
+		jobs []scheduler.JobExecution
 	}{
-		"no CADRuntimeOutcome": {true, []scheduler.JobExecution{{CADRuntimeOutcome: nil}}},
-		"verification not pass": {true, []scheduler.JobExecution{{CADRuntimeOutcome: &executor.CADRuntimeOutcome{
+		"no CADRuntimeOutcome": {[]scheduler.JobExecution{{CADRuntimeOutcome: nil}}},
+		"verification not pass": {[]scheduler.JobExecution{{CADRuntimeOutcome: &executor.CADRuntimeOutcome{
 			JobID: "job-1", ProductKey: "widget", StepID: "2",
 			Verification: artifact.VerificationOutcomeFailed,
 		}}}},
-		"job error": {true, []scheduler.JobExecution{{
+		"job error": {[]scheduler.JobExecution{{
 			Err:               errors.New("boom"),
-			CADRuntimeOutcome: cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("r"), []byte("v"), []byte("o")),
-		}}},
-		"overall execution failure": {false, []scheduler.JobExecution{{
 			CADRuntimeOutcome: cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("r"), []byte("v"), []byte("o")),
 		}}},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got, err := cadRuntimeRunEvidence(scheduler.ExecutionResult{Jobs: tc.jobs}, tc.succeeded)
+			got, err := runOutcomeEvidences(scheduler.ExecutionResult{Jobs: tc.jobs})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if got != nil {
-				t.Fatalf("expected nil evidence, got %#v", got)
+			if len(got) != 0 {
+				t.Fatalf("expected no eligible outcomes, got %#v", got)
 			}
 		})
 	}
 }
 
-func TestCADRuntimeRunEvidence_ExactlyOneEligibleCandidate_CapturesExactBytes(t *testing.T) {
+func TestRunOutcomeEvidences_CapturesExactBytesPerOutcome(t *testing.T) {
 	// Deliberately non-canonical formatting (whitespace/indentation/key
 	// order) so a re-serializing implementation would fail this comparison.
 	result := []byte("{\n  \"status\":   \"succeeded\",\n \"schemaVersion\": \"1.0\"\n}\n")
 	verification := []byte("{\"expected\":{\n\"parameters\":[]  }}\n")
 	observed := []byte("{  \"workingCopy\":{\"path\":\"x\"} }")
 	outcome := cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", result, verification, observed)
+	outcome.Verification = artifact.VerificationOutcomePassed
 	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}
 
-	got, err := cadRuntimeRunEvidence(execution, true)
+	got, err := runOutcomeEvidences(execution)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got == nil {
-		t.Fatal("expected non-nil evidence for exactly one eligible candidate")
+	if len(got) != 1 || got[0].CADRuntime == nil {
+		t.Fatalf("expected one outcome group, got %#v", got)
 	}
-	if !bytes.Equal(got.Result, result) {
-		t.Fatalf("Result bytes differ\nwant: %q\ngot:  %q", result, got.Result)
+	evidence := got[0].CADRuntime
+	if !bytes.Equal(evidence.Result, result) {
+		t.Fatalf("Result bytes differ\nwant: %q\ngot:  %q", result, evidence.Result)
 	}
-	if !bytes.Equal(got.Verification, verification) {
-		t.Fatalf("Verification bytes differ\nwant: %q\ngot:  %q", verification, got.Verification)
+	if !bytes.Equal(evidence.Verification, verification) {
+		t.Fatalf("Verification bytes differ\nwant: %q\ngot:  %q", verification, evidence.Verification)
 	}
-	if !bytes.Equal(got.Observed, observed) {
-		t.Fatalf("Observed bytes differ\nwant: %q\ngot:  %q", observed, got.Observed)
+	if !bytes.Equal(evidence.Observed, observed) {
+		t.Fatalf("Observed bytes differ\nwant: %q\ngot:  %q", observed, evidence.Observed)
 	}
 }
 
-func TestCADRuntimeRunEvidence_AbsentOptionalEvidenceOmitted(t *testing.T) {
+func TestRunOutcomeEvidences_AbsentOptionalEvidenceOmitted(t *testing.T) {
 	outcome := cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("result-only"), nil, nil)
+	outcome.Verification = artifact.VerificationOutcomePassed
 	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}
 
-	got, err := cadRuntimeRunEvidence(execution, true)
+	got, err := runOutcomeEvidences(execution)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got == nil || !bytes.Equal(got.Result, []byte("result-only")) {
+	if len(got) != 1 || got[0].CADRuntime == nil || !bytes.Equal(got[0].CADRuntime.Result, []byte("result-only")) {
 		t.Fatalf("expected result evidence, got %#v", got)
 	}
-	if len(got.Verification) != 0 || len(got.Observed) != 0 {
-		t.Fatalf("expected absent optional evidence to stay empty, got verification=%q observed=%q", got.Verification, got.Observed)
+	if len(got[0].CADRuntime.Verification) != 0 || len(got[0].CADRuntime.Observed) != 0 {
+		t.Fatalf("expected absent optional evidence to stay empty, got verification=%q observed=%q", got[0].CADRuntime.Verification, got[0].CADRuntime.Observed)
 	}
 }
 
-func TestCADRuntimeRunEvidence_MultipleEligibleCandidatesOmitProjection(t *testing.T) {
-	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{
-		{CADRuntimeOutcome: cadRuntimeEvidenceOutcome(t, "job-1", "widget-a", "2", []byte("a"), []byte("a"), []byte("a"))},
-		{CADRuntimeOutcome: cadRuntimeEvidenceOutcome(t, "job-1", "widget-b", "2", []byte("b"), []byte("b"), []byte("b"))},
-	}}
-	got, err := cadRuntimeRunEvidence(execution, true)
+func TestRunOutcomeEvidences_MultipleEligibleOutcomesRemainDistinct(t *testing.T) {
+	outcomeA := cadRuntimeEvidenceOutcome(t, "job-1", "widget-a", "2", []byte("a"), nil, []byte("oa"))
+	outcomeA.Verification = artifact.VerificationOutcomePassed
+	outcomeB := cadRuntimeEvidenceOutcome(t, "job-2", "widget-b", "2", []byte("b"), nil, []byte("ob"))
+	outcomeB.Verification = artifact.VerificationOutcomePassed
+	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcomeA}, {CADRuntimeOutcome: outcomeB}}}
+	got, err := runOutcomeEvidences(execution)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != nil {
-		t.Fatalf("expected nil projection for multiple eligible candidates (no arbitrary selection), got %#v", got)
+	if len(got) != 2 || got[0].ProductKey == got[1].ProductKey {
+		t.Fatalf("expected two distinct outcome groups, got %#v", got)
+	}
+	if !bytes.Equal(got[0].CADRuntime.Observed, []byte("oa")) || !bytes.Equal(got[1].CADRuntime.Observed, []byte("ob")) {
+		t.Fatal("outcome-scoped CAD evidence was collapsed or overwritten")
 	}
 }
 
-func TestCADRuntimeRunEvidence_PropagatesPathSafetyErrors(t *testing.T) {
+func TestRunOutcomeEvidences_PropagatesPathSafetyErrors(t *testing.T) {
 	outcome := cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("r"), nil, nil)
+	outcome.Verification = artifact.VerificationOutcomePassed
 	// Point ResultPath outside the declared working copy: the guarded reader
 	// must reject this rather than silently reading across the boundary.
 	outside := filepath.Join(t.TempDir(), "prm.result.json")
@@ -2340,7 +2349,7 @@ func TestCADRuntimeRunEvidence_PropagatesPathSafetyErrors(t *testing.T) {
 	outcome.ResultPath = outside
 	execution := scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}
 
-	got, err := cadRuntimeRunEvidence(execution, true)
+	got, err := runOutcomeEvidences(execution)
 	if err == nil || got != nil {
 		t.Fatalf("got=%#v err=%v, want a path-safety error and no evidence", got, err)
 	}
