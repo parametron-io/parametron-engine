@@ -550,6 +550,43 @@ and post-persistence result proof is a later adapter phase built on these
 contracts, not implemented here; see the
 [test matrix](docs/test-matrix.md#source-lock-and-configured-result-provenance-contract-coverage).
 
+## FreeCAD handoff
+
+Engine's coordinated resource, reference, occurrence, fact, integrity, and
+outcome-scoped package contracts are sufficient for `parametron-freecad` to
+implement the bounded native phase without inventing normalized semantics.
+
+The adapter implements bounded native responsibilities:
+
+- resolve declared resources only through Engine-provided attempt-relative
+  coordinates and report missing, unavailable, unsupported, or undeclared native
+  access explicitly;
+- emit schema `1.0` generic reference traversal evidence, including accepted
+  property/mechanism distinctions and declared, undeclared, or unsupported
+  targets;
+- emit explicit direct-member occurrence evidence with complete, incomplete, or
+  unsupported completeness and exact member inventory;
+- emit bounded fact evidence for requested native properties with typed scalar
+  values, explicit unit tokens, and observed, unavailable, or unsupported
+  availability;
+- report the pre-mutation materialized baseline digest and the post-persistence
+  configured-result coordinate and digest, plus per-resource unavailable
+  diagnostics;
+- preserve exact raw result, observed, traversal, occurrence, fact, and integrity
+  bytes and return them through the canonical request/evidence contracts.
+
+The adapter must not emit Engine-normalized records, decide quantity or BOM
+policy, invent logical resource identity, enforce source-lock policy, derive
+plan/job/product identity, or persist PDM data. Engine owns declared-resource
+joins, expected-versus-observed verification, reference/occurrence/fact
+normalization, complete-scope quantity rollup, integrity validation,
+deterministic failure classification, and outcome-scoped package emission.
+
+Recursive dependency discovery, general BOM generation, physical mass,
+universal unit algebra, and a material database remain outside this phase. The
+canonical contract and adapter handoff descriptions are maintained in
+`parametron-docs`.
+
 ## Target actions
 
 The authoring layer supports target actions for engineering-model intent such
