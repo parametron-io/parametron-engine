@@ -46,6 +46,12 @@ type VerificationMappingInput struct {
 
 	// Optional digest of raw/observed/prm.observed.json used by target-state comparison.
 	ObservedEvidenceDigestSHA256 string
+
+	// Optional raw evidence package path overrides. Empty preserves the canonical
+	// paths. Callers use them to attribute evidence to one outcome in a
+	// multi-outcome package.
+	EvidenceRef         string
+	ObservedEvidenceRef string
 }
 
 // VerificationMappingOutput carries a normalized verification record.
@@ -116,9 +122,9 @@ func mapVerificationSummary(input VerificationMappingInput) (recordcontract.Veri
 	}
 
 	digest := strings.TrimSpace(input.EvidenceDigestSHA256)
-	evidence := verificationRecordEvidence(digest)
+	evidence := verificationRecordEvidence(verificationEvidencePath(input), digest)
 	if input.Result.Categories.TargetState.Enabled {
-		evidence = append(evidence, verificationObservedRecordEvidence(strings.TrimSpace(input.ObservedEvidenceDigestSHA256)))
+		evidence = append(evidence, verificationObservedRecordEvidence(verificationObservedEvidencePath(input), strings.TrimSpace(input.ObservedEvidenceDigestSHA256)))
 	}
 
 	failureClass, err := mapTopLevelVerificationFailureClass(outcome, input.Result.Failure)
@@ -126,7 +132,7 @@ func mapVerificationSummary(input VerificationMappingInput) (recordcontract.Veri
 		return recordcontract.VerificationSummary{}, err
 	}
 
-	categories, err := mapVerificationCategoryResults(input.Result, digest, strings.TrimSpace(input.ObservedEvidenceDigestSHA256))
+	categories, err := mapVerificationCategoryResults(input.Result, verificationEvidencePath(input), verificationObservedEvidencePath(input), digest, strings.TrimSpace(input.ObservedEvidenceDigestSHA256))
 	if err != nil {
 		return recordcontract.VerificationSummary{}, err
 	}
@@ -141,7 +147,7 @@ func mapVerificationSummary(input VerificationMappingInput) (recordcontract.Veri
 	}, nil
 }
 
-func mapVerificationCategoryResults(result verification.Result, digest, observedDigest string) ([]recordcontract.VerificationCategoryResult, error) {
+func mapVerificationCategoryResults(result verification.Result, evidenceRef, observedEvidenceRef, digest, observedDigest string) ([]recordcontract.VerificationCategoryResult, error) {
 	ordered := []struct {
 		category recordcontract.VerificationCategory
 		item     verification.CategoryResult
@@ -160,7 +166,7 @@ func mapVerificationCategoryResults(result verification.Result, digest, observed
 
 	out := make([]recordcontract.VerificationCategoryResult, 0, len(ordered))
 	for _, entry := range ordered {
-		mapped, err := mapVerificationCategoryResult(entry.category, entry.item, digest, observedDigest, result)
+		mapped, err := mapVerificationCategoryResult(entry.category, entry.item, evidenceRef, observedEvidenceRef, digest, observedDigest, result)
 		if err != nil {
 			return nil, err
 		}
@@ -173,6 +179,8 @@ func mapVerificationCategoryResults(result verification.Result, digest, observed
 func mapVerificationCategoryResult(
 	category recordcontract.VerificationCategory,
 	result verification.CategoryResult,
+	evidenceRef string,
+	observedEvidenceRef string,
 	digest string,
 	observedDigest string,
 	topResult verification.Result,
@@ -187,9 +195,9 @@ func mapVerificationCategoryResult(
 		return recordcontract.VerificationCategoryResult{}, err
 	}
 
-	evidence := verificationRecordEvidence(digest)
+	evidence := verificationRecordEvidence(evidenceRef, digest)
 	if category == recordcontract.VerificationCategoryTargetState && result.Enabled {
-		evidence = append(evidence, verificationObservedRecordEvidence(observedDigest))
+		evidence = append(evidence, verificationObservedRecordEvidence(observedEvidenceRef, observedDigest))
 	}
 	return recordcontract.VerificationCategoryResult{
 		Category:     category,
@@ -331,13 +339,13 @@ func mapVerificationFailureClass(class verification.FailureClass) (recordcontrac
 func enrichVerificationProvenance(input VerificationMappingInput) (recordcontract.Provenance, error) {
 	provenance := copyProvenance(input.Provenance)
 
-	evidence, err := appendVerificationEvidence(provenance.Evidence, strings.TrimSpace(input.EvidenceDigestSHA256))
+	evidence, err := appendVerificationEvidence(provenance.Evidence, verificationEvidencePath(input), strings.TrimSpace(input.EvidenceDigestSHA256))
 	if err != nil {
 		return recordcontract.Provenance{}, err
 	}
 	provenance.Evidence = evidence
 	if input.Result.Categories.TargetState.Enabled {
-		evidence, err = appendVerificationObservedEvidence(provenance.Evidence, strings.TrimSpace(input.ObservedEvidenceDigestSHA256))
+		evidence, err = appendVerificationObservedEvidence(provenance.Evidence, verificationObservedEvidencePath(input), strings.TrimSpace(input.ObservedEvidenceDigestSHA256))
 		if err != nil {
 			return recordcontract.Provenance{}, err
 		}
@@ -352,10 +360,10 @@ func enrichVerificationProvenance(input VerificationMappingInput) (recordcontrac
 	return normalized, nil
 }
 
-func appendVerificationObservedEvidence(existing []recordcontract.EvidenceReference, digest string) ([]recordcontract.EvidenceReference, error) {
+func appendVerificationObservedEvidence(existing []recordcontract.EvidenceReference, evidenceRef, digest string) ([]recordcontract.EvidenceReference, error) {
 	out := copyEvidenceReferences(existing)
 	for i, item := range out {
-		if strings.TrimSpace(item.Kind) == verificationObservedEvidenceKind && strings.TrimSpace(item.Ref) == verificationObservedEvidenceRef {
+		if strings.TrimSpace(item.Kind) == verificationObservedEvidenceKind && strings.TrimSpace(item.Ref) == evidenceRef {
 			existingDigest := strings.TrimSpace(item.DigestSHA256)
 			if existingDigest != "" && digest != "" && existingDigest != digest {
 				return nil, fmt.Errorf("%w: conflicting digest for observed evidence reference", ErrInvalidVerificationMapping)
@@ -366,17 +374,17 @@ func appendVerificationObservedEvidence(existing []recordcontract.EvidenceRefere
 			return out, nil
 		}
 	}
-	return append(out, recordcontract.EvidenceReference{Kind: verificationObservedEvidenceKind, Ref: verificationObservedEvidenceRef, DigestSHA256: digest}), nil
+	return append(out, recordcontract.EvidenceReference{Kind: verificationObservedEvidenceKind, Ref: evidenceRef, DigestSHA256: digest}), nil
 }
 
-func verificationObservedRecordEvidence(digest string) recordcontract.VerificationEvidence {
-	return recordcontract.VerificationEvidence{SourceKind: verificationObservedEvidenceKind, SourceRef: verificationObservedEvidenceRef, DigestSHA256: digest}
+func verificationObservedRecordEvidence(evidenceRef, digest string) recordcontract.VerificationEvidence {
+	return recordcontract.VerificationEvidence{SourceKind: verificationObservedEvidenceKind, SourceRef: evidenceRef, DigestSHA256: digest}
 }
 
-func appendVerificationEvidence(existing []recordcontract.EvidenceReference, digest string) ([]recordcontract.EvidenceReference, error) {
+func appendVerificationEvidence(existing []recordcontract.EvidenceReference, evidenceRef, digest string) ([]recordcontract.EvidenceReference, error) {
 	out := copyEvidenceReferences(existing)
 	for i, item := range out {
-		if strings.TrimSpace(item.Kind) != verificationEvidenceKind || strings.TrimSpace(item.Ref) != verificationEvidenceRef {
+		if strings.TrimSpace(item.Kind) != verificationEvidenceKind || strings.TrimSpace(item.Ref) != evidenceRef {
 			continue
 		}
 		existingDigest := strings.TrimSpace(item.DigestSHA256)
@@ -391,20 +399,34 @@ func appendVerificationEvidence(existing []recordcontract.EvidenceReference, dig
 
 	out = append(out, recordcontract.EvidenceReference{
 		Kind:         verificationEvidenceKind,
-		Ref:          verificationEvidenceRef,
+		Ref:          evidenceRef,
 		DigestSHA256: digest,
 	})
 	return out, nil
 }
 
-func verificationRecordEvidence(digest string) []recordcontract.VerificationEvidence {
+func verificationRecordEvidence(evidenceRef, digest string) []recordcontract.VerificationEvidence {
 	return []recordcontract.VerificationEvidence{
 		{
 			SourceKind:   verificationEvidenceKind,
-			SourceRef:    verificationEvidenceRef,
+			SourceRef:    evidenceRef,
 			DigestSHA256: digest,
 		},
 	}
+}
+
+func verificationEvidencePath(input VerificationMappingInput) string {
+	if ref := strings.TrimSpace(input.EvidenceRef); ref != "" {
+		return ref
+	}
+	return verificationEvidenceRef
+}
+
+func verificationObservedEvidencePath(input VerificationMappingInput) string {
+	if ref := strings.TrimSpace(input.ObservedEvidenceRef); ref != "" {
+		return ref
+	}
+	return verificationObservedEvidenceRef
 }
 
 func verificationLinkage(linkage VerificationMappingLinkage) recordcontract.VerificationLinkage {

@@ -431,18 +431,19 @@ func TestCLIProjectRun_EquivalentRunsInDifferentOutputRootsKeepArtifactAndExecut
 	}
 }
 
-// --- cadRuntimeRunEvidence typed-value transport (helper level) ---
+// --- outcome projection typed-value transport (helper level) ---
 
-func TestCADRuntimeRunEvidence_CarriesTypedValuesAndLinkageFromOutcome(t *testing.T) {
+func TestRunOutcomeEvidences_CarriesTypedValuesAndLinkageFromOutcome(t *testing.T) {
 	outcome := cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("r"), []byte("v"), []byte("o"))
 	obs := &observed.Observed{SchemaVersion: observed.SchemaVersion}
 	result := &verification.Result{Status: verification.StatusPass}
 	outcome.Observed, outcome.VerificationResult = obs, result
 
-	got, err := cadRuntimeRunEvidence(scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}, true)
-	if err != nil || got == nil {
-		t.Fatalf("evidence=%#v err=%v", got, err)
+	outcomes, err := runOutcomeEvidences(scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}})
+	if err != nil || len(outcomes) != 1 || outcomes[0].CADRuntime == nil {
+		t.Fatalf("outcomes=%#v err=%v", outcomes, err)
 	}
+	got := outcomes[0].CADRuntime
 	if got.ObservedValue != obs || got.VerificationResult != result {
 		t.Fatalf("typed values not carried: observed=%p result=%p", got.ObservedValue, got.VerificationResult)
 	}
@@ -451,14 +452,14 @@ func TestCADRuntimeRunEvidence_CarriesTypedValuesAndLinkageFromOutcome(t *testin
 	}
 }
 
-func TestCADRuntimeRunEvidence_AbsentTypedValuesStayNil(t *testing.T) {
+func TestRunOutcomeEvidences_AbsentTypedValuesStayNil(t *testing.T) {
 	outcome := cadRuntimeEvidenceOutcome(t, "job-1", "widget", "2", []byte("r"), nil, nil)
-	got, err := cadRuntimeRunEvidence(scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}}, true)
-	if err != nil || got == nil {
-		t.Fatalf("evidence=%#v err=%v", got, err)
+	outcomes, err := runOutcomeEvidences(scheduler.ExecutionResult{Jobs: []scheduler.JobExecution{{CADRuntimeOutcome: outcome}}})
+	if err != nil || len(outcomes) != 1 || outcomes[0].CADRuntime == nil {
+		t.Fatalf("outcomes=%#v err=%v", outcomes, err)
 	}
-	if got.ObservedValue != nil || got.VerificationResult != nil {
-		t.Fatalf("typed values synthesized from absent evidence: observed=%v result=%v", got.ObservedValue, got.VerificationResult)
+	if outcomes[0].CADRuntime.ObservedValue != nil || outcomes[0].CADRuntime.VerificationResult != nil {
+		t.Fatalf("typed values synthesized from absent evidence: %#v", outcomes[0].CADRuntime)
 	}
 }
 

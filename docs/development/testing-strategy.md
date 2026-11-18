@@ -159,19 +159,24 @@ record packaging.
   FreeCAD vocabulary maps validation failures to `validation / validation`,
   adapter availability and native observation/traversal failures to
   `adapter / adapter`, artifact export failures to `export / export`, and
-  ordinary or otherwise-valid unknown failures to `runtime / runtime`.
+  ordinary or otherwise-valid unknown failures to `runtime / runtime`. Optional
+  raw-evidence path overrides keep each outcome's normalized evidence associated
+  with its own package path.
 - **Record Package Writer & Emission (`internal/engine/recordpackage`, `internal/engine/recordemit`)**:
   Verifies normal-run emission, deterministic package generation, manifest
   indexing, and raw evidence preservation under `raw/`. Artifact tests cover
   zero, one, and multiple records at the identity-addressed
-  `records/artifacts/<identityId>/prm.artifact-record.json` path, stable
-  identity ordering, and duplicate rejection while other record families remain
-  singular. CAD evidence tests prove observation, verification, and target-state
-  emission from typed Engine material; preserve exact source bytes; reject
-  run-root guessing; and avoid arbitrary selection when multiple outcomes are
-  eligible. Failure tests cover terminal failed-outcome correlation,
-  runtime-native precedence, report-derived fallback, verification-failure
-  separation, exact-byte digest provenance, and deterministic repeated output.
+  `records/artifacts/<identityId>/prm.artifact-record.json` path. Outcome-scoped
+  emission tests cover plural observation, reference, and verification records
+  at `records/outcomes/<outcomeKey>/`, plural raw evidence under
+  `raw/outcomes/<outcomeKey>/`, deterministic ordering, duplicate rejection, and
+  configured-result separation across distinct attempts. CAD evidence tests prove
+  observation, verification, and target-state emission from typed Engine
+  material; preserve exact source bytes; and reject run-root guessing. Failure
+  tests cover terminal failed-outcome correlation, runtime-native precedence,
+  report-derived fallback, verification-failure separation, exact-byte digest
+  provenance, and deterministic repeated output. Single-outcome packages retain
+  their established paths.
 
 ### 4. Scheduler, Executor, and Cache
 
@@ -242,12 +247,14 @@ record packaging.
   independent property/mechanism discrimination, deterministic duplicate and
   conflict handling, native resolution, explicit unqualified targets, and
   complete/incomplete/unavailable empty traversal records. The controlled CLI
-  participant returns raw evidence through the normal single-candidate path;
+  participant returns raw evidence through the normal outcome-scoped path;
   Engine preserves exact bytes and SHA-256 provenance, with stable relationship
   keys but evidence-sensitive record identity across relocated/reordered inputs.
-  These are Engine contract proofs, not real FreeCAD execution or proof of
-  occurrence identity, quantities, recursive discovery, automatic external
-  mapping population, or general multi-outcome aggregation.
+  A separate multi-outcome suite proves that every eligible verified outcome
+  retains its own observation, reference, occurrence, fact, integrity, and raw
+  evidence without arbitrary selection. These are Engine contract proofs, not
+  real FreeCAD execution or proof of occurrence identity, quantities, recursive
+  discovery, or automatic external mapping population.
 - **Opt-in Real FreeCAD Integration (`scripts/cad_runtime_integration_proof.py --mode real`)**:
   Executes live CAD mutation, recompute, export, and verification against
   `parametron-freecad` and FreeCAD binaries.

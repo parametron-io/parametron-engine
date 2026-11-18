@@ -15,11 +15,15 @@ type OccurrenceRunEvidence struct {
 	Input cadruntime.OccurrenceMappingInput
 }
 
-func appendOccurrenceRecords(records []recordpackage.Record, evidence *CADRuntimeRunEvidence, recordKey string, base recordcontract.Provenance) ([]recordpackage.Record, error) {
+func appendOccurrenceRecords(records []recordpackage.Record, evidence *CADRuntimeRunEvidence, observationRecordKey string, base recordcontract.Provenance, evidenceRef, scope string) ([]recordpackage.Record, error) {
 	if evidence.Occurrence == nil {
 		return records, nil
 	}
-	summary, err := cadruntime.MapOccurrenceEvidence(evidence.Occurrence.Input)
+	input := evidence.Occurrence.Input
+	if evidenceRef != "" {
+		input.EvidenceRef = evidenceRef
+	}
+	summary, err := cadruntime.MapOccurrenceEvidence(input)
 	if err != nil {
 		return nil, fmt.Errorf("recordemit: occurrence evidence: %w", err)
 	}
@@ -65,11 +69,12 @@ func appendOccurrenceRecords(records []recordpackage.Record, evidence *CADRuntim
 		}
 		provenance.Evidence = append(refs, recordcontract.EvidenceReference{Kind: summary.Evidence.SourceKind, Ref: summary.Evidence.SourceRef, DigestSHA256: summary.Evidence.DigestSHA256})
 	}
-	record, err := recordcontract.BuildObservationRecord(recordcontract.ObservationRecordInput{RecordKey: recordKey + ":observation", Provenance: provenance, Observation: facts})
+	record, err := recordcontract.BuildObservationRecord(recordcontract.ObservationRecordInput{RecordKey: observationRecordKey, Provenance: provenance, Observation: facts})
 	if err != nil {
 		return nil, err
 	}
 	wrapped := recordpackage.ObservationRecord(record)
+	wrapped.OutcomeKey = scope
 	if index >= 0 {
 		records[index] = wrapped
 	} else {

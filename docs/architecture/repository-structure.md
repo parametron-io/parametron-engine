@@ -65,7 +65,8 @@ contracts; `recordmap` interprets accepted execution evidence into records;
 packages. Raw runtime evidence and Engine-normalized records remain distinct.
 Normalized provenance carries separate source, baseline, and configured-result
 integrity fields for declared CAD resources, while raw runtime integrity
-evidence is preserved verbatim at `raw/runtime/prm.integrity-evidence.json`.
+evidence is preserved verbatim at `raw/runtime/prm.integrity-evidence.json` or
+under `raw/outcomes/<outcomeKey>/` for multi-outcome packages.
 
 ## Further reading
 

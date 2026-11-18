@@ -219,7 +219,7 @@ func ValidateOccurrenceSummary(s OccurrenceSummary) error {
 		return fmt.Errorf("%w: quantity differs from distinct occurrence rollup", ErrInvalidOccurrence)
 	}
 	if s.Evidence.SourceKind != "" || s.Evidence.SourceRef != "" || s.Evidence.DigestSHA256 != "" {
-		if s.Evidence.SourceKind != "occurrence-evidence" || s.Evidence.SourceRef != "raw/runtime/prm.occurrence-evidence.json" || s.Evidence.DigestSHA256 == "" {
+		if s.Evidence.SourceKind != "occurrence-evidence" || !isOutcomeScopedEvidenceRef(s.Evidence.SourceRef, "raw/runtime/prm.occurrence-evidence.json", "runtime/prm.occurrence-evidence.json") || s.Evidence.DigestSHA256 == "" {
 			return fmt.Errorf("%w: canonical occurrence evidence required", ErrInvalidOccurrence)
 		}
 	} else if s.Completeness != "unavailable" {

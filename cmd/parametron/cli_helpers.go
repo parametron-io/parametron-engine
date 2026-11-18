@@ -508,17 +508,15 @@ func executePlanRun(opts executionOptions) (*executionResult, error) {
 	var packageEmitErr error
 	if reportErr == nil {
 		emitInput := recordemit.RunEmitInput{
-			RunRoot:            runRoot,
-			PlanHash:           opts.Planned.PlanHash,
-			Report:             runReport,
-			Metadata:           runMetadata,
-			Artifacts:          artifacts,
-			ReferenceTraversal: referenceTraversalRunEvidence(schedulerResult, executionErr == nil),
-			SourceIntegrity:    opts.Planned.SourceIntegrity,
+			RunRoot:         runRoot,
+			PlanHash:        opts.Planned.PlanHash,
+			Report:          runReport,
+			Metadata:        runMetadata,
+			Artifacts:       artifacts,
+			SourceIntegrity: opts.Planned.SourceIntegrity,
 		}
-		if executionErr == nil {
-			emitInput.CADRuntime, packageEmitErr = cadRuntimeRunEvidence(schedulerResult, true)
-		} else {
+		emitInput.Outcomes, packageEmitErr = runOutcomeEvidences(schedulerResult)
+		if packageEmitErr == nil && executionErr != nil {
 			emitInput.CADRuntime, packageEmitErr = cadRuntimeFailureRunEvidence(schedulerResult, runReport)
 			if packageEmitErr == nil {
 				packageEmitErr = attachIntegrityFailureEvidence(&emitInput, schedulerResult, runReport)
@@ -581,25 +579,34 @@ func attachIntegrityFailureEvidence(input *recordemit.RunEmitInput, execution sc
 	return nil
 }
 
-func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecutionSucceeded bool) (*recordemit.CADRuntimeRunEvidence, error) {
-	if !overallExecutionSucceeded {
-		return nil, nil
-	}
-	var candidate *executor.CADRuntimeOutcome
+// runOutcomeEvidences projects every eligible verified CAD outcome. It does not
+// select one outcome: multi-product or otherwise distinct outcomes remain
+// separate outcome-scoped engineering-observation groups.
+func runOutcomeEvidences(execution scheduler.ExecutionResult) ([]recordemit.RunOutcomeEvidence, error) {
+	out := make([]recordemit.RunOutcomeEvidence, 0, len(execution.Jobs))
 	for _, jobExecution := range execution.Jobs {
 		outcome := jobExecution.CADRuntimeOutcome
 		if jobExecution.Err != nil || outcome == nil || outcome.Verification != artifact.VerificationOutcomePassed {
 			continue
 		}
-		// Singular package destinations cannot represent multiple attempts.
-		if candidate != nil {
-			return nil, nil
+		cad, err := cadRuntimeEvidenceForOutcome(outcome)
+		if err != nil {
+			return nil, err
 		}
-		candidate = outcome
+		group := recordemit.RunOutcomeEvidence{
+			JobID: cad.JobID, ProductKey: cad.ProductKey, StepRef: cad.StepRef,
+			Attempt: cad.Attempt, AttemptID: cad.AttemptID,
+			CADRuntime: cad,
+		}
+		if traversal := referenceTraversalEvidenceForOutcome(outcome); traversal != nil {
+			group.ReferenceTraversal = traversal
+		}
+		out = append(out, group)
 	}
-	if candidate == nil {
-		return nil, nil
-	}
+	return out, nil
+}
+
+func cadRuntimeEvidenceForOutcome(candidate *executor.CADRuntimeOutcome) (*recordemit.CADRuntimeRunEvidence, error) {
 	evidence := &recordemit.CADRuntimeRunEvidence{}
 	if candidate.OccurrenceRequest != nil || len(candidate.OccurrenceJSON) > 0 {
 		evidence.Occurrence = &recordemit.OccurrenceRunEvidence{Input: cadruntime.OccurrenceMappingInput{
@@ -617,6 +624,8 @@ func cadRuntimeRunEvidence(execution scheduler.ExecutionResult, overallExecution
 	evidence.JobID = candidate.JobID
 	evidence.ProductKey = candidate.ProductKey
 	evidence.StepRef = candidate.StepID
+	evidence.Attempt = candidate.Attempt
+	evidence.AttemptID = candidate.AttemptID
 	for _, source := range []struct {
 		path    string
 		content *[]byte
@@ -761,28 +770,18 @@ func reportFailureJobID(jobs []report.JobReport, productKey string) string {
 	return ""
 }
 
-func referenceTraversalRunEvidence(execution scheduler.ExecutionResult, overallExecutionSucceeded bool) *recordemit.ReferenceTraversalRunEvidence {
-	if !overallExecutionSucceeded {
+func referenceTraversalEvidenceForOutcome(outcome *executor.CADRuntimeOutcome) *recordemit.ReferenceTraversalRunEvidence {
+	if outcome == nil || len(outcome.ReferenceTraversalJSON) == 0 ||
+		!isCanonicalExecutionLink(outcome.JobID) || !isCanonicalExecutionLink(outcome.ProductKey) || !isCanonicalExecutionLink(outcome.StepID) {
 		return nil
 	}
-	var candidate *recordemit.ReferenceTraversalRunEvidence
-	for _, jobExecution := range execution.Jobs {
-		outcome := jobExecution.CADRuntimeOutcome
-		if jobExecution.Err != nil || outcome == nil || outcome.Verification != artifact.VerificationOutcomePassed || len(outcome.ReferenceTraversalJSON) == 0 ||
-			!isCanonicalExecutionLink(outcome.JobID) || !isCanonicalExecutionLink(outcome.ProductKey) || !isCanonicalExecutionLink(outcome.StepID) {
-			continue
-		}
-		if candidate != nil {
-			return nil
-		}
-		candidate = &recordemit.ReferenceTraversalRunEvidence{
-			Resources:              outcome.Resources,
-			ExpectedSourceDocument: outcome.SourceDocument,
-			Content:                append([]byte(nil), outcome.ReferenceTraversalJSON...),
-			JobID:                  outcome.JobID, ProductKey: outcome.ProductKey, StepRef: outcome.StepID,
-		}
+	return &recordemit.ReferenceTraversalRunEvidence{
+		Resources:              outcome.Resources,
+		ExpectedSourceDocument: outcome.SourceDocument,
+		Content:                append([]byte(nil), outcome.ReferenceTraversalJSON...),
+		JobID:                  outcome.JobID, ProductKey: outcome.ProductKey, StepRef: outcome.StepID,
+		Attempt: outcome.Attempt, AttemptID: outcome.AttemptID,
 	}
-	return candidate
 }
 
 func isCanonicalExecutionLink(value string) bool {

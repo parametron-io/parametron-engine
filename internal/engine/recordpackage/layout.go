@@ -22,6 +22,9 @@ const (
 	// ArtifactRecordsDirectoryName contains identity-addressed artifact records.
 	ArtifactRecordsDirectoryName = "artifacts"
 
+	// OutcomeRecordsDirectoryName contains outcome-scoped normalized records.
+	OutcomeRecordsDirectoryName = "outcomes"
+
 	// ArtifactsDirectoryName is the canonical packaged artifacts directory.
 	ArtifactsDirectoryName = "artifacts"
 
@@ -119,6 +122,49 @@ func RecordContractPath(family recordcontract.Family) (string, bool) {
 // ArtifactRecordsDirectoryContractPath returns the artifact-record collection directory.
 func ArtifactRecordsDirectoryContractPath() string {
 	return mustJoinContractPath(RecordsDirectoryName, ArtifactRecordsDirectoryName)
+}
+
+// OutcomeRecordsDirectoryContractPath returns the outcome-scoped record collection directory.
+func OutcomeRecordsDirectoryContractPath() string {
+	return mustJoinContractPath(RecordsDirectoryName, OutcomeRecordsDirectoryName)
+}
+
+// NormalizeOutcomeKey validates an outcome-scoped path segment.
+func NormalizeOutcomeKey(outcomeKey string) (string, error) {
+	outcomeKey = strings.TrimSpace(outcomeKey)
+	if outcomeKey == "" {
+		return "", nil
+	}
+	if strings.Contains(outcomeKey, "/") {
+		return "", fmt.Errorf("%w: outcome key must be a single path segment", ErrInvalidLayoutPath)
+	}
+	if err := ValidateContractPath(outcomeKey); err != nil {
+		return "", err
+	}
+	if outcomeKey == PackageDirectoryName {
+		return "", fmt.Errorf("%w: outcome key %q is reserved", ErrInvalidLayoutPath, outcomeKey)
+	}
+	return outcomeKey, nil
+}
+
+// OutcomeRecordContractPath returns the canonical path for one outcome-scoped
+// normalized record family.
+func OutcomeRecordContractPath(outcomeKey string, family recordcontract.Family) (string, error) {
+	outcomeKey, err := NormalizeOutcomeKey(outcomeKey)
+	if err != nil {
+		return "", err
+	}
+	if outcomeKey == "" {
+		return "", fmt.Errorf("%w: outcome key is required", ErrInvalidLayoutPath)
+	}
+	if recordcontract.NormalizeFamily(family) == recordcontract.FamilyArtifact {
+		return "", fmt.Errorf("%w: artifact records use identity addresses", ErrInvalidLayoutPath)
+	}
+	fileName, ok := recordcontract.FileNameForFamily(family)
+	if !ok {
+		return "", fmt.Errorf("%w: unknown record family %q", ErrInvalidLayoutPath, family)
+	}
+	return JoinContractPath(OutcomeRecordsDirectoryContractPath(), outcomeKey, fileName)
 }
 
 // ArtifactRecordContractPath returns the canonical identity-addressed path for
