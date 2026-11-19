@@ -15,6 +15,23 @@ import (
 const FactRequestFilename = "prm.fact-request.json"
 const FactEvidenceFilename = "prm.fact-evidence.json"
 
+// ComposeFactRequestJSON validates explicit fact intent and returns the
+// canonical request-document bytes used by the runtime sidecar. It is the
+// single Engine-owned authoring path for the fact request contract.
+func ComposeFactRequestJSON(request *recordcontract.FactRequest) ([]byte, error) {
+	if request == nil {
+		return nil, nil
+	}
+	if err := recordcontract.ValidateFactRequest(*request); err != nil {
+		return nil, err
+	}
+	content, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	return append(content, '\n'), nil
+}
+
 // writeFactRequest writes an optional sidecar in the already prepared, confined
 // attempt. No new process argument or runtime capability is implied.
 func writeFactRequest(root string, request *recordcontract.FactRequest) error {
@@ -25,10 +42,7 @@ func writeFactRequest(root string, request *recordcontract.FactRequest) error {
 	if request == nil {
 		return nil
 	}
-	if err := recordcontract.ValidateFactRequest(*request); err != nil {
-		return err
-	}
-	content, err := json.Marshal(request)
+	content, err := ComposeFactRequestJSON(request)
 	if err != nil {
 		return err
 	}
@@ -37,7 +51,7 @@ func writeFactRequest(root string, request *recordcontract.FactRequest) error {
 		return err
 	}
 	defer os.Remove(temp.Name())
-	if _, err = temp.Write(append(content, '\n')); err != nil {
+	if _, err = temp.Write(content); err != nil {
 		temp.Close()
 		return err
 	}

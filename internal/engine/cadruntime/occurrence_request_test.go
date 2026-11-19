@@ -151,3 +151,40 @@ func TestOccurrenceRuntimeSidecarAndVerificationBoundary(t *testing.T) {
 		})
 	}
 }
+
+func TestComposeOccurrenceRequestJSONIsEngineOwnedCanonicalIntent(t *testing.T) {
+	request := &recordcontract.OccurrenceRequest{
+		SchemaVersion: recordcontract.OccurrenceSchemaVersion,
+		Requirement:   "optional",
+		Scope: recordcontract.OccurrenceScope{
+			Parent: recordcontract.OccurrenceEntity{
+				Resource:   recordcontract.ReferenceResource{ProjectID: "p", Kind: "model", LogicalID: "assembly"},
+				NativeKind: "object", Name: "Assembly",
+			},
+			Context:   []recordcontract.OccurrenceContextFrame{},
+			Mechanism: recordcontract.OccurrenceDirectMemberMechanism,
+		},
+	}
+	content, err := ComposeOccurrenceRequestJSON(request)
+	if err != nil {
+		t.Fatalf("ComposeOccurrenceRequestJSON returned error: %v", err)
+	}
+	if len(content) == 0 || content[len(content)-1] != '\n' {
+		t.Fatalf("composed occurrence request is not newline terminated: %q", content)
+	}
+	decoded, err := DecodeOccurrenceRequest(content)
+	if err != nil {
+		t.Fatalf("DecodeOccurrenceRequest(composed) returned error: %v", err)
+	}
+	if !reflect.DeepEqual(decoded, *request) {
+		t.Fatalf("composed occurrence request = %#v, want %#v", decoded, *request)
+	}
+	if content, err := ComposeOccurrenceRequestJSON(nil); err != nil || content != nil {
+		t.Fatalf("nil occurrence intent = %q, %v; want nil bytes and nil error", content, err)
+	}
+	invalid := *request
+	invalid.Requirement = "mixed"
+	if _, err := ComposeOccurrenceRequestJSON(&invalid); !errors.Is(err, recordcontract.ErrInvalidOccurrence) {
+		t.Fatalf("invalid occurrence intent error = %v, want ErrInvalidOccurrence", err)
+	}
+}

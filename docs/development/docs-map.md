@@ -36,6 +36,7 @@ historical implementation records — remains here.
 | Repository layout, package responsibilities, and directory structure | [docs/architecture/repository-structure.md](../architecture/repository-structure.md) |
 | Local build setup, running commands, and smoke tests | [docs/development/local-development.md](local-development.md) |
 | Testing philosophy, architectural test layers, and verification commands | [docs/development/testing-strategy.md](testing-strategy.md) |
+| Real FreeCAD occurrence, fact, and integrity acceptance proof | [docs/development/real-evidence-proof.md](real-evidence-proof.md) |
 | Extension guide: adding DSL syntax, step types, and CAD adapters | [docs/development/extension-guide.md](extension-guide.md) |
 | DSL fixture governance, categorisation, and contribution rules | [docs/development/fixture-governance.md](fixture-governance.md) |
 | Public test matrix across packages and subsystems | [docs/test-matrix.md](../test-matrix.md) |
