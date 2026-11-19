@@ -1726,6 +1726,63 @@ def real_proof(ctx):
     }
 
 
+def real_evidence_proof(ctx):
+    """Drive the Engine-owned real-FreeCAD occurrence, fact, and integrity
+    acceptance proof. The Go harness authors every request through Engine
+    contracts, invokes the production parametron-freecad launcher, and consumes
+    the returned evidence through Engine strict intake and normalization."""
+    built = run(["nix", "build", "--no-link", "--print-out-paths",
+                 str(ctx.freecad_repo) + "#parametron-freecad"],
+                cwd=ctx.engine_repo, timeout=ctx.timeout)
+    runtime = Path(built.stdout.strip().splitlines()[-1]) / "bin/parametron-freecad"
+    require(runtime.is_file() and os.access(runtime, os.X_OK), "real FreeCAD wrapper unavailable")
+    smoke = json.loads(run([runtime, "smoke"], cwd=ctx.workspace, timeout=ctx.timeout).stdout)
+    require(smoke.get("status") == "ok" and smoke.get("host") == "freecadcmd" and
+            smoke.get("freecadVersion", [])[:3] == ["1", "1", "4"],
+            f"real FreeCAD smoke failed: {smoke}")
+
+    evidence_root = ctx.workspace / "evidence"
+    evidence_root.mkdir(parents=True, exist_ok=True)
+    evidence_report = evidence_root / "evidence-proof-report.json"
+    env = dict(os.environ)
+    env.update({
+        "PARAMETRON_FREECAD_EVIDENCE_PROOF": "1",
+        "PARAMETRON_FREECAD_RUNTIME": str(runtime),
+        "PARAMETRON_FREECAD_REPO": str(ctx.freecad_repo),
+        "PARAMETRON_FREECAD_EVIDENCE_WORKSPACE": str(evidence_root),
+        "PARAMETRON_FREECAD_EVIDENCE_REPORT": str(evidence_report),
+    })
+    completed = run(
+        ["nix", "develop", "--command", "go", "test", "./cmd/parametron",
+         "-run", "^TestRealFreeCADEvidenceProof$", "-count=1", "-v"],
+        cwd=ctx.engine_repo, env=env, timeout=ctx.timeout, check=False,
+    )
+    require(evidence_report.is_file(),
+            "Engine evidence proof produced no report\n"
+            f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}")
+    evidence = json_file(evidence_report)
+    require(evidence.get("status") == "passed",
+            "Engine evidence proof did not pass\n"
+            f"report:\n{json.dumps(evidence, indent=2)}\n"
+            f"stdout:\n{completed.stdout}\nstderr:\n{completed.stderr}")
+    scenarios = evidence.get("scenarios") or []
+    require(len(scenarios) >= 6, f"Engine evidence proof scenarios incomplete: {scenarios}")
+    require(all(item.get("status") == "passed" for item in scenarios),
+            f"Engine evidence proof scenario failed: {scenarios}")
+    require(evidence.get("crossRepositoryBlocker", {}).get("boundary") == "freecad",
+            "Engine evidence proof lost the documented cross-repository blocker")
+    return {
+        "launcher": "parametron-freecad",
+        "host": smoke["host"],
+        "freecadVersion": smoke["freecadVersion"],
+        "runtime": str(runtime),
+        "scenarios": scenarios,
+        "crossRepositoryBlocker": evidence.get("crossRepositoryBlocker"),
+        "engineReport": evidence,
+        "goTestExit": completed.returncode,
+    }
+
+
 def timeout_proof(ctx, runtime):
     """Prove that run()'s subprocess timeout is bounded and diagnostic,
     independent of machine speed or Go build-cache state: PARAMETRON_CAD_PROOF_MODE=block
@@ -1760,15 +1817,16 @@ def main():
     parser.add_argument("--engine-repo", type=Path, default=script_repo)
     parser.add_argument("--freecad-repo", type=Path, default=script_repo.parent / "parametron-freecad")
     parser.add_argument("--workspace", type=Path)
-    parser.add_argument("--mode", choices=("fake", "real", "all", "timeout", "target-foundation",
-                                           "unsafe-delete-foundation", "target-mutations-real",
+    parser.add_argument("--mode", choices=("fake", "real", "evidence-real", "all", "timeout",
+                                           "target-foundation", "unsafe-delete-foundation",
+                                           "target-mutations-real",
                                            "native-validity-real"), default="all")
     parser.add_argument("--report", type=Path)
     parser.add_argument("--keep-workspace", action="store_true")
     parser.add_argument("--timeout", type=int, default=240)
     args = parser.parse_args()
     if args.mode in ("target-foundation", "unsafe-delete-foundation", "target-mutations-real",
-                     "native-validity-real") and "--freecad-repo" not in sys.argv:
+                     "native-validity-real", "evidence-real") and "--freecad-repo" not in sys.argv:
         parser.error(f"{args.mode} requires explicit --freecad-repo")
 
     owned_temp = args.workspace is None
@@ -1818,6 +1876,8 @@ def main():
                 summary["scenarios"] = fake_proof(ctx, controlled)
             if args.mode in ("real", "all"):
                 summary["realRuntime"] = real_proof(ctx)
+            if args.mode in ("evidence-real", "all"):
+                summary["realEvidence"] = real_evidence_proof(ctx)
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         verdict = "PASS"

@@ -105,3 +105,29 @@ func TestWriteFactRequestMaterializesExactVersionedIntent(t *testing.T) {
 		t.Fatalf("invalid request was materialized, stat err = %v", err)
 	}
 }
+
+func TestComposeFactRequestJSONIsEngineOwnedCanonicalIntent(t *testing.T) {
+	request := factTestRequest(factTestBinding("widget", "Body", "Length", recordcontract.FactValueKindNumber, "mm"))
+	content, err := ComposeFactRequestJSON(request)
+	if err != nil {
+		t.Fatalf("ComposeFactRequestJSON returned error: %v", err)
+	}
+	if len(content) == 0 || content[len(content)-1] != '\n' {
+		t.Fatalf("composed fact request is not newline terminated: %q", content)
+	}
+	decoded, err := DecodeFactRequest(content)
+	if err != nil {
+		t.Fatalf("DecodeFactRequest(composed) returned error: %v", err)
+	}
+	if !reflect.DeepEqual(decoded, *request) {
+		t.Fatalf("composed fact request = %#v, want %#v", decoded, *request)
+	}
+	if content, err := ComposeFactRequestJSON(nil); err != nil || content != nil {
+		t.Fatalf("nil fact intent = %q, %v; want nil bytes and nil error", content, err)
+	}
+	invalid := factTestRequest(factTestBinding("widget", "Body", "Length", recordcontract.FactValueKindNumber, "mm"))
+	invalid.Bindings[0].Kind = "physical_mass"
+	if _, err := ComposeFactRequestJSON(invalid); !errors.Is(err, recordcontract.ErrInvalidFact) {
+		t.Fatalf("invalid fact intent error = %v, want ErrInvalidFact", err)
+	}
+}

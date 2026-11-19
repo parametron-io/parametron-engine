@@ -270,6 +270,19 @@ record packaging.
 - **Opt-in Real FreeCAD Integration (`scripts/cad_runtime_integration_proof.py --mode real`)**:
   Executes live CAD mutation, recompute, export, and verification against
   `parametron-freecad` and FreeCAD binaries.
+- **Opt-in Real FreeCAD Evidence Acceptance
+  (`cmd/parametron/real_evidence_proof_test.go`,
+  `scripts/cad_runtime_integration_proof.py --mode evidence-real`)**: Requires
+  a real FreeCAD 1.1.4 host and the production `parametron-freecad` launcher.
+  Engine authors every occurrence, fact, and integrity request through typed
+  contracts, then consumes the returned evidence through strict decoding,
+  declared-resource joins, quantity rollup, normalized package emission, and
+  independent persisted-result hashing. Covers complete and incomplete
+  occurrence scopes, explicit unsupported/unresolved/auxiliary states, scalar
+  facts, required fact failure, baseline mismatch, relocation, repeated runs,
+  and multi-outcome evidence. It documents the cross-repository external-link
+  layout blocker rather than substituting a fake runtime. See
+  [Real FreeCAD Evidence Acceptance Proof](real-evidence-proof.md).
 
 ## Canonical Verification Commands
 

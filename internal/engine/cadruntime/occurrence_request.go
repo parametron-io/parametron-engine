@@ -13,6 +13,23 @@ import (
 const OccurrenceRequestFilename = "prm.occurrence-request.json"
 const OccurrenceEvidenceFilename = "prm.occurrence-evidence.json"
 
+// ComposeOccurrenceRequestJSON validates explicit occurrence intent and returns
+// the canonical request-document bytes used by the runtime sidecar. It is the
+// single Engine-owned authoring path for the occurrence request contract.
+func ComposeOccurrenceRequestJSON(request *recordcontract.OccurrenceRequest) ([]byte, error) {
+	if request == nil {
+		return nil, nil
+	}
+	if err := recordcontract.ValidateOccurrenceRequest(*request); err != nil {
+		return nil, err
+	}
+	content, err := json.Marshal(request)
+	if err != nil {
+		return nil, err
+	}
+	return append(content, '\n'), nil
+}
+
 // writeOccurrenceRequest writes an optional sidecar in the already prepared,
 // confined attempt. No new process argument or runtime capability is implied.
 func writeOccurrenceRequest(root string, request *recordcontract.OccurrenceRequest) error {
@@ -23,10 +40,7 @@ func writeOccurrenceRequest(root string, request *recordcontract.OccurrenceReque
 	if request == nil {
 		return nil
 	}
-	if err := recordcontract.ValidateOccurrenceRequest(*request); err != nil {
-		return err
-	}
-	content, err := json.Marshal(request)
+	content, err := ComposeOccurrenceRequestJSON(request)
 	if err != nil {
 		return err
 	}
@@ -35,7 +49,7 @@ func writeOccurrenceRequest(root string, request *recordcontract.OccurrenceReque
 		return err
 	}
 	defer os.Remove(temp.Name())
-	if _, err = temp.Write(append(content, '\n')); err != nil {
+	if _, err = temp.Write(content); err != nil {
 		temp.Close()
 		return err
 	}
