@@ -75,6 +75,13 @@ record packaging.
   Planner tests prove equivalent plan JSON and hashes, identity changes for used
   native mappings, identity independence from DisplayName and unused mappings,
   ordering by projected runtime objects, and `keep` without a native mapping.
+- **Target-Scoped Metadata Resolution (`internal/engine/semantic`, `internal/engine/semanticmap`)**:
+  Resolves exact semantic targets and exact captured metadata ownership,
+  validates writable and observable capability, maps captured `valueType` plus
+  native type to `string`, `boolean`, `number`, or `integer`, resolves native
+  owner and property identity, and rejects unsupported or invalid cases
+  deterministically. Resolved-value validation requires exact integral finite
+  numbers for integer metadata.
 - **DSL Regression Gate (`testdata/dsl/stress.dsl`)**: Comprehensive regression
   suite exercising language features, math functions, conditionals, and manifest
   generation.

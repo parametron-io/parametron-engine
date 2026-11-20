@@ -355,7 +355,7 @@ func ResolveSemanticTargetByExactName(model *Model, name string) (ResolvedSemant
 	matches := resolveSemanticMutationTargetsByExactName(model, name)
 	switch len(matches) {
 	case 0:
-		return ResolvedSemanticTarget{}, fmt.Errorf("semantic target %q does not resolve to a Feature or Component by exact Name", name)
+		return ResolvedSemanticTarget{}, &TargetResolutionError{Name: name}
 	case 1:
 		return matches[0], nil
 	default:
@@ -363,7 +363,7 @@ func ResolveSemanticTargetByExactName(model *Model, name string) (ResolvedSemant
 		for _, match := range matches {
 			descriptors = append(descriptors, match.SemanticEntityKind+":"+match.SemanticID)
 		}
-		return ResolvedSemanticTarget{}, fmt.Errorf("semantic target %q is ambiguous across candidates [%s]", name, strings.Join(descriptors, " "))
+		return ResolvedSemanticTarget{}, &TargetResolutionError{Name: name, Candidates: descriptors, Ambiguous: true}
 	}
 }
 

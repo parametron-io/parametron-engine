@@ -47,6 +47,12 @@ var (
 	supportedMetadataValueKinds = map[string]struct{}{
 		"capture.nativeType": {},
 	}
+	supportedResolvedMetadataValueKinds = map[string]struct{}{
+		MetadataValueKindString:  {},
+		MetadataValueKindBoolean: {},
+		MetadataValueKindNumber:  {},
+		MetadataValueKindInteger: {},
+	}
 )
 
 func Validate(contract *SemanticMap) error {
@@ -263,6 +269,24 @@ func validate(contract *SemanticMap) []string {
 				problems = append(problems, location+".valueKind must not have leading or trailing whitespace")
 			} else if _, ok := supportedMetadataValueKinds[entry.ValueKind]; !ok {
 				problems = append(problems, fmt.Sprintf("%s.valueKind %q is not supported", location, entry.ValueKind))
+			}
+			if entry.NativeValueKinds != nil && len(entry.NativeValueKinds) == 0 {
+				problems = append(problems, location+".nativeValueKinds must not be empty when present")
+			}
+			for _, nativeType := range sortedKeys(entry.NativeValueKinds) {
+				valueKind := entry.NativeValueKinds[nativeType]
+				if strings.TrimSpace(nativeType) == "" {
+					problems = append(problems, location+".nativeValueKinds key must not be empty")
+				} else if nativeType != strings.TrimSpace(nativeType) {
+					problems = append(problems, fmt.Sprintf("%s.nativeValueKinds key %q must not have leading or trailing whitespace", location, nativeType))
+				}
+				if strings.TrimSpace(valueKind) == "" {
+					problems = append(problems, fmt.Sprintf("%s.nativeValueKinds[%q] must reference a non-empty metadata value kind", location, nativeType))
+				} else if valueKind != strings.TrimSpace(valueKind) {
+					problems = append(problems, fmt.Sprintf("%s.nativeValueKinds[%q] must not have leading or trailing whitespace", location, nativeType))
+				} else if _, ok := supportedResolvedMetadataValueKinds[valueKind]; !ok {
+					problems = append(problems, fmt.Sprintf("%s.nativeValueKinds[%q] %q is not supported", location, nativeType, valueKind))
+				}
 			}
 			key := entry.CaptureKind + "\x00" + entry.SemanticKind
 			if prev, ok := seenMetadata[key]; ok {

@@ -77,6 +77,9 @@ func cloneCaptureToSemantic(in *CaptureToSemantic) *CaptureToSemantic {
 	for i := range out.Components {
 		out.Components[i].SemanticKinds = cloneMap(in.Components[i].SemanticKinds)
 	}
+	for i := range out.Metadata {
+		out.Metadata[i].NativeValueKinds = cloneMap(in.Metadata[i].NativeValueKinds)
+	}
 
 	return &out
 }
