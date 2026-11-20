@@ -32,6 +32,7 @@ type ProductNode struct {
 	Lets                      []*LetNode
 	Parameters                []*ParameterNode
 	TargetActions             []*TargetActionNode
+	TargetMetadata            []*TargetMetadataNode
 	Adapter                   ExpressionNode
 	SourceModel               ExpressionNode
 	Outputs                   ExpressionNode
@@ -49,6 +50,30 @@ type TargetActionNode struct {
 }
 
 func (t *TargetActionNode) isNode() {}
+
+// TargetMetadataNode represents one metadata declaration authored for a
+// semantic target. Example: metadata material = "S235JR"
+type TargetMetadataNode struct {
+	SemanticTarget string
+	Key            string
+	Value          ExpressionNode
+	// Settings is the parsed optional settings block. It is nil for both an
+	// omitted block and an empty block. DSL version 1.0 defines no supported
+	// settings, so validation rejects a non-empty block.
+	Settings []*TargetMetadataSettingNode
+}
+
+func (t *TargetMetadataNode) isNode() {}
+
+// TargetMetadataSettingNode is one structurally parsed entry inside an
+// optional target-metadata settings block. DSL version 1.0 defines no
+// supported settings; validation rejects a non-empty block.
+type TargetMetadataSettingNode struct {
+	Key   string
+	Value ExpressionNode
+}
+
+func (t *TargetMetadataSettingNode) isNode() {}
 
 // LetNode represents a product-local binding inside a product.
 // Example: let area = width * height
