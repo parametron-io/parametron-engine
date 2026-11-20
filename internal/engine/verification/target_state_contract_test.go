@@ -106,10 +106,10 @@ func TestTargetStateRequest_DerivationWithoutTargetMutationsOmitsTargetState(t *
 	// Non-target mutation families alone must not request target state either.
 	contract = deriveTargetStateContract(t,
 		&planner.ExportManifestMutationCollection{
-			Properties: []planner.ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "x"}},
+			Metadata:   []planner.ExportManifestMetadataMutation{{Object: "Box", Property: "Label", Value: "x", ValueKind: "string"}},
 		}, nil)
 	if contract.Observe.TargetState || contract.ObservationContext.TargetState != nil {
-		t.Fatalf("property-only mutations must not request target state: %+v", contract)
+		t.Fatalf("metadata-only mutations must not request target state: %+v", contract)
 	}
 	if bytes.Contains(mustCanonical(t, contract), []byte("targetState")) {
 		t.Fatal("canonical JSON must omit targetState")

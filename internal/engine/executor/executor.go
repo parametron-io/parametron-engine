@@ -550,13 +550,14 @@ func cloneMutationCollection(in *planner.ExportManifestMutationCollection) *plan
 		Visibility:  append([]planner.ExportManifestVisibilityMutation(nil), in.Visibility...),
 		Deletion:    append([]planner.ExportManifestDeletionMutation(nil), in.Deletion...),
 	}
-	if in.Properties != nil {
-		out.Properties = make([]planner.ExportManifestPropertyMutation, len(in.Properties))
-		for i, property := range in.Properties {
-			out.Properties[i] = planner.ExportManifestPropertyMutation{
-				Object:   property.Object,
-				Property: property.Property,
-				Value:    cloneInterfaceValue(property.Value),
+	if in.Metadata != nil {
+		out.Metadata = make([]planner.ExportManifestMetadataMutation, len(in.Metadata))
+		for i, metadata := range in.Metadata {
+			out.Metadata[i] = planner.ExportManifestMetadataMutation{
+				Object:    metadata.Object,
+				Property:  metadata.Property,
+				Value:     cloneInterfaceValue(metadata.Value),
+				ValueKind: metadata.ValueKind,
 			}
 		}
 	}

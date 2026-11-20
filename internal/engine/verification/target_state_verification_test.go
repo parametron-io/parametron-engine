@@ -226,9 +226,9 @@ func TestExpectedTargetState_AbsentWithoutTargetMutations(t *testing.T) {
 	if got := deriveTargetStateContract(t, nil, nil).Expected.TargetState; got != nil {
 		t.Fatalf("no mutations must not derive expected target state: %+v", got)
 	}
-	propertyOnly := &tsMutations{Properties: []planner.ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "x"}}}
-	if got := deriveTargetStateContract(t, propertyOnly, nil).Expected.TargetState; got != nil {
-		t.Fatalf("property-only mutations must not derive expected target state: %+v", got)
+	metadataOnly := &tsMutations{Metadata: []planner.ExportManifestMetadataMutation{{Object: "Box", Property: "Label", Value: "x", ValueKind: "string"}}}
+	if got := deriveTargetStateContract(t, metadataOnly, nil).Expected.TargetState; got != nil {
+		t.Fatalf("metadata-only mutations must not derive expected target state: %+v", got)
 	}
 	if got := deriveTargetStateContract(t, &tsMutations{}, &tsMutations{}).Expected.TargetState; got != nil {
 		t.Fatalf("empty collections must not derive expected target state: %+v", got)

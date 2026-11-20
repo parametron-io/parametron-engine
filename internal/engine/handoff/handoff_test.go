@@ -444,8 +444,8 @@ func TestPackagePlan_ReconstructsOriginalOrderAndPayloads(t *testing.T) {
 					Parameters: []planner.ExportManifestParameterMutation{
 						{Object: "Assembly", Property: "Length", ValueParam: "first", Type: "number", Unit: "mm"},
 					},
-					Properties: []planner.ExportManifestPropertyMutation{
-						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"label": "primary"}},
+					Metadata: []planner.ExportManifestMetadataMutation{
+						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"label": "primary"}, ValueKind: "string"},
 					},
 				},
 				PartMutations: &planner.ExportManifestMutationCollection{
@@ -643,8 +643,8 @@ func TestFromJob_ManifestMutationsRoundTripThroughJSON(t *testing.T) {
 					Parameters: []planner.ExportManifestParameterMutation{
 						{Object: "Assembly", Property: "Length", ValueParam: "width", Type: "number", Unit: "mm"},
 					},
-					Properties: []planner.ExportManifestPropertyMutation{
-						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"kind": "fixture"}},
+					Metadata: []planner.ExportManifestMetadataMutation{
+						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"kind": "fixture"}, ValueKind: "string"},
 					},
 				},
 				PartMutations: &planner.ExportManifestMutationCollection{

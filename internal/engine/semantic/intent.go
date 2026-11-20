@@ -167,15 +167,6 @@ func buildProductIntent(model *Model, product *dsl.ProductNode, consts map[strin
 					ids,
 				))
 			}
-		case dsl.ParamTypeString, dsl.ParamTypeBoolean:
-			propertyIntent, problems := buildPropertyMutationIntent(model, product.Name, param)
-			if len(problems) > 0 {
-				diagnostics = append(diagnostics, problems...)
-				continue
-			}
-			if propertyIntent != nil {
-				intent.Mutations = append(intent.Mutations, *propertyIntent)
-			}
 		}
 	}
 
@@ -238,41 +229,6 @@ func buildOutputIntents(model *Model, productName string, formats []string) ([]O
 		}
 	}
 	return outputs, nil
-}
-
-func buildPropertyMutationIntent(model *Model, productName string, param *dsl.ParameterNode) (*MutationIntent, []DSLIntentDiagnostic) {
-	if param == nil {
-		return nil, nil
-	}
-
-	matches := resolveMetadataByExactKey(model, param.Name)
-	switch len(matches) {
-	case 0:
-		return nil, nil
-	case 1:
-		metadata := matches[0]
-		return &MutationIntent{
-			OperationKind:    "set_property",
-			TargetEntityKind: "metadata",
-			TargetSemanticID: metadata.ID,
-			TargetField:      metadata.Key,
-			Scope:            mutationScopeForComponent(model, metadata.ComponentID),
-			ValueSource: MutationValueSource{
-				Kind:             "dsl_parameter",
-				DSLParameterName: param.Name,
-			},
-		}, nil
-	default:
-		ids := collectMetadataIDs(matches)
-		return nil, []DSLIntentDiagnostic{newDSLIntentDiagnostic(
-			DSLIntentDiagnosticCategoryAmbiguousDSLReference,
-			DSLIntentDiagnosticCodeSemanticMetadataReferenceAmbiguous,
-			productName,
-			param.Name,
-			fmt.Sprintf("product %q parameter %q is ambiguous across semantic metadata %q", productName, param.Name, ids),
-			ids,
-		)}
-	}
 }
 
 // ResolvedSemanticTarget identifies one semantic Feature or Component selected
@@ -426,19 +382,6 @@ func resolveSemanticParametersByExactName(model *Model, name string) []Parameter
 	return matches
 }
 
-func resolveMetadataByExactKey(model *Model, key string) []Metadata {
-	if model == nil {
-		return nil
-	}
-	matches := make([]Metadata, 0)
-	for _, entry := range model.Metadata {
-		if entry.Key == key {
-			matches = append(matches, entry)
-		}
-	}
-	return matches
-}
-
 func resolveFeaturesByExactName(model *Model, name string) []Feature {
 	if model == nil {
 		return nil
@@ -495,15 +438,6 @@ func mutationScopeForComponent(model *Model, componentID string) string {
 }
 
 func collectParameterIDs(matches []Parameter) []string {
-	ids := make([]string, 0, len(matches))
-	for _, match := range matches {
-		ids = append(ids, match.ID)
-	}
-	slices.Sort(ids)
-	return ids
-}
-
-func collectMetadataIDs(matches []Metadata) []string {
 	ids := make([]string, 0, len(matches))
 	for _, match := range matches {
 		ids = append(ids, match.ID)

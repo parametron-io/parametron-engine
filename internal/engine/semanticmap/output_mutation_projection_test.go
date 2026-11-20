@@ -372,7 +372,7 @@ func TestProjectMutations_ProjectionReviewNotReadyFailsDeterministically(t *test
 	}
 }
 
-func TestProjectMutations_ProjectsStructuredMutationsWithoutMetadataLeakage(t *testing.T) {
+func TestProjectMutations_ProjectsStructuredMutations(t *testing.T) {
 	model := outputMutationProjectionModel()
 	linkage := mustLinkOutputMutationProjectionModel(t, model)
 
@@ -389,7 +389,6 @@ func TestProjectMutations_ProjectsStructuredMutationsWithoutMetadataLeakage(t *t
 
 	want := &ManifestMutationProjection{
 		Assembly: &ManifestMutationCollection{
-			Properties:  []ManifestPropertyMutation{{Object: "AssemblyA", Property: "part_number_a", Value: "PN-1"}},
 			Suppression: []ManifestSuppressionMutation{{Object: "Bracket-1", Suppressed: true}},
 		},
 		Part: &ManifestMutationCollection{
@@ -471,7 +470,6 @@ func TestProjectMutations_AssemblyVsPartPlacementIsDeterministic(t *testing.T) {
 		Intent: outputMutationProjectionIntentWithMutations(
 			semantic.MutationIntent{OperationKind: "unsuppress", TargetEntityKind: "feature", TargetSemanticID: "feat.part", Scope: "part", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter"}},
 			semantic.MutationIntent{OperationKind: "suppress", TargetEntityKind: "feature", TargetSemanticID: "feat.assembly", Scope: "assembly", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter"}},
-			semantic.MutationIntent{OperationKind: "set_property", TargetEntityKind: "metadata", TargetSemanticID: "meta.a", Scope: "assembly", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter", DSLParameterName: "part_number_a"}},
 			semantic.MutationIntent{OperationKind: "set_parameter", TargetEntityKind: "parameter", TargetSemanticID: "par.b", TargetField: "width", Scope: "part", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter", DSLParameterName: "width", SemanticParameterID: "par.b"}},
 		),
 		ResolvedValues:  map[string]any{"part_number_a": "PN-1", "width": 35.0},
@@ -548,7 +546,6 @@ func TestMarshalReducedExecutionProjectionJSON_OutputAndMutationDeterminismAcros
 		Intent: outputMutationProjectionIntentWithMutations(
 			semantic.MutationIntent{OperationKind: "unsuppress", TargetEntityKind: "feature", TargetSemanticID: "feat.part", Scope: "part", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter"}},
 			semantic.MutationIntent{OperationKind: "suppress", TargetEntityKind: "feature", TargetSemanticID: "feat.assembly", Scope: "assembly", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter"}},
-			semantic.MutationIntent{OperationKind: "set_property", TargetEntityKind: "metadata", TargetSemanticID: "meta.a", Scope: "assembly", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter", DSLParameterName: "part_number_a"}},
 			semantic.MutationIntent{OperationKind: "set_parameter", TargetEntityKind: "parameter", TargetSemanticID: "par.b", TargetField: "width", Scope: "part", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter", DSLParameterName: "width", SemanticParameterID: "par.b"}},
 		),
 		ResolvedValues: map[string]any{
@@ -581,14 +578,14 @@ func TestProjectMutations_IncompleteMutationValueSourceFailsDeterministically(t 
 
 	first, firstErr := ProjectMutations(&MutationProjectionRequest{
 		Model:           model,
-		Intent:          outputMutationProjectionIntentWithMutations(semantic.MutationIntent{OperationKind: "set_property", TargetEntityKind: "metadata", TargetSemanticID: "meta.a", Scope: "assembly", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter"}}),
+		Intent:          outputMutationProjectionIntentWithMutations(semantic.MutationIntent{OperationKind: "set_parameter", TargetEntityKind: "parameter", TargetSemanticID: "par.b", TargetField: "width", Scope: "part", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter", SemanticParameterID: "par.b"}}),
 		ResolvedValues:  map[string]any{},
 		Contract:        loadFixture(t, "smoke/freecad-default"),
 		IdentityLinkage: linkage,
 	})
 	second, secondErr := ProjectMutations(&MutationProjectionRequest{
 		Model:           model,
-		Intent:          outputMutationProjectionIntentWithMutations(semantic.MutationIntent{OperationKind: "set_property", TargetEntityKind: "metadata", TargetSemanticID: "meta.a", Scope: "assembly", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter"}}),
+		Intent:          outputMutationProjectionIntentWithMutations(semantic.MutationIntent{OperationKind: "set_parameter", TargetEntityKind: "parameter", TargetSemanticID: "par.b", TargetField: "width", Scope: "part", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter", SemanticParameterID: "par.b"}}),
 		ResolvedValues:  map[string]any{},
 		Contract:        loadFixture(t, "smoke/freecad-default"),
 		IdentityLinkage: linkage,
@@ -607,7 +604,7 @@ func TestProjectMutations_IncompleteMutationValueSourceFailsDeterministically(t 
 		t.Fatalf("expected ProjectionError, got %T", firstErr)
 	}
 	wantProblems := []string{
-		`semantic mutation operation "set_property" requires semantic mutation value intent for manifest field "value"`,
+		`semantic mutation operation "set_parameter" requires semantic mutation value intent for manifest field "valueParam"`,
 	}
 	if !reflect.DeepEqual(projectionErr.ProblemList(), wantProblems) {
 		t.Fatalf("unexpected problem list\nwant: %#v\ngot:  %#v", wantProblems, projectionErr.ProblemList())
@@ -636,7 +633,6 @@ func outputMutationProjectionIntent() *semantic.ProductIntent {
 		},
 		[]semantic.MutationIntent{
 			{OperationKind: "set_parameter", TargetEntityKind: "parameter", TargetSemanticID: "par.b", TargetField: "width", Scope: "part", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter", DSLParameterName: "width", SemanticParameterID: "par.b"}},
-			{OperationKind: "set_property", TargetEntityKind: "metadata", TargetSemanticID: "meta.a", Scope: "assembly", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter", DSLParameterName: "part_number_a"}},
 			{OperationKind: "suppress", TargetEntityKind: "feature", TargetSemanticID: "feat.assembly", Scope: "assembly", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter"}},
 			{OperationKind: "unsuppress", TargetEntityKind: "feature", TargetSemanticID: "feat.part", Scope: "part", ValueSource: semantic.MutationValueSource{Kind: "dsl_parameter"}},
 		},

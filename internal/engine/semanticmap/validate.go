@@ -26,12 +26,10 @@ var (
 	}
 	knownMutationCollections = map[string]struct{}{
 		"assemblyMutations.parameters":  {},
-		"assemblyMutations.properties":  {},
 		"assemblyMutations.suppression": {},
 		"assemblyMutations.visibility":  {},
 		"assemblyMutations.deletion":    {},
 		"partMutations.parameters":      {},
-		"partMutations.properties":      {},
 		"partMutations.suppression":     {},
 		"partMutations.visibility":      {},
 		"partMutations.deletion":        {},
@@ -454,13 +452,6 @@ func validateSemanticToManifest(mapping *SemanticToManifest) []string {
 					problems = append(problems, location+".value must not be set")
 				}
 				problems = append(problems, validateForbiddenField(location+".propertyField", entry.PropertyField)...)
-			case strings.HasSuffix(entry.ManifestCollection, ".properties"):
-				problems = append(problems, validateExactTrimmedField(location+".targetField", entry.TargetField, "object")...)
-				problems = append(problems, validateExactTrimmedField(location+".propertyField", entry.PropertyField, "property")...)
-				problems = append(problems, validateExactTrimmedField(location+".valueField", entry.ValueField, "value")...)
-				if entry.Value != nil {
-					problems = append(problems, location+".value must not be set")
-				}
 			case strings.HasSuffix(entry.ManifestCollection, ".parameters"):
 				problems = append(problems, validateExactTrimmedField(location+".targetField", entry.TargetField, "object")...)
 				problems = append(problems, validateExactTrimmedField(location+".propertyField", entry.PropertyField, "property")...)

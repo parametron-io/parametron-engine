@@ -79,9 +79,9 @@ func cloneAttemptMutations(in *planner.ExportManifestMutationCollection) *planne
 	}
 	out := *in
 	out.Parameters = append([]planner.ExportManifestParameterMutation(nil), in.Parameters...)
-	out.Properties = append([]planner.ExportManifestPropertyMutation(nil), in.Properties...)
-	for i := range out.Properties {
-		out.Properties[i].Value = cloneAttemptAny(in.Properties[i].Value)
+	out.Metadata = append([]planner.ExportManifestMetadataMutation(nil), in.Metadata...)
+	for i := range out.Metadata {
+		out.Metadata[i].Value = cloneAttemptAny(in.Metadata[i].Value)
 	}
 	out.Suppression = append([]planner.ExportManifestSuppressionMutation(nil), in.Suppression...)
 	return &out
@@ -131,7 +131,7 @@ func enrichFreeCADRuntimeAttemptRequest(req *adapter.CADRuntimeOrchestrationRequ
 	req.Manifest.Values = map[string]interface{}{"width": 10.0, "nested": map[string]interface{}{"labels": []interface{}{"a", "b"}}}
 	req.Manifest.ParameterAssignments = []planner.ExportManifestParameterAssignment{{Name: "width", Target: "Body.Width", Value: 10, Type: "number", Unit: "mm"}}
 	req.Manifest.AssemblyMutations = &planner.ExportManifestMutationCollection{
-		Properties:  []planner.ExportManifestPropertyMutation{{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"label": "widget"}}},
+		Metadata:    []planner.ExportManifestMetadataMutation{{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"label": "widget"}, ValueKind: "string"}},
 		Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Bracket", Suppressed: true}},
 	}
 	req.Manifest.PartMutations = &planner.ExportManifestMutationCollection{

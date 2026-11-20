@@ -15,8 +15,8 @@ import (
 // project structurally into optional runtime `assemblyMutations` /
 // `partMutations` sections that contain ONLY the suppression / visibility /
 // deletion families, with exact canonical entry shapes. The sections are
-// omitted when no runtime mutations exist. Nested Parameters / Properties
-// metadata is filtered out while top-level parameterAssignments remains the
+// omitted when no runtime mutations exist. Nested Parameters / Metadata
+// intent is filtered out while top-level parameterAssignments remains the
 // sole executable native scalar-write surface. Every other schemaVersion,
 // including the retired "2.0", is rejected.
 
@@ -107,7 +107,7 @@ func TestTask11Adapter_RuntimeManifestTypeShape(t *testing.T) {
 			t.Fatalf("collection field %d: got %q/%q want %q/%q", i, f.Name, f.Tag.Get("json"), want.name, want.tag)
 		}
 	}
-	for _, forbidden := range []string{"Parameters", "Properties"} {
+	for _, forbidden := range []string{"Parameters", "Properties", "Metadata"} {
 		if _, ok := col.FieldByName(forbidden); ok {
 			t.Fatalf("runtime mutation collection must not carry %q", forbidden)
 		}
@@ -456,15 +456,15 @@ func TestTask11Adapter_OmitemptyContract(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// PART J — runtime filtering (Parameters / Properties never reach runtime)
+// PART J — runtime filtering (Parameters / Metadata intent never reach runtime)
 // ---------------------------------------------------------------------------
 
-func TestTask11Adapter_NestedParametersAndPropertiesAreFiltered(t *testing.T) {
+func TestTask11Adapter_NestedParametersAndMetadataIntentAreFiltered(t *testing.T) {
 	for _, section := range []string{"part", "assembly"} {
 		t.Run(section, func(t *testing.T) {
 			col := &planner.ExportManifestMutationCollection{
 				Parameters:  []planner.ExportManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width", Type: "number", Unit: "mm"}},
-				Properties:  []planner.ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "primary"}},
+				Metadata:    []planner.ExportManifestMetadataMutation{{Object: "Box", Property: "Label", Value: "primary", ValueKind: "string"}},
 				Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 				Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
 				Deletion:    []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}},
@@ -567,8 +567,8 @@ func TestTask11Adapter_SchemaValidationMatrix(t *testing.T) {
 	paramsOnly := func(p *planner.WriteExportManifestPayload) {
 		p.PartMutations = &planner.ExportManifestMutationCollection{Parameters: []planner.ExportManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width"}}}
 	}
-	propsOnly := func(p *planner.WriteExportManifestPayload) {
-		p.PartMutations = &planner.ExportManifestMutationCollection{Properties: []planner.ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "primary"}}}
+	metadataOnly := func(p *planner.WriteExportManifestPayload) {
+		p.PartMutations = &planner.ExportManifestMutationCollection{Metadata: []planner.ExportManifestMetadataMutation{{Object: "Box", Property: "Label", Value: "primary", ValueKind: "string"}}}
 	}
 
 	base := func(schema string, apply func(*planner.WriteExportManifestPayload)) planner.WriteExportManifestPayload {
@@ -594,7 +594,7 @@ func TestTask11Adapter_SchemaValidationMatrix(t *testing.T) {
 		{"1.0 visibility accepted", base("1.0", visibility), ""},
 		{"1.0 deletion accepted", base("1.0", deletion), ""},
 		{"1.0 internal parameters only accepted", base("1.0", paramsOnly), ""},
-		{"1.0 internal properties only accepted", base("1.0", propsOnly), ""},
+		{"1.0 metadata intent only accepted", base("1.0", metadataOnly), ""},
 		{"2.0 no mutation rejected", base("2.0", nil), `"2.0" is not supported`},
 		{"2.0 suppression rejected", base("2.0", suppression), `"2.0" is not supported`},
 		{"2.0 visibility rejected", base("2.0", visibility), `"2.0" is not supported`},

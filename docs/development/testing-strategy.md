@@ -82,6 +82,17 @@ record packaging.
   owner and property identity, and rejects unsupported or invalid cases
   deterministically. Resolved-value validation requires exact integral finite
   numbers for integer metadata.
+- **Target-Scoped Metadata Planning (`internal/authoring/planner`)**: Lowers
+  resolved DSL target metadata into native runtime metadata mutations carrying
+  only `object`, `property`, `value`, and `valueKind`. Tests cover component and
+  Feature routing to Part and Assembly buckets, `let`/`param`/constant/
+  `table_cell`/ternary value evaluation, type/kind/writability/observability
+  rejection, duplicate semantic and native conflict detection, canonical
+  ordering independent of authoring order, and plan identity sensitivity to
+  value, key, and target while remaining independent of display labels. The
+  retired implicit `param` → `set_property` path is proven to emit no metadata
+  mutation, and numeric parameter assignments and target actions coexist with
+  metadata intent.
 - **DSL Regression Gate (`testdata/dsl/stress.dsl`)**: Comprehensive regression
   suite exercising language features, math functions, conditionals, and manifest
   generation.

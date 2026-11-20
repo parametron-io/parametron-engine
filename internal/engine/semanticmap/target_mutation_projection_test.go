@@ -107,12 +107,11 @@ func assertExactStructShape(t *testing.T, rt reflect.Type, want map[string]refle
 	}
 }
 
-// 4. The broader internal mutation collection retains all five families:
-// Parameters + Properties survive alongside the new Suppression + Visibility +
-// Deletion. Task 10 must not remove Parameters or Properties.
+// 4. The broader internal mutation collection retains all four families:
+// Parameters survive alongside Suppression + Visibility + Deletion.
 func TestManifestMutationCollection_RetainsAllFamilies(t *testing.T) {
 	rt := reflect.TypeOf(ManifestMutationCollection{})
-	want := []string{"Parameters", "Properties", "Suppression", "Visibility", "Deletion"}
+	want := []string{"Parameters", "Suppression", "Visibility", "Deletion"}
 	if rt.NumField() != len(want) {
 		t.Fatalf("ManifestMutationCollection field count changed: want %d, got %d", len(want), rt.NumField())
 	}
@@ -121,10 +120,10 @@ func TestManifestMutationCollection_RetainsAllFamilies(t *testing.T) {
 			t.Fatalf("ManifestMutationCollection field %d: want %q, got %q", i, name, rt.Field(i).Name)
 		}
 	}
-	if got := reflect.TypeOf(ManifestMutationCollection{}).Field(3).Type; got != reflect.TypeOf([]ManifestVisibilityMutation(nil)) {
+	if got := reflect.TypeOf(ManifestMutationCollection{}).Field(2).Type; got != reflect.TypeOf([]ManifestVisibilityMutation(nil)) {
 		t.Fatalf("Visibility field type changed: %s", got)
 	}
-	if got := reflect.TypeOf(ManifestMutationCollection{}).Field(4).Type; got != reflect.TypeOf([]ManifestDeletionMutation(nil)) {
+	if got := reflect.TypeOf(ManifestMutationCollection{}).Field(3).Type; got != reflect.TypeOf([]ManifestDeletionMutation(nil)) {
 		t.Fatalf("Deletion field type changed: %s", got)
 	}
 }
@@ -196,9 +195,6 @@ func mutationCollectionContract(t *testing.T, manifestCollection string) *Semant
 	case endsWith(manifestCollection, ".parameters"):
 		mapping.PropertyField = "property"
 		mapping.ValueField = "valueParam"
-	case endsWith(manifestCollection, ".properties"):
-		mapping.PropertyField = "property"
-		mapping.ValueField = "value"
 	}
 	contract.SemanticToManifest.Mutations = map[string]MutationMapping{"op": mapping}
 	return contract
@@ -233,12 +229,10 @@ func TestInternalCollectionRecognition_SuppressionRegression(t *testing.T) {
 	assertCollectionRecognized(t, "assemblyMutations.suppression")
 }
 
-// 13 / 14. Existing parameters/properties collections remain recognized.
-func TestInternalCollectionRecognition_ParametersPropertiesRegression(t *testing.T) {
+// 13 / 14. Existing parameters collections remain recognized.
+func TestInternalCollectionRecognition_ParametersRegression(t *testing.T) {
 	assertCollectionRecognized(t, "partMutations.parameters")
 	assertCollectionRecognized(t, "assemblyMutations.parameters")
-	assertCollectionRecognized(t, "partMutations.properties")
-	assertCollectionRecognized(t, "assemblyMutations.properties")
 }
 
 // 15. An actually unknown collection still fails deterministically with the
@@ -328,7 +322,7 @@ func TestProjectTargetMutationRouting_SuppressToSuppressionTrue(t *testing.T) {
 		t.Fatalf("suppression\nwant: %#v\ngot:  %#v", want, projected.Part.Suppression)
 	}
 	if len(projected.Part.Visibility) != 0 || len(projected.Part.Deletion) != 0 ||
-		len(projected.Part.Parameters) != 0 || len(projected.Part.Properties) != 0 {
+		len(projected.Part.Parameters) != 0 {
 		t.Fatalf("expected only suppression populated, got %#v", projected.Part)
 	}
 }
@@ -619,7 +613,7 @@ func TestProjectTargetMutationRouting_CrossFamilySameObjectPreserved(t *testing.
 // 44 - 49. The dedicated routed-target projector rejects every operation outside
 // the five-action target-action domain, deterministically, with nil output.
 func TestProjectTargetMutationRouting_UnsupportedOperationsRejected(t *testing.T) {
-	for _, op := range []string{"keep", "set_parameter", "set_property", "write_parameter", "write_metadata", ""} {
+	for _, op := range []string{"keep", "set_parameter", "write_parameter", "write_metadata", ""} {
 		t.Run("op="+op, func(t *testing.T) {
 			err := projectRoutingExpectError(t, partRouting(rtm(op, "Pad")))
 			want := `unsupported routed target mutation operation "` + op + `"`
@@ -823,7 +817,6 @@ func TestReducedExecutionProjection_PreservesAllFamilies(t *testing.T) {
 	projected := &ManifestMutationProjection{
 		Part: &ManifestMutationCollection{
 			Parameters:  []ManifestParameterMutation{{Object: "GroupB", Property: "width", ValueParam: "width", Type: "number", Unit: "mm"}},
-			Properties:  []ManifestPropertyMutation{{Object: "PartB", Property: "pn", Value: "PN-1"}},
 			Suppression: []ManifestSuppressionMutation{{Object: "Pocket", Suppressed: true}},
 			Visibility:  []ManifestVisibilityMutation{{Object: "Body", Visible: false}},
 			Deletion:    []ManifestDeletionMutation{{Object: "Chamfer"}},
@@ -839,7 +832,7 @@ func TestReducedExecutionProjection_PreservesAllFamilies(t *testing.T) {
 	if !reflect.DeepEqual(reduced.PartMutations.Deletion, projected.Part.Deletion) {
 		t.Fatalf("deletion not preserved: %#v", reduced.PartMutations.Deletion)
 	}
-	if len(reduced.PartMutations.Parameters) != 1 || len(reduced.PartMutations.Properties) != 1 || len(reduced.PartMutations.Suppression) != 1 {
+	if len(reduced.PartMutations.Parameters) != 1 || len(reduced.PartMutations.Suppression) != 1 {
 		t.Fatalf("existing families not preserved: %#v", reduced.PartMutations)
 	}
 }

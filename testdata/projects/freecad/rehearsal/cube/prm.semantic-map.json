@@ -106,12 +106,6 @@
         "targetField": "object",
         "valueField": "suppressed",
         "value": false
-      },
-      "set_property": {
-        "manifestCollection": "partMutations.properties",
-        "targetField": "object",
-        "propertyField": "property",
-        "valueField": "value"
       }
     }
   },

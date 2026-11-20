@@ -79,11 +79,11 @@ type legacyPrefixAllowEntry struct {
 // hide_/unhide_/delete_/keep_ are never allowlisted: there is no legitimate
 // current use of those pseudo-prefixes anywhere in the corpus.
 var legacyPrefixCorpusAllowlist = map[legacyPrefixAllowEntry]bool{
-	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_UnmappedPrefixLikeParameterProducesNoMutationOrDiagnostic"}:      true,
-	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_PrefixLikeParameterIgnoresFeatureComponentNameCollision"}:        true,
-	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_PrefixLikeParametersNeverTriggerTargetResolution"}:                true,
-	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_LegacySuppressionPrefixesAreOrdinaryParameters"}:                  true,
-	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_LegacySuppressionPrefixNameMapsAsOrdinaryProperty"}:               true,
+	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_UnmappedPrefixLikeParameterProducesNoMutationOrDiagnostic"}:                     true,
+	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_PrefixLikeParameterIgnoresFeatureComponentNameCollision"}:                       true,
+	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_PrefixLikeParametersNeverTriggerTargetResolution"}:                              true,
+	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_LegacySuppressionPrefixesAreOrdinaryParameters"}:                                true,
+	{File: "internal/engine/semantic/semantic_test.go", Func: "TestInjectDSLIntent_StringParamDoesNotProduceMetadataMutation"}:                                     true,
 	{File: "internal/authoring/planner/planner_test.go", Func: "TestCreatePlanWithTablesAndSemanticModel_CaptureBackedManifestPayloadContainsExecutionIntentOnly"}: true,
 }
 

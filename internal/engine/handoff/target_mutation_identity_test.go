@@ -117,7 +117,6 @@ func mutationIdentityContract() *semanticmap.SemanticMap {
 			},
 			Mutations: map[string]semanticmap.MutationMapping{
 				"set_parameter": {ManifestCollection: "partMutations.parameters", TargetField: "object", PropertyField: "property", ValueField: "valueParam"},
-				"set_property":  {ManifestCollection: "partMutations.properties", TargetField: "object", PropertyField: "property", ValueField: "value"},
 				"suppress":      {ManifestCollection: "partMutations.suppression", TargetField: "object", ValueField: "suppressed", Value: boolPtr(true)},
 			},
 		},

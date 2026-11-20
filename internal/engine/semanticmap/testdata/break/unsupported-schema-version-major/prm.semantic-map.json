@@ -77,12 +77,6 @@
         "propertyField": "property",
         "valueField": "valueParam"
       },
-      "set_property": {
-        "manifestCollection": "partMutations.properties",
-        "targetField": "object",
-        "propertyField": "property",
-        "valueField": "value"
-      },
       "suppress": {
         "manifestCollection": "partMutations.suppression",
         "targetField": "object",
