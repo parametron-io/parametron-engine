@@ -55,11 +55,13 @@ record packaging.
 ### 1. Authoring and Planning
 
 - **DSL Lexer & Parser (`internal/authoring/dsl`)**: Validates syntax, Pratt
-  parselet dispatch, operator precedence, string interpolation, and diagnostic
-  reporting.
+  parselet dispatch, operator precedence, string interpolation, target-action
+  and target-metadata declarations, optional metadata settings-block
+  normalization, and diagnostic reporting.
 - **Semantic Validation (`internal/authoring/dsl`)**: Enforces strict type
-  checking, identifier resolution, enum literal constraints, and profile setting
-  rules.
+  checking, identifier resolution, enum literal constraints, profile setting
+  rules, scalar target-metadata expression validation, and deterministic
+  rejection of non-empty metadata settings.
 - **Intermediate Representation & Planning (`internal/authoring/ir`, `internal/authoring/planner`)**:
   Validates AST-to-IR conversion, IR-to-plan generation, dependency resolution,
   topological ordering, and roundtrip codegen.

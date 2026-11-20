@@ -92,7 +92,7 @@ func validateAST(ast *AST, tables map[string]*table.Table) error {
 		if err := validateProductParams(p, resolvedConstants, tables); err != nil {
 			return fmt.Errorf("validation error in product '%s': %w", p.Name, err)
 		}
-		if err := validateProductTargetActions(p, resolvedConstants, tables); err != nil {
+		if err := validateProductTargetDeclarations(p, resolvedConstants, tables); err != nil {
 			return fmt.Errorf("validation error in product '%s': %w", p.Name, err)
 		}
 	}
@@ -438,7 +438,7 @@ func validateProductParams(p *ProductNode, constScope map[string]ConstantValue, 
 	return nil
 }
 
-func validateProductTargetActions(p *ProductNode, constScope map[string]ConstantValue, tables map[string]*table.Table) error {
+func validateProductTargetDeclarations(p *ProductNode, constScope map[string]ConstantValue, tables map[string]*table.Table) error {
 	scope, err := buildProductBindingScope(p, constScope, tables)
 	if err != nil {
 		return err
@@ -451,7 +451,39 @@ func validateProductTargetActions(p *ProductNode, constScope map[string]Constant
 		}
 	}
 
+	for _, targetMetadata := range p.TargetMetadata {
+		location := fmt.Sprintf("%s.%s", targetMetadata.SemanticTarget, targetMetadata.Key)
+		if len(targetMetadata.Settings) > 0 {
+			return fmt.Errorf("in target metadata '%s': metadata settings are not supported in DSL version %s", location, SupportedDSLVersion)
+		}
+		if err := validateTargetMetadataExpression(targetMetadata.Value, targetMetadata.Key, scope, constScope, tables); err != nil {
+			return fmt.Errorf("in target metadata '%s': %w", location, err)
+		}
+	}
+
 	return nil
+}
+
+// targetMetadataScalarTypes is the deterministic candidate set used to validate
+// a metadata expression without a captured model. The captured metadata
+// contract selects the exact final type during planning; the DSL layer only
+// proves that the expression is a well-formed scalar expression.
+var targetMetadataScalarTypes = []ParameterType{
+	{Kind: ParamTypeNumber},
+	{Kind: ParamTypeString},
+	{Kind: ParamTypeBoolean},
+}
+
+func validateTargetMetadataExpression(expr ExpressionNode, key string, scope map[string]*ParameterNode, constScope map[string]ConstantValue, tables map[string]*table.Table) error {
+	if expr == nil {
+		return fmt.Errorf("metadata value expression is required")
+	}
+	for _, expectedType := range targetMetadataScalarTypes {
+		if err := validateExpressionWithTables(expr, expectedType, key, scope, constScope, tables); err == nil {
+			return nil
+		}
+	}
+	return fmt.Errorf("metadata value must resolve to a supported scalar type (number, string, or boolean)")
 }
 
 type productBindingDecl struct {

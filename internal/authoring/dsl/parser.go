@@ -225,7 +225,7 @@ func (p *Parser) parseProduct() (*ProductNode, error) {
 		Name:       name,
 		Parameters: []*ParameterNode{},
 	}
-	seenTargetActions := make(map[string]struct{})
+	seenTargets := make(map[string]struct{})
 
 	for !p.isEOF() {
 		if p.lexErr != nil {
@@ -251,15 +251,14 @@ func (p *Parser) parseProduct() (*ProductNode, error) {
 			}
 			prod.Parameters = append(prod.Parameters, param)
 		} else if token == "target" {
-			targetAction, err := p.parseTargetAction()
+			targetAction, targetMetadata, err := p.parseTargetDeclaration(seenTargets, name)
 			if err != nil {
 				return nil, err
 			}
-			if _, exists := seenTargetActions[targetAction.SemanticTarget]; exists {
-				return nil, p.errorf("duplicate target action declaration for semantic target '%s' in product '%s'", targetAction.SemanticTarget, name)
+			if targetAction != nil {
+				prod.TargetActions = append(prod.TargetActions, targetAction)
 			}
-			seenTargetActions[targetAction.SemanticTarget] = struct{}{}
-			prod.TargetActions = append(prod.TargetActions, targetAction)
+			prod.TargetMetadata = append(prod.TargetMetadata, targetMetadata...)
 		} else if token == "adapter" || token == "source_model" || token == "outputs" {
 			key := p.consume()
 			if err := p.expect("="); err != nil {
@@ -303,35 +302,138 @@ func (p *Parser) parseProduct() (*ProductNode, error) {
 	return nil, p.errorf("unexpected EOF inside product '%s'", name)
 }
 
-func (p *Parser) parseTargetAction() (*TargetActionNode, error) {
+// parseTargetDeclaration parses one target-scoped declaration block. A target
+// declaration may carry at most one action entry and any number of metadata
+// entries with distinct keys. Entries continue until the next product-level
+// construct or the closing product brace.
+func (p *Parser) parseTargetDeclaration(seen map[string]struct{}, productName string) (*TargetActionNode, []*TargetMetadataNode, error) {
 	if err := p.expect("target"); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	semanticTarget, err := p.parseIdentifier()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	if _, exists := seen[semanticTarget]; exists {
+		return nil, nil, p.errorf("duplicate target declaration for semantic target '%s' in product '%s'", semanticTarget, productName)
+	}
+	seen[semanticTarget] = struct{}{}
 
 	if err := p.expect(":"); err != nil {
-		return nil, err
-	}
-	if err := p.expect("action"); err != nil {
-		return nil, err
-	}
-	if err := p.expect("="); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	action, err := p.parseExpression(0)
-	if err != nil {
-		return nil, err
-	}
+	var action *TargetActionNode
+	var metadata []*TargetMetadataNode
+	actionSeen := false
+	metadataKeys := make(map[string]struct{})
 
-	return &TargetActionNode{
-		SemanticTarget: semanticTarget,
-		Action:         action,
-	}, nil
+	for {
+		if p.lexErr != nil {
+			return nil, nil, p.lexErr
+		}
+
+		token := p.peek()
+		if token == "" {
+			return nil, nil, p.errorf("unexpected EOF in target declaration for semantic target '%s'", semanticTarget)
+		}
+		if token == "action" {
+			if actionSeen {
+				return nil, nil, p.errorf("duplicate action declaration for semantic target '%s' in product '%s'", semanticTarget, productName)
+			}
+			p.consume()
+			if err := p.expect("="); err != nil {
+				return nil, nil, err
+			}
+			expr, err := p.parseExpression(0)
+			if err != nil {
+				return nil, nil, err
+			}
+			action = &TargetActionNode{
+				SemanticTarget: semanticTarget,
+				Action:         expr,
+			}
+			actionSeen = true
+			continue
+		}
+		if token == "metadata" {
+			p.consume()
+			key, err := p.parseIdentifier()
+			if err != nil {
+				return nil, nil, err
+			}
+			if _, exists := metadataKeys[key]; exists {
+				return nil, nil, p.errorf("duplicate metadata declaration '%s' for semantic target '%s' in product '%s'", key, semanticTarget, productName)
+			}
+			metadataKeys[key] = struct{}{}
+			if err := p.expect("="); err != nil {
+				return nil, nil, err
+			}
+			value, err := p.parseExpression(0)
+			if err != nil {
+				return nil, nil, err
+			}
+			settings, err := p.parseOptionalTargetMetadataSettings()
+			if err != nil {
+				return nil, nil, err
+			}
+			metadata = append(metadata, &TargetMetadataNode{
+				SemanticTarget: semanticTarget,
+				Key:            key,
+				Value:          value,
+				Settings:       settings,
+			})
+			continue
+		}
+
+		if action == nil && len(metadata) == 0 {
+			return nil, nil, p.errorf("expected 'action' or 'metadata' after target '%s:', got '%s'", semanticTarget, token)
+		}
+		return action, metadata, nil
+	}
+}
+
+// parseOptionalTargetMetadataSettings parses an optional metadata settings
+// block. An omitted block and an empty block both return nil. The parser keeps
+// non-empty entries structurally so validation can reject them deterministically.
+func (p *Parser) parseOptionalTargetMetadataSettings() ([]*TargetMetadataSettingNode, error) {
+	if p.peek() != "{" {
+		return nil, nil
+	}
+	p.consume()
+
+	var settings []*TargetMetadataSettingNode
+	for {
+		if p.lexErr != nil {
+			return nil, p.lexErr
+		}
+
+		token := p.peek()
+		if token == "}" {
+			p.consume()
+			if len(settings) == 0 {
+				return nil, nil
+			}
+			return settings, nil
+		}
+		if token == "" {
+			return nil, p.errorf("unexpected EOF in metadata settings block")
+		}
+
+		key, err := p.parseIdentifier()
+		if err != nil {
+			return nil, err
+		}
+		if err := p.expect("="); err != nil {
+			return nil, err
+		}
+		value, err := p.parseExpression(0)
+		if err != nil {
+			return nil, err
+		}
+		settings = append(settings, &TargetMetadataSettingNode{Key: key, Value: value})
+	}
 }
 
 func (p *Parser) parseLet() (*LetNode, error) {

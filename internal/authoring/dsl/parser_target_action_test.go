@@ -207,7 +207,7 @@ func TestParser_TargetAction_DuplicateDeclarations(t *testing.T) {
     target Pad: action = unsuppress
 }`,
 			expectErr:     true,
-			errorContains: "duplicate target action declaration for semantic target 'Pad' in product 'Demo'",
+			errorContains: "duplicate target declaration for semantic target 'Pad' in product 'Demo'",
 		},
 		{
 			name: "duplicate with identical action expressions still fails",
@@ -216,7 +216,7 @@ func TestParser_TargetAction_DuplicateDeclarations(t *testing.T) {
     target Pad: action = suppress
 }`,
 			expectErr:     true,
-			errorContains: "duplicate target action declaration for semantic target 'Pad' in product 'Demo'",
+			errorContains: "duplicate target declaration for semantic target 'Pad' in product 'Demo'",
 		},
 		{
 			name: "case variant is not a parser duplicate",
@@ -297,7 +297,7 @@ func TestParser_TargetAction_MalformedGrammar(t *testing.T) {
 			input: `product Demo {
     target Pad: suppress = true
 }`,
-			errorContains: "expected 'action', got 'suppress'",
+			errorContains: "expected 'action' or 'metadata' after target 'Pad:', got 'suppress'",
 		},
 		{
 			name: "missing equals",
