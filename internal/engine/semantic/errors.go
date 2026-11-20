@@ -9,6 +9,8 @@ import (
 var ErrValidation = errors.New("semantic model validation error")
 var ErrDSLIntent = errors.New("semantic DSL intent resolution error")
 var ErrCoercion = errors.New("semantic coercion error")
+var ErrSemanticTargetNotFound = errors.New("semantic target not found")
+var ErrSemanticTargetAmbiguous = errors.New("semantic target ambiguous")
 
 const (
 	DSLIntentDiagnosticCategoryInvalidDSLReference          = "invalid_dsl_reference"
@@ -97,4 +99,30 @@ func (e *DSLIntentError) Diagnostics() []DSLIntentDiagnostic {
 		out[i].MatchingParameterIDs = append([]string(nil), out[i].MatchingParameterIDs...)
 	}
 	return out
+}
+
+// TargetResolutionError reports the deterministic outcome of exact semantic
+// target lookup. Its Error text remains the established diagnostic; callers
+// that need classification can use errors.Is with the sentinel errors above.
+type TargetResolutionError struct {
+	Name       string
+	Candidates []string
+	Ambiguous  bool
+}
+
+func (e *TargetResolutionError) Error() string {
+	if e == nil {
+		return ErrSemanticTargetNotFound.Error()
+	}
+	if e.Ambiguous {
+		return fmt.Sprintf("semantic target %q is ambiguous across candidates [%s]", e.Name, strings.Join(e.Candidates, " "))
+	}
+	return fmt.Sprintf("semantic target %q does not resolve to a Feature or Component by exact Name", e.Name)
+}
+
+func (e *TargetResolutionError) Unwrap() error {
+	if e != nil && e.Ambiguous {
+		return ErrSemanticTargetAmbiguous
+	}
+	return ErrSemanticTargetNotFound
 }

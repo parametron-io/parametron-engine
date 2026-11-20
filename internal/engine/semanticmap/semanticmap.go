@@ -96,6 +96,12 @@ type MetadataMapping struct {
 	Identity     string `json:"identity"`
 	Key          string `json:"key"`
 	ValueKind    string `json:"valueKind"`
+	// NativeValueKinds maps a captured native type (for example
+	// "App::PropertyInteger") to a resolved metadata value kind
+	// (string, boolean, number, or integer). It is required when resolving
+	// target-scoped metadata through this mapping; capture valueType remains
+	// the broad contract and does not distinguish integer-native properties.
+	NativeValueKinds map[string]string `json:"nativeValueKinds,omitempty"`
 }
 
 type SemanticToManifest struct {

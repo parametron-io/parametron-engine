@@ -3864,7 +3864,19 @@ func defaultCaptureBackedSemanticMapJSON() string {
         "semanticKind": "metadata",
         "identity": "capture.id",
         "key": "capture.key",
-        "valueKind": "capture.nativeType"
+        "valueKind": "capture.nativeType",
+        "nativeValueKinds": {
+          "App::PropertyString": "string",
+          "App::PropertyBool": "boolean",
+          "App::PropertyInteger": "integer",
+          "App::PropertyIntegerConstraint": "integer",
+          "App::PropertyFloat": "number",
+          "App::PropertyFloatConstraint": "number",
+          "App::PropertyLength": "number",
+          "App::PropertyDistance": "number",
+          "App::PropertyAngle": "number",
+          "App::PropertyQuantity": "number"
+        }
       }
     ]
   },
