@@ -202,6 +202,15 @@ record packaging.
   ordinary or otherwise-valid unknown failures to `runtime / runtime`. Optional
   raw-evidence path overrides keep each outcome's normalized evidence associated
   with its own package path.
+- **Normalized Observed Metadata Records (`internal/engine/recordcontract`, `internal/engine/recordmap`, `internal/engine/recordemit`)**:
+  Proves observed metadata flows into the existing observation record without a
+  second authoritative store. Normalized metadata facts preserve the semantic
+  metadata ID (`subject.id`) separately from the native owner
+  (`subject.ownerId`) and native property (`subject.name`/`key`), plus the typed
+  value and kind. Tests cover canonical `ownerId` serialization, owner-tied
+  ordering determinism, mapping order independence, and byte-exact raw
+  `prm.observed.json` preservation alongside the normalized observation record
+  and record package. Record schema remains `1.0`.
 - **Record Package Writer & Emission (`internal/engine/recordpackage`, `internal/engine/recordemit`)**:
   Verifies normal-run emission, deterministic package generation, manifest
   indexing, and raw evidence preservation under `raw/`. Artifact tests cover
