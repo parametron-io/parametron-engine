@@ -751,3 +751,47 @@ func runStep(productKey, _, manifestFilename string) planner.Step {
 		},
 	}
 }
+
+// TestFromJob_RetainsVerificationIntentForInMemoryExecution proves the
+// scheduler's in-memory handoff clone retains Engine-private verification
+// intent. Expected parameter and metadata observations must survive the
+// Job -> Package -> Package.Plan() path used by the normal CLI scheduler; the
+// runtime-facing manifest JSON intentionally remains free of this control data.
+func TestFromJob_RetainsVerificationIntentForInMemoryExecution(t *testing.T) {
+	intent := planner.VerificationManifestIntent{
+		ExpectedParameters: []planner.VerificationExpectedParameter{
+			{ID: "par.root.width", Name: "width", Value: 42, Type: "number", Unit: "mm"},
+		},
+		ExpectedMetadata: []planner.VerificationExpectedMetadata{
+			{ID: "meta.bracket.material", Key: "material", OwnerID: "Body01", Value: "S235JR", ValueKind: "string"},
+		},
+		ObservationParameterLinks: []planner.VerificationObservationParameterLink{
+			{ID: "par.root.width", Name: "width", GroupName: "Variables"},
+		},
+	}
+
+	manifest := manifestStep("widget", planner.ExportManifestFilename, planner.ExportManifestSchemaVersion, "widget.step")
+	payload := manifest.Payload.(planner.WriteExportManifestPayload)
+	payload.Verification = intent
+	manifest.Payload = payload
+
+	pkg := mustPackage(t, mustJob(t, "widget", []planner.Step{csvStep("widget", "widget.csv"), manifest}))
+	if !reflect.DeepEqual(pkg.Manifest.Verification, intent) {
+		t.Fatalf("package manifest verification intent lost:\ngot:  %#v\nwant: %#v", pkg.Manifest.Verification, intent)
+	}
+	if len(pkg.Steps) != 2 || pkg.Steps[1].Manifest == nil {
+		t.Fatalf("package step snapshots = %#v", pkg.Steps)
+	}
+	if !reflect.DeepEqual(pkg.Steps[1].Manifest.Verification, intent) {
+		t.Fatalf("step snapshot verification intent lost: %#v", pkg.Steps[1].Manifest.Verification)
+	}
+
+	replanned := pkg.Plan()
+	replannedPayload, ok := replanned.Steps[1].Payload.(planner.WriteExportManifestPayload)
+	if !ok {
+		t.Fatalf("replanned payload type = %T", replanned.Steps[1].Payload)
+	}
+	if !reflect.DeepEqual(replannedPayload.Verification, intent) {
+		t.Fatalf("replanned manifest verification intent lost:\ngot:  %#v\nwant: %#v", replannedPayload.Verification, intent)
+	}
+}

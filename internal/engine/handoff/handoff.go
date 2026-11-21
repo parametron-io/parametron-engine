@@ -530,7 +530,28 @@ func cloneWriteExportManifestPayload(payload planner.WriteExportManifestPayload)
 		AssemblyMutations:      cloneMutationCollection(payload.AssemblyMutations),
 		PartMutations:          cloneMutationCollection(payload.PartMutations),
 		Outputs:                cloneExportManifestOutputs(payload.Outputs),
+		Verification:           cloneVerificationManifestIntent(payload.Verification),
 	}
+}
+
+func cloneVerificationManifestIntent(intent planner.VerificationManifestIntent) planner.VerificationManifestIntent {
+	cloned := planner.VerificationManifestIntent{
+		ExpectedParameters:        append([]planner.VerificationExpectedParameter(nil), intent.ExpectedParameters...),
+		ObservationParameterLinks: append([]planner.VerificationObservationParameterLink(nil), intent.ObservationParameterLinks...),
+	}
+	if intent.ExpectedMetadata != nil {
+		cloned.ExpectedMetadata = make([]planner.VerificationExpectedMetadata, len(intent.ExpectedMetadata))
+		for index, entry := range intent.ExpectedMetadata {
+			cloned.ExpectedMetadata[index] = planner.VerificationExpectedMetadata{
+				ID:        entry.ID,
+				Key:       entry.Key,
+				OwnerID:   entry.OwnerID,
+				Value:     cloneInterfaceValue(entry.Value),
+				ValueKind: entry.ValueKind,
+			}
+		}
+	}
+	return cloned
 }
 
 // cloneExportManifestOutputs defensively copies Outputs while preserving

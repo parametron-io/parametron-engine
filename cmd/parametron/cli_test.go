@@ -3022,12 +3022,15 @@ for item in expected.get("parameters", []):
     })
 metadata = []
 for item in expected.get("metadata", []):
-    metadata.append({
+    entry = {
         "id": item.get("id", item["key"]),
         "key": item["key"],
         "value": digest if item["key"] == "working_copy_sha256" else item["value"],
         "valueKind": item.get("valueKind", "string")
-    })
+    }
+    if item.get("ownerId") is not None:
+        entry["ownerId"] = item["ownerId"]
+    metadata.append(entry)
 references = [{"kind": item["kind"], "name": item["name"]} for item in expected.get("references", [])]
 components = [{"id": item["id"], "kind": item["kind"], "name": item["name"]} for item in expected.get("components", [])]
 observed = {
