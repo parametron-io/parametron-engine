@@ -273,6 +273,9 @@ func normalizeObservationFacts(facts []ObservationFact) []ObservationFact {
 		if left.Subject.Name != right.Subject.Name {
 			return left.Subject.Name < right.Subject.Name
 		}
+		if left.Subject.OwnerID != right.Subject.OwnerID {
+			return left.Subject.OwnerID < right.Subject.OwnerID
+		}
 		if left.Key != right.Key {
 			return left.Key < right.Key
 		}
