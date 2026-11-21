@@ -59,12 +59,16 @@ func realTargetStateVerification(t *testing.T, targetState *observed.TargetState
 		t.Fatalf("derive: %v", err)
 	}
 	meta, ref := contract.Expected.Metadata[0], contract.Expected.References[0]
+	digest, err := meta.StringValue()
+	if err != nil {
+		t.Fatalf("metadata digest: %v", err)
+	}
 	obs := &observed.Observed{
 		SchemaVersion: observed.SchemaVersion,
-		WorkingCopy:   observed.WorkingCopy{Path: ref.Name, SHA256: meta.Value},
+		WorkingCopy:   observed.WorkingCopy{Path: ref.Name, SHA256: digest},
 		Observation: observed.Observation{
 			Parameters:  []observed.Parameter{},
-			Metadata:    []observed.Metadata{{ID: "working-copy:sha256", Key: meta.Key, Value: tsMapObservedValue(t, `"`+meta.Value+`"`), ValueKind: "string"}},
+			Metadata:    []observed.Metadata{{ID: "working-copy:sha256", Key: meta.Key, Value: tsMapObservedValue(t, string(meta.Value)), ValueKind: "string"}},
 			References:  []observed.Reference{{Kind: ref.Kind, Name: ref.Name}},
 			Components:  []observed.Component{},
 			TargetState: targetState,

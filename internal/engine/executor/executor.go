@@ -534,6 +534,7 @@ func cloneManifestPayload(payload planner.WriteExportManifestPayload) planner.Wr
 		Outputs:                append([]planner.ExportManifestOutput(nil), payload.Outputs...),
 		Verification: planner.VerificationManifestIntent{
 			ExpectedParameters:        append([]planner.VerificationExpectedParameter(nil), payload.Verification.ExpectedParameters...),
+			ExpectedMetadata:          append([]planner.VerificationExpectedMetadata(nil), payload.Verification.ExpectedMetadata...),
 			ObservationParameterLinks: append([]planner.VerificationObservationParameterLink(nil), payload.Verification.ObservationParameterLinks...),
 		},
 	}

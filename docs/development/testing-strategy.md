@@ -143,6 +143,16 @@ record packaging.
   non-integral numbers, and duplicate native object/property pairs. A real planner
   pipeline test proves the semantic target name differs from the native object
   selector while only the native selector reaches the runtime manifest.
+- **Target-Scoped Metadata Verification (`internal/engine/verification`, `internal/engine/cadruntime`, `internal/authoring/planner`)**:
+  Derives `prm.verification.json` expected metadata from authored mutation
+  intent. Each expectation keeps the semantic metadata ID separate from the
+  exact native owner/property identity used by the runtime manifest, and carries
+  the typed value and value kind. Tests cover string, boolean, number, and
+  integer expectations; pass and deterministic failure paths for missing
+  observation, value mismatch, value-kind mismatch, owner/key mismatch, and
+  observed values inconsistent with their declared kind; duplicate semantic and
+  native expectation rejection; canonical serialization; and compatibility with
+  the existing working-copy digest expectation.
 - **Evidence Intake Validation (`internal/engine/cadruntime`, `internal/engine/observed`)**:
   Validates raw `prm.result.json` loading, strict artifact containment checks,
   `prm.observed.json` working copy fingerprint correlation, strict target-state

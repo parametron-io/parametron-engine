@@ -341,7 +341,7 @@ func TestComposeFreeCADRuntimeObservationRequest_UsesPreparedSource(t *testing.T
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256(hostBytes)
-	if got.Contract.Expected.Metadata[0].Value != hex.EncodeToString(sum[:]) ||
+	if mustExpectedMetadataDigest(t, got.Contract.Expected.Metadata[0]) != hex.EncodeToString(sum[:]) ||
 		got.Contract.Expected.References[0].Name != attempt.Layout.WorkingCopyDir ||
 		got.Contract.Expected.References[0].Name == attempt.Layout.SourceDocumentPath ||
 		got.Contract.Expected.References[0].Name == req.Manifest.Inputs.SourceModel {
@@ -369,7 +369,7 @@ func TestComposeFreeCADRuntimeObservationRequest_SeparatesWorkingCopyRootFromPre
 	}
 	sum := sha256.Sum256(prepared)
 	if got.Contract.Expected.Metadata[0].Key != "working_copy_sha256" ||
-		got.Contract.Expected.Metadata[0].Value != hex.EncodeToString(sum[:]) {
+		mustExpectedMetadataDigest(t, got.Contract.Expected.Metadata[0]) != hex.EncodeToString(sum[:]) {
 		t.Fatalf("prepared-source digest=%#v", got.Contract.Expected.Metadata)
 	}
 	if got.Manifest.Manifest.SourceDocument != filepath.ToSlash(attempt.Layout.SourceDocument) {
@@ -534,7 +534,9 @@ func TestWriteFreeCADRuntimeObservationRequest_DigestMatchesPreparedAttempt(t *t
 		t.Fatal(err)
 	}
 	a, b := sha256.Sum256([]byte("A")), sha256.Sum256([]byte("B"))
-	if one.Contract.Expected.Metadata[0].Value != hex.EncodeToString(a[:]) || two.Contract.Expected.Metadata[0].Value != hex.EncodeToString(b[:]) ||
+	oneDigest := mustExpectedMetadataDigest(t, one.Contract.Expected.Metadata[0])
+	twoDigest := mustExpectedMetadataDigest(t, two.Contract.Expected.Metadata[0])
+	if oneDigest != hex.EncodeToString(a[:]) || twoDigest != hex.EncodeToString(b[:]) ||
 		one.Path == two.Path || one.Contract.Expected.References[0].Name == req1.Manifest.Inputs.SourceModel || two.Contract.Expected.References[0].Name == req2.Manifest.Inputs.SourceModel {
 		t.Fatalf("attempt isolation failed: %#v %#v", one, two)
 	}
@@ -817,4 +819,13 @@ func TestFreeCADRuntimeObservationRequest_DoesNotAlterLogicalEngineeringIdentity
 
 func TestComposeFreeCADRuntimeObservationRequest_PathDoesNotAlterEngineeringIdentity(t *testing.T) {
 	TestFreeCADRuntimeObservationRequest_DoesNotAlterLogicalEngineeringIdentity(t)
+}
+
+func mustExpectedMetadataDigest(t *testing.T, entry verification.ExpectedMetadata) string {
+	t.Helper()
+	value, err := entry.StringValue()
+	if err != nil {
+		t.Fatalf("metadata digest: %v", err)
+	}
+	return value
 }

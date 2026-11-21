@@ -1,6 +1,7 @@
 package planner
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -257,6 +258,59 @@ func findMetadataMutation(collection *ExportManifestMutationCollection, object, 
 
 func literalMetadataValue(value any) dsl.ExpressionNode {
 	return &dsl.LiteralExpression{Value: value}
+}
+
+func TestPlannerTargetMetadata_PopulatesVerificationExpectedMetadata(t *testing.T) {
+	dslContent := `
+product Box {
+    adapter = "freecad"
+    source_model = "box_model"
+    outputs = ["step"]
+
+    param width: number = 12
+
+    target bracket:
+        metadata material = "S235JR"
+    target mounting_bracket:
+        metadata part_number = "PN-1001"
+        metadata revision = 7
+    target RootAssembly:
+        metadata assembly_count = 8
+}
+`
+
+	_, plan := parseValidateAndPlanCaptureBacked(t, dslContent, plannerTargetMetadataModel(), plannerTargetMetadataContract())
+	payload := manifestPayloadFromPlan(t, plan)
+
+	want := []VerificationExpectedMetadata{
+		{ID: "meta.bracket.material", Key: "material", OwnerID: "Body01", Value: "S235JR", ValueKind: "string"},
+		{ID: "meta.feature.partNumber", Key: "part_number", OwnerID: "MountingBracket01", Value: "PN-1001", ValueKind: "string"},
+		{ID: "meta.feature.revision", Key: "revision", OwnerID: "MountingBracket01", Value: float64(7), ValueKind: "integer"},
+		{ID: "meta.root.assemblyCount", Key: "assembly_count", OwnerID: "Assembly01", Value: float64(8), ValueKind: "number"},
+	}
+	if !reflect.DeepEqual(payload.Verification.ExpectedMetadata, want) {
+		t.Fatalf("expected metadata intent\nwant: %#v\ngot:  %#v", want, payload.Verification.ExpectedMetadata)
+	}
+
+	// Semantic metadata identity must remain separate from the native owner and
+	// property identity used by the runtime mutation and verification request.
+	mutationIdentities := map[string]bool{}
+	for _, collection := range []*ExportManifestMutationCollection{payload.AssemblyMutations, payload.PartMutations} {
+		if collection == nil {
+			continue
+		}
+		for _, mutation := range collection.Metadata {
+			mutationIdentities[mutation.Object+"\x00"+mutation.Property] = true
+		}
+	}
+	for _, entry := range payload.Verification.ExpectedMetadata {
+		if entry.ID == entry.OwnerID {
+			t.Fatalf("semantic metadata ID must not be the native owner selector: %#v", entry)
+		}
+		if !mutationIdentities[entry.OwnerID+"\x00"+entry.Key] {
+			t.Fatalf("expected metadata identity does not match any native mutation: %#v", entry)
+		}
+	}
 }
 
 func TestPlannerTargetMetadata_ProjectsComponentAndFeatureMutations(t *testing.T) {

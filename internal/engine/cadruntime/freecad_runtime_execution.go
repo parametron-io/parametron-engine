@@ -305,7 +305,17 @@ func invokeAndValidateFreeCADRuntime(
 			fmt.Errorf("got %q, want %q", loadedObserved.WorkingCopy.Path, layout.WorkingCopyDir),
 		)
 	}
-	expectedPreparedSourceDigest := materialization.Contract.Expected.Metadata[0].Value
+	expectedPreparedSourceDigest, err := materialization.WorkingCopySHA256()
+	if err != nil {
+		return run, runError(
+			FreeCADRuntimeRunStageObservedCorrelation,
+			"Observed.WorkingCopy.SHA256",
+			attempt.Identity.ID,
+			observedPath,
+			nil,
+			err,
+		)
+	}
 	if loadedObserved.WorkingCopy.SHA256 != expectedPreparedSourceDigest {
 		return run, runError(
 			FreeCADRuntimeRunStageObservedCorrelation,

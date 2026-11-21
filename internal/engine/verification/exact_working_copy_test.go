@@ -3,6 +3,7 @@ package verification
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -52,10 +53,10 @@ func TestDeriveFromManifestAndWorkingCopy_UsesExactFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	sumB, sumA := sha256.Sum256(b), sha256.Sum256(a)
-	if got.Expected.Metadata[0].Key != "working_copy_sha256" || got.Expected.Metadata[0].Value != hex.EncodeToString(sumB[:]) {
+	if got.Expected.Metadata[0].Key != "working_copy_sha256" || mustExpectedMetadataString(t, got.Expected.Metadata[0]) != hex.EncodeToString(sumB[:]) {
 		t.Fatalf("metadata=%#v", got.Expected.Metadata)
 	}
-	if got.Expected.Metadata[0].Value == hex.EncodeToString(sumA[:]) {
+	if mustExpectedMetadataString(t, got.Expected.Metadata[0]) == hex.EncodeToString(sumA[:]) {
 		t.Fatal("legacy file was hashed")
 	}
 	if got.Expected.References[0].Kind != "working_copy_path" || got.Expected.References[0].Name != exact {
@@ -166,10 +167,27 @@ func TestDeriveFromManifestAndWorkingCopy_ReturnsIndependentContracts(t *testing
 	}
 	first.Expected.Parameters[0].ID = "mutated"
 	first.ObservationContext.Parameters[0].Name = "mutated"
-	first.Expected.Metadata[0].Value = "mutated"
+	first.Expected.Metadata[0].Value = mustExpectedMetadataRaw("mutated")
 	first.Expected.References[0].Name = "/mutated"
 	if second.Expected.Parameters[0].ID != "width" || second.ObservationContext.Parameters[0].Name != "Width" ||
-		second.Expected.Metadata[0].Value == "mutated" || second.Expected.References[0].Name != path {
+		mustExpectedMetadataString(t, second.Expected.Metadata[0]) == "mutated" || second.Expected.References[0].Name != path {
 		t.Fatalf("contracts alias: %#v", second)
 	}
+}
+
+func mustExpectedMetadataString(t *testing.T, entry ExpectedMetadata) string {
+	t.Helper()
+	value, err := entry.StringValue()
+	if err != nil {
+		t.Fatalf("metadata value: %v", err)
+	}
+	return value
+}
+
+func mustExpectedMetadataRaw(value string) json.RawMessage {
+	raw, err := EncodeExpectedMetadataValue("string", value)
+	if err != nil {
+		panic(err)
+	}
+	return raw
 }
