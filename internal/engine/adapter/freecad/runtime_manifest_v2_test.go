@@ -261,15 +261,15 @@ func TestTask11Runtime_ProductAndAttemptLocalParity(t *testing.T) {
 		t.Fatalf("product-level and attempt-local JSON diverge:\nproduct:\n%s\nattempt:\n%s", productJSON, attemptLocal.JSON)
 	}
 
-	// Neither path emits nested Parameters / Properties inside the mutation
-	// sections.
+	// Neither path emits nested Parameters or Properties inside the mutation
+	// sections; resolved metadata intent is part of the runtime contract.
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(attemptLocal.JSON, &top); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	for _, key := range []string{"assemblyMutations", "partMutations"} {
 		if strings.Contains(string(top[key]), `"parameters"`) || strings.Contains(string(top[key]), `"properties"`) {
-			t.Fatalf("%s leaked nested metadata: %s", key, top[key])
+			t.Fatalf("%s leaked filtered nested intent: %s", key, top[key])
 		}
 	}
 }

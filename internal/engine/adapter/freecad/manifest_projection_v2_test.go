@@ -13,12 +13,13 @@ import (
 // Issue #16 adapter permanent contract: the FreeCAD runtime export manifest has
 // one canonical schema, "1.0". Planner Part / Assembly mutation collections
 // project structurally into optional runtime `assemblyMutations` /
-// `partMutations` sections that contain ONLY the suppression / visibility /
-// deletion families, with exact canonical entry shapes. The sections are
-// omitted when no runtime mutations exist. Nested Parameters / Metadata
-// intent is filtered out while top-level parameterAssignments remains the
-// sole executable native scalar-write surface. Every other schemaVersion,
-// including the retired "2.0", is rejected.
+// `partMutations` sections that contain ONLY the metadata / suppression /
+// visibility / deletion families, with exact canonical entry shapes. The
+// sections are omitted when no runtime mutations exist. Nested Parameters
+// intent is filtered out, resolved metadata intent projects into the runtime
+// `metadata` family, and top-level parameterAssignments remains the sole
+// executable native scalar-write surface. Every other schemaVersion, including
+// the retired "2.0", is rejected.
 
 func canonicalMutationPayload(mut func(*planner.WriteExportManifestPayload)) planner.WriteExportManifestPayload {
 	p := planner.WriteExportManifestPayload{
@@ -94,6 +95,7 @@ func TestTask11Adapter_RuntimeManifestTypeShape(t *testing.T) {
 
 	col := reflect.TypeOf(FreeCADRuntimeMutationCollection{})
 	wantCol := []struct{ name, tag string }{
+		{"Metadata", "metadata,omitempty"},
 		{"Suppression", "suppression,omitempty"},
 		{"Visibility", "visibility,omitempty"},
 		{"Deletion", "deletion,omitempty"},
@@ -107,9 +109,31 @@ func TestTask11Adapter_RuntimeManifestTypeShape(t *testing.T) {
 			t.Fatalf("collection field %d: got %q/%q want %q/%q", i, f.Name, f.Tag.Get("json"), want.name, want.tag)
 		}
 	}
-	for _, forbidden := range []string{"Parameters", "Properties", "Metadata"} {
+	for _, forbidden := range []string{"Parameters", "Properties"} {
 		if _, ok := col.FieldByName(forbidden); ok {
 			t.Fatalf("runtime mutation collection must not carry %q", forbidden)
+		}
+	}
+
+	meta := reflect.TypeOf(FreeCADRuntimeMetadataMutation{})
+	wantMeta := []struct{ name, tag string }{
+		{"Object", "object"},
+		{"Property", "property"},
+		{"Value", "value"},
+		{"ValueKind", "valueKind"},
+	}
+	if meta.NumField() != len(wantMeta) {
+		t.Fatalf("metadata mutation field count: got %d want %d", meta.NumField(), len(wantMeta))
+	}
+	for i, want := range wantMeta {
+		f := meta.Field(i)
+		if f.Name != want.name || f.Tag.Get("json") != want.tag {
+			t.Fatalf("metadata field %d: got %q/%q want %q/%q", i, f.Name, f.Tag.Get("json"), want.name, want.tag)
+		}
+	}
+	for _, forbidden := range []string{"SemanticID", "SemanticTarget", "MetadataKey", "DisplayName", "TargetKind", "Scope", "Policy"} {
+		if _, ok := meta.FieldByName(forbidden); ok {
+			t.Fatalf("runtime metadata mutation must not carry %q", forbidden)
 		}
 	}
 
@@ -197,6 +221,12 @@ func TestTask11Adapter_Schema1AcceptsRuntimeFamilies(t *testing.T) {
 				c.Deletion = []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}}
 			},
 			family: "deletion", want: `{"object":"Chamfer"}`,
+		},
+		"metadata": {
+			apply: func(c *planner.ExportManifestMutationCollection) {
+				c.Metadata = []planner.ExportManifestMetadataMutation{{Object: "Body01", Property: "part_number", Value: "PN-1001", ValueKind: "string"}}
+			},
+			family: "metadata", want: `{"object":"Body01","property":"part_number","value":"PN-1001","valueKind":"string"}`,
 		},
 	}
 	for name, tc := range families {
@@ -324,6 +354,46 @@ func TestTask11Adapter_CanonicalMutationEntryShapes(t *testing.T) {
 			},
 			section: "assemblyMutations", family: "deletion",
 			want: map[string]any{"object": "SubAsm"},
+		},
+		{
+			name: "part metadata string",
+			apply: func(p *planner.WriteExportManifestPayload) {
+				p.PartMutations = &planner.ExportManifestMutationCollection{Metadata: []planner.ExportManifestMetadataMutation{{Object: "Body01", Property: "part_number", Value: "PN-1001", ValueKind: "string"}}}
+			},
+			section: "partMutations", family: "metadata",
+			want: map[string]any{"object": "Body01", "property": "part_number", "value": "PN-1001", "valueKind": "string"},
+		},
+		{
+			name: "part metadata integer",
+			apply: func(p *planner.WriteExportManifestPayload) {
+				p.PartMutations = &planner.ExportManifestMutationCollection{Metadata: []planner.ExportManifestMetadataMutation{{Object: "MountingBracket01", Property: "revision", Value: float64(7), ValueKind: "integer"}}}
+			},
+			section: "partMutations", family: "metadata",
+			want: map[string]any{"object": "MountingBracket01", "property": "revision", "value": float64(7), "valueKind": "integer"},
+		},
+		{
+			name: "part metadata number",
+			apply: func(p *planner.WriteExportManifestPayload) {
+				p.PartMutations = &planner.ExportManifestMutationCollection{Metadata: []planner.ExportManifestMetadataMutation{{Object: "MountingBracket01", Property: "mass", Value: 12.5, ValueKind: "number"}}}
+			},
+			section: "partMutations", family: "metadata",
+			want: map[string]any{"object": "MountingBracket01", "property": "mass", "value": 12.5, "valueKind": "number"},
+		},
+		{
+			name: "part metadata boolean",
+			apply: func(p *planner.WriteExportManifestPayload) {
+				p.PartMutations = &planner.ExportManifestMutationCollection{Metadata: []planner.ExportManifestMetadataMutation{{Object: "MountingBracket01", Property: "tagged", Value: true, ValueKind: "boolean"}}}
+			},
+			section: "partMutations", family: "metadata",
+			want: map[string]any{"object": "MountingBracket01", "property": "tagged", "value": true, "valueKind": "boolean"},
+		},
+		{
+			name: "assembly metadata",
+			apply: func(p *planner.WriteExportManifestPayload) {
+				p.AssemblyMutations = &planner.ExportManifestMutationCollection{Metadata: []planner.ExportManifestMetadataMutation{{Object: "Assembly01", Property: "assembly_count", Value: float64(8), ValueKind: "integer"}}}
+			},
+			section: "assemblyMutations", family: "metadata",
+			want: map[string]any{"object": "Assembly01", "property": "assembly_count", "value": float64(8), "valueKind": "integer"},
 		},
 	}
 	for _, tc := range cases {
@@ -456,15 +526,15 @@ func TestTask11Adapter_OmitemptyContract(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// PART J — runtime filtering (Parameters / Metadata intent never reach runtime)
+// PART J — runtime filtering: nested Parameters are filtered; metadata projects
 // ---------------------------------------------------------------------------
 
-func TestTask11Adapter_NestedParametersAndMetadataIntentAreFiltered(t *testing.T) {
+func TestTask11Adapter_NestedParametersAreFilteredAndMetadataIsProjected(t *testing.T) {
 	for _, section := range []string{"part", "assembly"} {
 		t.Run(section, func(t *testing.T) {
 			col := &planner.ExportManifestMutationCollection{
 				Parameters:  []planner.ExportManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width", Type: "number", Unit: "mm"}},
-				Metadata:    []planner.ExportManifestMetadataMutation{{Object: "Box", Property: "Label", Value: "primary", ValueKind: "string"}},
+				Metadata:    []planner.ExportManifestMetadataMutation{{Object: "Body01", Property: "part_number", Value: "PN-1001", ValueKind: "string"}},
 				Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 				Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
 				Deletion:    []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}},
@@ -487,8 +557,12 @@ func TestTask11Adapter_NestedParametersAndMetadataIntentAreFiltered(t *testing.T
 			if runtime == nil {
 				t.Fatalf("expected a %s section", key)
 			}
-			if len(runtime.Suppression) != 1 || len(runtime.Visibility) != 1 || len(runtime.Deletion) != 1 {
+			if len(runtime.Metadata) != 1 || len(runtime.Suppression) != 1 || len(runtime.Visibility) != 1 || len(runtime.Deletion) != 1 {
 				t.Fatalf("runtime families not projected: %#v", runtime)
+			}
+			wantMetadata := FreeCADRuntimeMetadataMutation{Object: "Body01", Property: "part_number", Value: "PN-1001", ValueKind: "string"}
+			if !reflect.DeepEqual(runtime.Metadata[0], wantMetadata) {
+				t.Fatalf("metadata mutation: got %#v want %#v", runtime.Metadata[0], wantMetadata)
 			}
 
 			var top map[string]json.RawMessage
@@ -504,13 +578,18 @@ func TestTask11Adapter_NestedParametersAndMetadataIntentAreFiltered(t *testing.T
 					t.Fatalf("%s section leaked nested %q: %s", key, forbidden, top[key])
 				}
 			}
-			// scan the whole mutation subtree text for the nested keys
-			if strings.Contains(string(top[key]), `"parameters"`) || strings.Contains(string(top[key]), `"properties"`) {
-				t.Fatalf("%s subtree text leaked nested metadata: %s", key, top[key])
+			if _, ok := sectionKeys["metadata"]; !ok {
+				t.Fatalf("%s section missing metadata family: %s", key, top[key])
 			}
-			// "primary" / "Width" metadata values must not appear in the subtree
-			if strings.Contains(string(top[key]), "primary") {
-				t.Fatalf("%s subtree leaked a property value: %s", key, top[key])
+			// scan the whole mutation subtree text for the filtered nested keys
+			if strings.Contains(string(top[key]), `"parameters"`) || strings.Contains(string(top[key]), `"properties"`) {
+				t.Fatalf("%s subtree text leaked filtered nested metadata: %s", key, top[key])
+			}
+			if !strings.Contains(string(top[key]), "PN-1001") {
+				t.Fatalf("%s subtree did not preserve the metadata value: %s", key, top[key])
+			}
+			if strings.Contains(string(top[key]), "width") || strings.Contains(string(top[key]), "Width") {
+				t.Fatalf("%s subtree leaked internal parameter intent: %s", key, top[key])
 			}
 		})
 	}

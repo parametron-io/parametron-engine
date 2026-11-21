@@ -133,6 +133,16 @@ record packaging.
   Capture-backed native-target tests carry `Body01` through the runtime manifest,
   observation request, in-memory expected state, and controlled returned evidence
   using exact `(destination, object)` correlation.
+- **FreeCAD Runtime Metadata Manifest (`internal/engine/adapter/freecad`)**:
+  Projects resolved native metadata mutations into the canonical schema-1.0
+  `metadata` family under `partMutations` / `assemblyMutations`. Tests prove exact
+  `object`, `property`, `value`, and `valueKind` projection for string, boolean,
+  number, and integer values; metadata-only sections, empty-family omission, and
+  planner-order preservation; and pre-write rejection of empty, whitespace-
+  surrounded, or NUL selectors, unsupported or mismatched kinds, non-finite or
+  non-integral numbers, and duplicate native object/property pairs. A real planner
+  pipeline test proves the semantic target name differs from the native object
+  selector while only the native selector reaches the runtime manifest.
 - **Evidence Intake Validation (`internal/engine/cadruntime`, `internal/engine/observed`)**:
   Validates raw `prm.result.json` loading, strict artifact containment checks,
   `prm.observed.json` working copy fingerprint correlation, strict target-state
