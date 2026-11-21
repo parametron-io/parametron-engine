@@ -16,7 +16,7 @@ import (
 func fullMutationCollection() *planner.ExportManifestMutationCollection {
 	return &planner.ExportManifestMutationCollection{
 		Parameters:  []planner.ExportManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width", Type: "number", Unit: "mm"}},
-		Properties:  []planner.ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "primary"}},
+		Metadata:    []planner.ExportManifestMetadataMutation{{Object: "Box", Property: "Label", Value: "primary", ValueKind: "string"}},
 		Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 		Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
 		Deletion:    []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}},
@@ -60,7 +60,7 @@ func TestTask11Handoff_CloneIsDefensive(t *testing.T) {
 
 	// Mutate every slice in the original after the clone.
 	in.Parameters[0].Object = "MUTATED"
-	in.Properties[0].Value = "MUTATED"
+	in.Metadata[0].Value = "MUTATED"
 	in.Suppression[0].Suppressed = false
 	in.Visibility[0].Visible = true
 	in.Deletion[0].Object = "MUTATED"
@@ -86,7 +86,7 @@ func TestTask11Handoff_ClonePreservesNilAndEmptySemantics(t *testing.T) {
 	if out == nil {
 		t.Fatal("cloning a non-nil empty collection must stay non-nil")
 	}
-	if out.Parameters != nil || out.Properties != nil || out.Suppression != nil || out.Visibility != nil || out.Deletion != nil {
+	if out.Parameters != nil || out.Metadata != nil || out.Suppression != nil || out.Visibility != nil || out.Deletion != nil {
 		t.Fatalf("clone invented empty slices: %#v", out)
 	}
 }

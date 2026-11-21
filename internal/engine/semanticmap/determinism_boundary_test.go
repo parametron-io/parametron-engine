@@ -208,41 +208,6 @@ func TestProjectOutputs_IdentityLinkageResolutionRemainsCaseSensitive(t *testing
 	}
 }
 
-func TestProjectMutations_MissingIdentityLinkageDoesNotFallbackToNamesOrNativeMetadata(t *testing.T) {
-	model := outputMutationProjectionModel()
-	linkage := mustLinkOutputMutationProjectionModel(t, model)
-	filtered := linkage.Entries[:0]
-	for _, entry := range linkage.Entries {
-		if entry.EntityKind == identityKindMetadata && entry.SemanticID == "meta.a" {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	linkage.Entries = filtered
-
-	_, err := ProjectMutations(&MutationProjectionRequest{
-		Model: model,
-		Intent: outputMutationProjectionIntentWithMutations(
-			semantic.MutationIntent{
-				OperationKind:    "set_property",
-				TargetEntityKind: "metadata",
-				TargetSemanticID: "meta.a",
-				Scope:            "assembly",
-				ValueSource:      semantic.MutationValueSource{Kind: "dsl_parameter", DSLParameterName: "part_number_a"},
-			},
-		),
-		ResolvedValues:  map[string]any{"part_number_a": "A-001"},
-		Contract:        loadFixture(t, "smoke/freecad-default"),
-		IdentityLinkage: linkage,
-	})
-	if err == nil {
-		t.Fatal("expected missing metadata identity linkage failure")
-	}
-	if !errors.Is(err, ErrProjectionMissingIdentityLinkage) {
-		t.Fatalf("expected missing identity linkage sentinel, got %v", err)
-	}
-}
-
 func assertValidationErrorProblems(t *testing.T, err error, want []string) {
 	t.Helper()
 	if err == nil {

@@ -1171,9 +1171,6 @@ func TestWriteExportManifestPayload_JSONSerializationStable(t *testing.T) {
 			Parameters: []ExportManifestParameterMutation{
 				{Object: "Assembly", Property: "Length", ValueParam: "length", Type: "number", Unit: "mm"},
 			},
-			Properties: []ExportManifestPropertyMutation{
-				{Object: "Assembly", Property: "PartNumber", Value: "BOX-35"},
-			},
 			Suppression: []ExportManifestSuppressionMutation{
 				{Object: "Bracket-1", Suppressed: true},
 			},
@@ -1436,17 +1433,7 @@ func TestProjectSemanticManifestIntent_ReturnsCompleteManifestProjection(t *test
 				NativeType:  "Length",
 			},
 		},
-		Metadata: []semantic.Metadata{
-			{
-				ID:          "meta.part.finish",
-				OwnerKind:   semantic.OwnerKindComponent,
-				OwnerID:     "cmp.part",
-				ComponentID: "cmp.part",
-				Key:         "finish",
-				NativeType:  "String",
-				ValueType:   "string",
-			},
-		},
+		Metadata: []semantic.Metadata{},
 	}
 	intent := &semantic.ProductIntent{
 		Name: "Box",
@@ -1470,17 +1457,6 @@ func TestProjectSemanticManifestIntent_ReturnsCompleteManifestProjection(t *test
 					SemanticParameterID: "par.root.length",
 				},
 			},
-			{
-				OperationKind:    "set_property",
-				TargetEntityKind: "metadata",
-				TargetSemanticID: "meta.part.finish",
-				TargetField:      "finish",
-				Scope:            "part",
-				ValueSource: semantic.MutationValueSource{
-					Kind:             "dsl_parameter",
-					DSLParameterName: "finish",
-				},
-			},
 		},
 	}
 
@@ -1490,7 +1466,6 @@ func TestProjectSemanticManifestIntent_ReturnsCompleteManifestProjection(t *test
 		Intent:   intent,
 		ResolvedValues: map[string]any{
 			"length": 35.0,
-			"finish": "Oak",
 		},
 		Contract: testProjectionContract(),
 	})
@@ -1509,11 +1484,6 @@ func TestProjectSemanticManifestIntent_ReturnsCompleteManifestProjection(t *test
 		AssemblyMutations: &ExportManifestMutationCollection{
 			Parameters: []ExportManifestParameterMutation{
 				{Object: "RootAssembly", Property: "length", ValueParam: "length", Type: "number", Unit: "mm"},
-			},
-		},
-		PartMutations: &ExportManifestMutationCollection{
-			Properties: []ExportManifestPropertyMutation{
-				{Object: "Leg", Property: "finish", Value: "Oak"},
 			},
 		},
 		Verification: VerificationManifestIntent{
@@ -1535,7 +1505,6 @@ func TestProjectSemanticManifestIntent_ReturnsCompleteManifestProjection(t *test
 		Intent:   intent,
 		ResolvedValues: map[string]any{
 			"length": 35.0,
-			"finish": "Oak",
 		},
 		Contract: testProjectionContract(),
 	})
@@ -1681,7 +1650,6 @@ func testProjectionContract() *semanticmap.SemanticMap {
 			},
 			Mutations: map[string]semanticmap.MutationMapping{
 				"set_parameter": {ManifestCollection: "partMutations.parameters", TargetField: "object", PropertyField: "property", ValueField: "valueParam"},
-				"set_property":  {ManifestCollection: "partMutations.properties", TargetField: "object", PropertyField: "property", ValueField: "value"},
 				"suppress":      {ManifestCollection: "partMutations.suppression", TargetField: "object", ValueField: "suppressed", Value: boolPtr(true)},
 			},
 		},
@@ -2260,20 +2228,17 @@ product Box {
 		t.Fatalf("expected projected outputs to remain execution-facing, got %+v", manifest.Outputs)
 	}
 	parameterMutationCount := 0
-	propertyMutationCount := 0
 	suppressionMutationCount := 0
 	if manifest.AssemblyMutations != nil {
 		parameterMutationCount += len(manifest.AssemblyMutations.Parameters)
-		propertyMutationCount += len(manifest.AssemblyMutations.Properties)
 		suppressionMutationCount += len(manifest.AssemblyMutations.Suppression)
 	}
 	if manifest.PartMutations != nil {
 		parameterMutationCount += len(manifest.PartMutations.Parameters)
-		propertyMutationCount += len(manifest.PartMutations.Properties)
 		suppressionMutationCount += len(manifest.PartMutations.Suppression)
 	}
-	if parameterMutationCount == 0 || propertyMutationCount == 0 {
-		t.Fatalf("expected projected parameter/property mutations in capture-backed manifest, got assembly=%+v part=%+v", manifest.AssemblyMutations, manifest.PartMutations)
+	if parameterMutationCount == 0 {
+		t.Fatalf("expected projected parameter mutations in capture-backed manifest, got assembly=%+v part=%+v", manifest.AssemblyMutations, manifest.PartMutations)
 	}
 	// The retired suppress_ authoring prefix (Task 1) must not project a
 	// suppression mutation for an ordinary, unmapped boolean parameter name.
@@ -2549,7 +2514,6 @@ product Box {
 	secondContract.SemanticToManifest.Outputs["csv"] = semanticmap.OutputManifestMapping{ManifestType: "csv", TargetField: "target", TargetSource: "semantic.output.target.manifestName", ScopeField: "rollup", ScopeMap: map[string]string{"subtree": "assembly", "assembly": "assembly", "flat": "flat"}}
 	secondContract.SemanticToManifest.Mutations = map[string]semanticmap.MutationMapping{}
 	secondContract.SemanticToManifest.Mutations["suppress"] = semanticmap.MutationMapping{ManifestCollection: "partMutations.suppression", TargetField: "object", ValueField: "suppressed", Value: boolPtr(true)}
-	secondContract.SemanticToManifest.Mutations["set_property"] = semanticmap.MutationMapping{ManifestCollection: "partMutations.properties", TargetField: "object", PropertyField: "property", ValueField: "value"}
 	secondContract.SemanticToManifest.Mutations["set_parameter"] = semanticmap.MutationMapping{ManifestCollection: "partMutations.parameters", TargetField: "object", PropertyField: "property", ValueField: "valueParam"}
 
 	firstModel := &semantic.Model{

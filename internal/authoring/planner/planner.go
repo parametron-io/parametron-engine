@@ -140,7 +140,7 @@ type VerificationObservationParameterLink struct {
 
 type ExportManifestMutationCollection struct {
 	Parameters  []ExportManifestParameterMutation   `json:"parameters,omitempty"`
-	Properties  []ExportManifestPropertyMutation    `json:"properties,omitempty"`
+	Metadata    []ExportManifestMetadataMutation    `json:"metadata,omitempty"`
 	Suppression []ExportManifestSuppressionMutation `json:"suppression,omitempty"`
 	Visibility  []ExportManifestVisibilityMutation  `json:"visibility,omitempty"`
 	Deletion    []ExportManifestDeletionMutation    `json:"deletion,omitempty"`
@@ -154,10 +154,11 @@ type ExportManifestParameterMutation struct {
 	Unit       string `json:"unit"`
 }
 
-type ExportManifestPropertyMutation struct {
-	Object   string      `json:"object"`
-	Property string      `json:"property"`
-	Value    interface{} `json:"value"`
+type ExportManifestMetadataMutation struct {
+	Object    string      `json:"object"`
+	Property  string      `json:"property"`
+	Value     interface{} `json:"value"`
+	ValueKind string      `json:"valueKind"`
 }
 
 type ExportManifestSuppressionMutation struct {
@@ -281,6 +282,7 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 		parameters            []*dsl.ParameterNode
 		semanticIntent        *semantic.ProductIntent
 		targetActionMutations []semantic.MutationIntent
+		metadataMutations     []plannedMetadataMutation
 		contract              exportManifestContract
 	}
 	drafts := make([]productDraft, 0, len(ast.Products))
@@ -412,6 +414,14 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 			}
 		}
 
+		var metadataMutations []plannedMetadataMutation
+		if len(product.TargetMetadata) > 0 {
+			metadataMutations, err = evaluateProductTargetMetadata(product, resolvedValues, productBindingNames, productBindingScope, ast.ResolvedConstants, tables, semanticModel, semanticMapContract)
+			if err != nil {
+				return nil, fmt.Errorf("error evaluating target metadata in product '%s': %w", product.Name, err)
+			}
+		}
+
 		// 3. Now that all values are resolved, build the CSV step payload.
 		headers, values, exportedParams, err := buildExportedParameterValues(product.Parameters, resolvedValues)
 		if err != nil {
@@ -426,6 +436,7 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 			parameters:            product.Parameters,
 			semanticIntent:        productSemanticIntent,
 			targetActionMutations: targetActionMutations,
+			metadataMutations:     metadataMutations,
 			contract:              manifestContract,
 		})
 	}
@@ -443,7 +454,7 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 		for _, d := range drafts {
 			defaultCSVName := fmt.Sprintf("%s.csv", d.name)
 			includeObject := shouldRunCADAdapter(d.contract.Adapter)
-			manifestIntent, err := buildExportManifestIntent(d.name, d.contract.DefaultOutputFormats, includeObject, d.parameters, d.exportedParams, captureBacked, semanticModel, d.semanticIntent, d.targetActionMutations, semanticMapContract)
+			manifestIntent, err := buildExportManifestIntent(d.name, d.contract.DefaultOutputFormats, includeObject, d.parameters, d.exportedParams, captureBacked, semanticModel, d.semanticIntent, d.targetActionMutations, d.metadataMutations, semanticMapContract)
 			if err != nil {
 				return nil, fmt.Errorf("failed to build default export manifest intent for product '%s': %w", d.name, err)
 			}
@@ -527,7 +538,7 @@ func createPlan(ast *dsl.AST, overrides map[string]string, tables map[string]*ta
 		}
 
 		csvFileName := fmt.Sprintf("%s.csv", baseName)
-		manifestIntent, err := buildExportManifestIntent(baseName, d.contract.DefaultOutputFormats, includeObject, d.parameters, d.exportedParams, captureBacked, semanticModel, d.semanticIntent, d.targetActionMutations, semanticMapContract)
+		manifestIntent, err := buildExportManifestIntent(baseName, d.contract.DefaultOutputFormats, includeObject, d.parameters, d.exportedParams, captureBacked, semanticModel, d.semanticIntent, d.targetActionMutations, d.metadataMutations, semanticMapContract)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build export manifest intent for product '%s': %w", d.name, err)
 		}
@@ -679,6 +690,7 @@ type semanticManifestProjectionRequest struct {
 	Model                 *semantic.Model
 	Intent                *semantic.ProductIntent
 	TargetActionMutations []semantic.MutationIntent
+	MetadataMutations     []plannedMetadataMutation
 	ResolvedValues        map[string]any
 	Contract              *semanticmap.SemanticMap
 }
@@ -935,7 +947,7 @@ func buildExportManifestOutputs(baseName string, outputTypes []string, includeOb
 	return outputs, nil
 }
 
-func buildExportManifestIntent(baseName string, outputTypes []string, includeObject bool, params []*dsl.ParameterNode, resolvedValues map[string]any, captureBacked bool, model *semantic.Model, intent *semantic.ProductIntent, targetActionMutations []semantic.MutationIntent, contract *semanticmap.SemanticMap) (*semanticManifestProjectionResult, error) {
+func buildExportManifestIntent(baseName string, outputTypes []string, includeObject bool, params []*dsl.ParameterNode, resolvedValues map[string]any, captureBacked bool, model *semantic.Model, intent *semantic.ProductIntent, targetActionMutations []semantic.MutationIntent, metadataMutations []plannedMetadataMutation, contract *semanticmap.SemanticMap) (*semanticManifestProjectionResult, error) {
 	if captureBacked {
 		result, err := projectSemanticManifestIntent(&semanticManifestProjectionRequest{
 			BaseName:              baseName,
@@ -943,6 +955,7 @@ func buildExportManifestIntent(baseName string, outputTypes []string, includeObj
 			Model:                 model,
 			Intent:                intent,
 			TargetActionMutations: targetActionMutations,
+			MetadataMutations:     metadataMutations,
 			ResolvedValues:        resolvedValues,
 			Contract:              contract,
 		})
@@ -954,6 +967,8 @@ func buildExportManifestIntent(baseName string, outputTypes []string, includeObj
 			result.PartMutations = mergeExportManifestMutationCollections(result.PartMutations, result.TargetActionMutationCollections, false)
 			result.AssemblyMutations = canonicalizeRuntimeTargetMutationOrdering(result.AssemblyMutations)
 			result.PartMutations = canonicalizeRuntimeTargetMutationOrdering(result.PartMutations)
+			sortExportManifestMetadata(result.AssemblyMutations)
+			sortExportManifestMetadata(result.PartMutations)
 			if err := ValidateFreeCADCADTargetMappings(result.ParameterAssignments, result.AssemblyMutations, result.PartMutations); err != nil {
 				return nil, err
 			}
@@ -1165,6 +1180,9 @@ func projectSemanticManifestIntent(request *semanticManifestProjectionRequest) (
 		assemblyMutations = toExportManifestMutationCollection(projectedMutations.Assembly)
 		partMutations = toExportManifestMutationCollection(projectedMutations.Part)
 	}
+	assemblyMutations, partMutations = appendPlannedMetadataMutations(assemblyMutations, partMutations, request.MetadataMutations)
+	sortExportManifestMetadata(assemblyMutations)
+	sortExportManifestMetadata(partMutations)
 
 	out := &semanticManifestProjectionResult{
 		ParameterAssignments:            make([]ExportManifestParameterAssignment, len(assignments)),
@@ -1273,13 +1291,7 @@ func toExportManifestMutationCollection(projected *semanticmap.ManifestMutationC
 			Unit:       mutation.Unit,
 		})
 	}
-	for _, mutation := range projected.Properties {
-		collection.Properties = append(collection.Properties, ExportManifestPropertyMutation{
-			Object:   mutation.Object,
-			Property: mutation.Property,
-			Value:    mutation.Value,
-		})
-	}
+
 	for _, mutation := range projected.Suppression {
 		collection.Suppression = append(collection.Suppression, ExportManifestSuppressionMutation{
 			Object:     mutation.Object,
@@ -1319,7 +1331,7 @@ func mergeExportManifestMutationCollections(base *ExportManifestMutationCollecti
 	}
 	return &ExportManifestMutationCollection{
 		Parameters:  append(append([]ExportManifestParameterMutation(nil), base.Parameters...), targetCollection.Parameters...),
-		Properties:  append(append([]ExportManifestPropertyMutation(nil), base.Properties...), targetCollection.Properties...),
+		Metadata:    append(append([]ExportManifestMetadataMutation(nil), base.Metadata...), targetCollection.Metadata...),
 		Suppression: append(append([]ExportManifestSuppressionMutation(nil), base.Suppression...), targetCollection.Suppression...),
 		Visibility:  append(append([]ExportManifestVisibilityMutation(nil), base.Visibility...), targetCollection.Visibility...),
 		Deletion:    append(append([]ExportManifestDeletionMutation(nil), base.Deletion...), targetCollection.Deletion...),
@@ -1332,6 +1344,7 @@ func canonicalizeRuntimeTargetMutationOrdering(collection *ExportManifestMutatio
 	}
 
 	canonical := *collection
+	canonical.Metadata = append([]ExportManifestMetadataMutation(nil), collection.Metadata...)
 	canonical.Suppression = append([]ExportManifestSuppressionMutation(nil), collection.Suppression...)
 	canonical.Visibility = append([]ExportManifestVisibilityMutation(nil), collection.Visibility...)
 	canonical.Deletion = append([]ExportManifestDeletionMutation(nil), collection.Deletion...)
@@ -1358,7 +1371,7 @@ func canonicalizeRuntimeTargetMutationOrdering(collection *ExportManifestMutatio
 }
 
 func mutationCollectionEmpty(collection *ExportManifestMutationCollection) bool {
-	return collection == nil || (len(collection.Parameters) == 0 && len(collection.Properties) == 0 && len(collection.Suppression) == 0 && len(collection.Visibility) == 0 && len(collection.Deletion) == 0)
+	return collection == nil || (len(collection.Parameters) == 0 && len(collection.Metadata) == 0 && len(collection.Suppression) == 0 && len(collection.Visibility) == 0 && len(collection.Deletion) == 0)
 }
 
 func exportManifestSchemaVersionForProjection(mode ExportManifestProjectionMode, assembly, part *ExportManifestMutationCollection) string {

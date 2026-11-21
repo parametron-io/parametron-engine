@@ -3921,12 +3921,6 @@ func defaultCaptureBackedSemanticMapJSON() string {
         "targetField": "object",
         "valueField": "suppressed",
         "value": true
-      },
-      "set_property": {
-        "manifestCollection": "partMutations.properties",
-        "targetField": "object",
-        "propertyField": "property",
-        "valueField": "value"
       }
     }
   },

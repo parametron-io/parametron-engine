@@ -205,19 +205,19 @@ func equalStringSlices(a, b []string) bool {
 }
 
 // ---------------------------------------------------------------------------
-// Gap 4 -- combined parameter/property compatibility
+// Gap 4 -- combined parameter/metadata compatibility
 // ---------------------------------------------------------------------------
 
-// TestTask13Adapter_CombinedParameterAndPropertyCompatibility exercises a
+// TestTask13Adapter_CombinedParameterAndMetadataCompatibility exercises a
 // single canonical schema-1.0 payload that carries, simultaneously: a top-level
 // parameterAssignments scalar write, internal Parameters metadata, internal
-// Properties metadata, and a suppression/visibility/deletion mutation --
+// Metadata intent, and a suppression/visibility/deletion mutation --
 // across both Part and Assembly sections -- and proves the runtime
 // projection keeps exactly the top-level scalar write and the three runtime
-// families, with nested Parameters/Properties metadata filtered out and no
+// families, with nested Parameters/Metadata intent filtered out and no
 // value written through two surfaces at once.
-func TestTask13Adapter_CombinedParameterAndPropertyCompatibility(t *testing.T) {
-	const leakedPropertyValue = "combined-compat-do-not-leak"
+func TestTask13Adapter_CombinedParameterAndMetadataCompatibility(t *testing.T) {
+	const leakedMetadataValue = "combined-compat-do-not-leak"
 
 	payload := canonicalMutationPayload(func(p *planner.WriteExportManifestPayload) {
 		p.ParameterAssignments = []planner.ExportManifestParameterAssignment{
@@ -225,14 +225,14 @@ func TestTask13Adapter_CombinedParameterAndPropertyCompatibility(t *testing.T) {
 		}
 		p.PartMutations = &planner.ExportManifestMutationCollection{
 			Parameters:  []planner.ExportManifestParameterMutation{{Object: "Box", Property: "Height", ValueParam: "height", Type: "number", Unit: "mm"}},
-			Properties:  []planner.ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: leakedPropertyValue}},
+			Metadata:    []planner.ExportManifestMetadataMutation{{Object: "Box", Property: "Label", Value: leakedMetadataValue, ValueKind: "string"}},
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 			Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
 			Deletion:    []planner.ExportManifestDeletionMutation{{Object: "Chamfer"}},
 		}
 		p.AssemblyMutations = &planner.ExportManifestMutationCollection{
 			Parameters:  []planner.ExportManifestParameterMutation{{Object: "SubAsm", Property: "Offset", ValueParam: "offset", Type: "number", Unit: "mm"}},
-			Properties:  []planner.ExportManifestPropertyMutation{{Object: "SubAsm", Property: "Label", Value: leakedPropertyValue}},
+			Metadata:    []planner.ExportManifestMetadataMutation{{Object: "SubAsm", Property: "Label", Value: leakedMetadataValue, ValueKind: "string"}},
 			Suppression: []planner.ExportManifestSuppressionMutation{{Object: "SubAsm1", Suppressed: false}},
 			Visibility:  []planner.ExportManifestVisibilityMutation{{Object: "SubAsm2", Visible: true}},
 			Deletion:    []planner.ExportManifestDeletionMutation{{Object: "SubAsm3"}},
@@ -267,7 +267,7 @@ func TestTask13Adapter_CombinedParameterAndPropertyCompatibility(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s is not an object: %#v", section, sectionValue)
 		}
-		for _, forbidden := range []string{"parameters", "properties"} {
+		for _, forbidden := range []string{"parameters", "properties", "metadata"} {
 			if _, ok := sectionMap[forbidden]; ok {
 				t.Fatalf("%s leaked nested %q: %s", section, forbidden, data)
 			}
@@ -279,8 +279,8 @@ func TestTask13Adapter_CombinedParameterAndPropertyCompatibility(t *testing.T) {
 		}
 	}
 
-	if strings.Contains(string(data), leakedPropertyValue) {
-		t.Fatalf("property metadata value leaked into runtime manifest: %s", data)
+	if strings.Contains(string(data), leakedMetadataValue) {
+		t.Fatalf("metadata intent value leaked into runtime manifest: %s", data)
 	}
 	if strings.Contains(string(data), `"height"`) || strings.Contains(string(data), `"offset"`) {
 		t.Fatalf("internal parameter value-param names leaked into runtime manifest: %s", data)

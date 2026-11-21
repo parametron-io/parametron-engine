@@ -48,18 +48,16 @@ func cloneManifestMutationCollection(collection *ManifestMutationCollection) *Ma
 
 	cloned := &ManifestMutationCollection{
 		Parameters:  append([]ManifestParameterMutation(nil), collection.Parameters...),
-		Properties:  append([]ManifestPropertyMutation(nil), collection.Properties...),
 		Suppression: append([]ManifestSuppressionMutation(nil), collection.Suppression...),
 		Visibility:  append([]ManifestVisibilityMutation(nil), collection.Visibility...),
 		Deletion:    append([]ManifestDeletionMutation(nil), collection.Deletion...),
 	}
 	slices.SortFunc(cloned.Parameters, compareManifestParameterMutations)
-	slices.SortFunc(cloned.Properties, compareManifestPropertyMutations)
 	slices.SortFunc(cloned.Suppression, compareManifestSuppressionMutations)
 	slices.SortFunc(cloned.Visibility, compareManifestVisibilityMutations)
 	slices.SortFunc(cloned.Deletion, compareManifestDeletionMutations)
 
-	if len(cloned.Parameters) == 0 && len(cloned.Properties) == 0 && len(cloned.Suppression) == 0 && len(cloned.Visibility) == 0 && len(cloned.Deletion) == 0 {
+	if len(cloned.Parameters) == 0 && len(cloned.Suppression) == 0 && len(cloned.Visibility) == 0 && len(cloned.Deletion) == 0 {
 		return nil
 	}
 	return cloned

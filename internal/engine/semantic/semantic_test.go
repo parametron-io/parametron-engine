@@ -1956,7 +1956,7 @@ product NoCAD {
 	}
 }
 
-func TestInjectDSLIntent_BuildsStructuredOutputsAndOrdinaryMutationKinds(t *testing.T) {
+func TestInjectDSLIntent_BuildsStructuredOutputsAndParameterMutationKinds(t *testing.T) {
 	model := modelWithFeatureMutationFixtures(t)
 	ast := parseSemanticFixtureDSL(t, `
 product Box {
@@ -1965,7 +1965,6 @@ product Box {
     outputs = ["pdf", "step", "csv"]
 
     param length: number = 35
-    param part_number: string = "PN-123"
 }
 `)
 
@@ -1994,17 +1993,6 @@ product Box {
 				Kind:                "dsl_parameter",
 				DSLParameterName:    "length",
 				SemanticParameterID: "par.root.length",
-			},
-		},
-		{
-			OperationKind:    "set_property",
-			TargetEntityKind: "metadata",
-			TargetSemanticID: "meta.root.part_number",
-			TargetField:      "part_number",
-			Scope:            "assembly",
-			ValueSource: MutationValueSource{
-				Kind:             "dsl_parameter",
-				DSLParameterName: "part_number",
 			},
 		},
 	}
@@ -2134,12 +2122,10 @@ product Box {
 	}
 }
 
-// TestInjectDSLIntent_LegacySuppressionPrefixNameMapsAsOrdinaryProperty
-// proves suppress_/unsuppress_-prefixed names are not reserved: when a
-// literal metadata key happens to match one exactly, it is mapped as an
-// ordinary property mutation (OperationKind "set_property"), never as a
-// suppress/unsuppress operation.
-func TestInjectDSLIntent_LegacySuppressionPrefixNameMapsAsOrdinaryProperty(t *testing.T) {
+// TestInjectDSLIntent_StringParamDoesNotProduceMetadataMutation proves the
+// retired implicit param-to-metadata path is gone: a string parameter that
+// exactly matches a captured metadata key produces no mutation intent.
+func TestInjectDSLIntent_StringParamDoesNotProduceMetadataMutation(t *testing.T) {
 	model := modelWithFeatureMutationFixtures(t)
 	literalValue, err := NewScalarValue([]byte(`"literal"`))
 	if err != nil {
@@ -2174,16 +2160,9 @@ product Box {
 		t.Fatalf("InjectDSLIntent returned error: %v", err)
 	}
 
-	mutations := injected.ProductIntents[0].Mutations
-	if len(mutations) != 1 {
-		t.Fatalf("expected exactly one ordinary property mutation, got %#v", mutations)
-	}
-	mutation := mutations[0]
-	if mutation.OperationKind != "set_property" {
-		t.Fatalf("expected literal suppress_Pad metadata key to map as an ordinary property mutation, got OperationKind=%q", mutation.OperationKind)
-	}
-	if mutation.TargetSemanticID != "meta.root.suppress_pad" {
-		t.Fatalf("expected mutation to target the literal suppress_Pad metadata entry, got %#v", mutation)
+	assertInjectDSLIntentProducesNoMutations(t, model, ast)
+	if mutations := injected.ProductIntents[0].Mutations; len(mutations) != 0 {
+		t.Fatalf("expected no mutations for string param, got %#v", mutations)
 	}
 }
 
@@ -2195,7 +2174,6 @@ product Box {
     source_model = "box_model"
     outputs = ["step", "pdf", "csv"]
 
-    param part_number: string = "PN-123"
     param length: number = 35
 }
 `)

@@ -8,7 +8,7 @@ import "testing"
 // Deletion each by Object ascending (boolean families tie-break false-before-
 // true on equal Object), never dedups, never merges, never moves entries
 // across families or across the Part/Assembly buckets it is called on, and
-// never mutates its input. Parameters and Properties are untouched: they carry
+// never mutates its input. Parameters and Metadata are untouched: they carry
 // no target-mutation identity and Task 12 does not reorder them.
 //
 // These tests exercise canonicalizeRuntimeTargetMutationOrdering directly,
@@ -46,14 +46,14 @@ func TestCanonicalizeRuntimeTargetMutationOrdering_ParametersUntouched(t *testin
 	}
 }
 
-func TestCanonicalizeRuntimeTargetMutationOrdering_PropertiesUntouched(t *testing.T) {
+func TestCanonicalizeRuntimeTargetMutationOrdering_MetadataUntouched(t *testing.T) {
 	collection := &ExportManifestMutationCollection{
-		Properties:  []ExportManifestPropertyMutation{{Object: "Zulu", Property: "Label", Value: "z"}, {Object: "Alpha", Property: "Label", Value: "a"}},
+		Metadata:    []ExportManifestMetadataMutation{{Object: "Zulu", Property: "Label", Value: "z", ValueKind: "string"}, {Object: "Alpha", Property: "Label", Value: "a", ValueKind: "string"}},
 		Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 	}
 	got := canonicalizeRuntimeTargetMutationOrdering(collection)
-	if len(got.Properties) != 2 || got.Properties[0].Object != "Zulu" || got.Properties[1].Object != "Alpha" {
-		t.Fatalf("Properties reordered: got %#v", got.Properties)
+	if len(got.Metadata) != 2 || got.Metadata[0].Object != "Zulu" || got.Metadata[1].Object != "Alpha" {
+		t.Fatalf("Metadata reordered: got %#v", got.Metadata)
 	}
 }
 

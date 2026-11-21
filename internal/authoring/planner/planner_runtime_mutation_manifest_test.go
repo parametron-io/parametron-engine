@@ -168,19 +168,19 @@ func TestTask11_KeepOnlyRetainsSchema1AndParameterAssignments(t *testing.T) {
 	}
 }
 
-// Internal Parameters / Properties metadata never becomes a runtime mutation
-// family; a single runtime family entry does.
+// Planner metadata intent and parameter mutations do not count as runtime
+// target-mutation families; a single runtime family entry does.
 func TestTask11_InternalMetadataIsNotRuntimeMutation(t *testing.T) {
 	metaOnly := &ExportManifestMutationCollection{
 		Parameters: []ExportManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width"}},
-		Properties: []ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "primary"}},
+		Metadata:   []ExportManifestMetadataMutation{{Object: "Box", Property: "Label", Value: "primary", ValueKind: "string"}},
 	}
 	if hasRuntimeTargetMutations(metaOnly) {
-		t.Fatal("Parameters+Properties-only collection must not count as runtime target mutations")
+		t.Fatal("Parameters+Metadata-only collection must not count as runtime target mutations")
 	}
 	withVisibility := &ExportManifestMutationCollection{
 		Parameters: metaOnly.Parameters,
-		Properties: metaOnly.Properties,
+		Metadata:   metaOnly.Metadata,
 		Visibility: []ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
 	}
 	if !hasRuntimeTargetMutations(withVisibility) {
@@ -248,7 +248,7 @@ product Box {
 
 func TestTask11_PlannerMutationCollectionShape(t *testing.T) {
 	rt := reflect.TypeOf(ExportManifestMutationCollection{})
-	want := []string{"Parameters", "Properties", "Suppression", "Visibility", "Deletion"}
+	want := []string{"Parameters", "Metadata", "Suppression", "Visibility", "Deletion"}
 	if rt.NumField() != len(want) {
 		t.Fatalf("ExportManifestMutationCollection field count: got %d want %d", rt.NumField(), len(want))
 	}
@@ -280,11 +280,10 @@ func TestTask11_PlannerMutationCollectionShape(t *testing.T) {
 	}
 }
 
-// The semanticmap -> planner conversion retains all five families verbatim.
+// The semanticmap -> planner conversion retains all four families verbatim.
 func TestTask11_SemanticmapToPlannerConversionRetainsAllFamilies(t *testing.T) {
 	projected := &semanticmap.ManifestMutationCollection{
 		Parameters:  []semanticmap.ManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width", Type: "number", Unit: "mm"}},
-		Properties:  []semanticmap.ManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "primary"}},
 		Suppression: []semanticmap.ManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 		Visibility:  []semanticmap.ManifestVisibilityMutation{{Object: "Body", Visible: false}},
 		Deletion:    []semanticmap.ManifestDeletionMutation{{Object: "Chamfer"}},
@@ -292,7 +291,6 @@ func TestTask11_SemanticmapToPlannerConversionRetainsAllFamilies(t *testing.T) {
 	got := toExportManifestMutationCollection(projected)
 	want := &ExportManifestMutationCollection{
 		Parameters:  []ExportManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width", Type: "number", Unit: "mm"}},
-		Properties:  []ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "primary"}},
 		Suppression: []ExportManifestSuppressionMutation{{Object: "Pad", Suppressed: true}},
 		Visibility:  []ExportManifestVisibilityMutation{{Object: "Body", Visible: false}},
 		Deletion:    []ExportManifestDeletionMutation{{Object: "Chamfer"}},
@@ -309,7 +307,6 @@ func TestTask11_SemanticmapToPlannerConversionRetainsAllFamilies(t *testing.T) {
 func TestTask11_Task10CompositionPreservesMatureEntriesAndAppends(t *testing.T) {
 	base := &ExportManifestMutationCollection{
 		Parameters:  []ExportManifestParameterMutation{{Object: "Box", Property: "Width", ValueParam: "width"}},
-		Properties:  []ExportManifestPropertyMutation{{Object: "Box", Property: "Label", Value: "primary"}},
 		Suppression: []ExportManifestSuppressionMutation{{Object: "LegacyPad", Suppressed: true}},
 	}
 	routed := &semanticmap.ProjectedTargetMutationRouting{
@@ -327,9 +324,7 @@ func TestTask11_Task10CompositionPreservesMatureEntriesAndAppends(t *testing.T) 
 	if !reflect.DeepEqual(part.Parameters, base.Parameters) {
 		t.Fatalf("mature Parameters not preserved: %#v", part.Parameters)
 	}
-	if !reflect.DeepEqual(part.Properties, base.Properties) {
-		t.Fatalf("mature Properties not preserved: %#v", part.Properties)
-	}
+
 	wantSuppression := []ExportManifestSuppressionMutation{{Object: "LegacyPad", Suppressed: true}, {Object: "NewPad", Suppressed: false}}
 	if !reflect.DeepEqual(part.Suppression, wantSuppression) {
 		t.Fatalf("composition order wrong: got %#v want %#v", part.Suppression, wantSuppression)
@@ -440,7 +435,7 @@ func TestTask11_FiveActionRuntimeProjection(t *testing.T) {
 
 // assertRuntimeFamilies compares only the runtime families (suppression /
 // visibility / deletion) of a projected planner collection, ignoring internal
-// Parameters / Properties metadata that legitimately rides alongside.
+// Parameters / Metadata intent that legitimately rides alongside.
 func assertRuntimeFamilies(t *testing.T, bucket string, got, want *ExportManifestMutationCollection) {
 	t.Helper()
 	var gotS []ExportManifestSuppressionMutation

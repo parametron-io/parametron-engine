@@ -105,7 +105,6 @@ func supportedProjectionOutputTypes() []string {
 func supportedProjectionMutationCollections() []string {
 	return []string{
 		"partMutations.parameters",
-		"partMutations.properties",
 		"partMutations.suppression",
 	}
 }

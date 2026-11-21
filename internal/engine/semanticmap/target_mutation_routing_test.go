@@ -464,12 +464,12 @@ func TestRouteTargetMutations_KeepRejected(t *testing.T) {
 	}
 }
 
-// 30 / 31. set_parameter and set_property are rejected by the dedicated Task 9
-// route, whether they arrive with target-action provenance or their real
-// parameter/property provenance. The existing generic projection still supports
-// them (covered by output_mutation_projection_test.go).
+// 30. set_parameter is rejected by the dedicated Task 9 route, whether it
+// arrives with target-action provenance or its real parameter provenance. The
+// existing generic projection still supports it (covered by
+// output_mutation_projection_test.go).
 func TestRouteTargetMutations_ExistingSemanticOperationsRejected(t *testing.T) {
-	for _, operation := range []string{"set_parameter", "set_property"} {
+	for _, operation := range []string{"set_parameter"} {
 		withActionProvenance := targetActionMutation(operation, "part", "cmp.cover", "part")
 		if err := routeExpectError(t, routingLinkage("cmp.cover"), withActionProvenance); !strings.Contains(err.Error(), "unsupported target-action mutation operation") {
 			t.Fatalf("%s (action provenance): unexpected error: %v", operation, err)

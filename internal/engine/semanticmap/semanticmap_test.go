@@ -734,13 +734,6 @@ func TestValidateSemanticToManifestProblemsAreDeterministic(t *testing.T) {
 			"flat": "flat",
 		},
 	}
-	contract.SemanticToManifest.Mutations["set_property"] = MutationMapping{
-		ManifestCollection: "partMutations.properties",
-		TargetField:        "object",
-		PropertyField:      "property",
-		ValueField:         "value",
-		Value:              boolPtr(true),
-	}
 
 	first := Validate(contract)
 	second := Validate(contract)
@@ -760,7 +753,6 @@ func TestValidateSemanticToManifestProblemsAreDeterministic(t *testing.T) {
 	want := []string{
 		`semanticToManifest.parameters.type must equal "number"`,
 		`semanticToManifest.outputs["csv"].targetField must equal "target"`,
-		`semanticToManifest.mutations["set_property"].value must not be set`,
 	}
 	if !reflect.DeepEqual(firstErr.Messages(), want) {
 		t.Fatalf("unexpected first validation messages\nwant: %#v\ngot:  %#v", want, firstErr.Messages())
@@ -793,7 +785,6 @@ func TestReviewProjectionContractReportsSmokeFixtureReady(t *testing.T) {
 	}
 	wantMutations := []string{
 		"partMutations.parameters",
-		"partMutations.properties",
 		"partMutations.suppression",
 	}
 	if !reflect.DeepEqual(review.SupportedMutationCollections, wantMutations) {
@@ -841,7 +832,6 @@ func TestProjectionReview_DeterministicAcrossRuns(t *testing.T) {
 	}
 	wantMutations := []string{
 		"partMutations.parameters",
-		"partMutations.properties",
 		"partMutations.suppression",
 	}
 	if !reflect.DeepEqual(firstFromFirstLoad.SupportedMutationCollections, wantMutations) {

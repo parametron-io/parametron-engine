@@ -19,7 +19,6 @@ type ManifestOutput struct {
 
 type ManifestMutationCollection struct {
 	Parameters  []ManifestParameterMutation   `json:"parameters,omitempty"`
-	Properties  []ManifestPropertyMutation    `json:"properties,omitempty"`
 	Suppression []ManifestSuppressionMutation `json:"suppression,omitempty"`
 	Visibility  []ManifestVisibilityMutation  `json:"visibility,omitempty"`
 	Deletion    []ManifestDeletionMutation    `json:"deletion,omitempty"`
@@ -36,12 +35,6 @@ type ManifestParameterMutation struct {
 	ValueParam string `json:"valueParam"`
 	Type       string `json:"type"`
 	Unit       string `json:"unit"`
-}
-
-type ManifestPropertyMutation struct {
-	Object   string `json:"object"`
-	Property string `json:"property"`
-	Value    any    `json:"value"`
 }
 
 type ManifestSuppressionMutation struct {
@@ -220,16 +213,6 @@ func ProjectMutations(request *MutationProjectionRequest) (*ManifestMutationProj
 				Type:       typeName,
 				Unit:       unitName,
 			})
-		case "properties":
-			value, err := resolveProjectedMutationValue(request.ResolvedValues, mutationIntent, entry)
-			if err != nil {
-				return nil, err
-			}
-			collection.Properties = append(collection.Properties, ManifestPropertyMutation{
-				Object:   targetName,
-				Property: propertyName,
-				Value:    value,
-			})
 		case "suppression":
 			value, err := resolveProjectedMutationValue(request.ResolvedValues, mutationIntent, entry)
 			if err != nil {
@@ -273,22 +256,20 @@ func ProjectMutations(request *MutationProjectionRequest) (*ManifestMutationProj
 	}
 
 	slices.SortFunc(assembly.Parameters, compareManifestParameterMutations)
-	slices.SortFunc(assembly.Properties, compareManifestPropertyMutations)
 	slices.SortFunc(assembly.Suppression, compareManifestSuppressionMutations)
 	slices.SortFunc(assembly.Visibility, compareManifestVisibilityMutations)
 	slices.SortFunc(assembly.Deletion, compareManifestDeletionMutations)
 	slices.SortFunc(part.Parameters, compareManifestParameterMutations)
-	slices.SortFunc(part.Properties, compareManifestPropertyMutations)
 	slices.SortFunc(part.Suppression, compareManifestSuppressionMutations)
 	slices.SortFunc(part.Visibility, compareManifestVisibilityMutations)
 	slices.SortFunc(part.Deletion, compareManifestDeletionMutations)
 
 	out := &ManifestMutationProjection{}
-	if len(assembly.Parameters) > 0 || len(assembly.Properties) > 0 || len(assembly.Suppression) > 0 || len(assembly.Visibility) > 0 || len(assembly.Deletion) > 0 {
+	if len(assembly.Parameters) > 0 || len(assembly.Suppression) > 0 || len(assembly.Visibility) > 0 || len(assembly.Deletion) > 0 {
 		assemblyCopy := assembly
 		out.Assembly = &assemblyCopy
 	}
-	if len(part.Parameters) > 0 || len(part.Properties) > 0 || len(part.Suppression) > 0 || len(part.Visibility) > 0 || len(part.Deletion) > 0 {
+	if len(part.Parameters) > 0 || len(part.Suppression) > 0 || len(part.Visibility) > 0 || len(part.Deletion) > 0 {
 		partCopy := part
 		out.Part = &partCopy
 	}
@@ -394,16 +375,14 @@ func missingMutationIntentProblems(mutation semantic.MutationIntent, entry Mutat
 	if strings.TrimSpace(mutation.TargetEntityKind) == "" {
 		problems = append(problems, fmt.Sprintf("semantic mutation operation %q requires semantic mutation target entity kind intent", mutation.OperationKind))
 	}
-	if entry.PropertyField != "" && strings.TrimSpace(mutation.TargetField) == "" && mutation.OperationKind != "set_parameter" && mutation.OperationKind != "set_property" {
+	if entry.PropertyField != "" && strings.TrimSpace(mutation.TargetField) == "" && mutation.OperationKind != "set_parameter" {
 		problems = append(problems, fmt.Sprintf("semantic mutation operation %q requires semantic mutation property intent for manifest field %q", mutation.OperationKind, entry.PropertyField))
 	}
 	if entry.ValueField != "" {
 		switch {
 		case mutation.OperationKind == "set_parameter" && strings.TrimSpace(mutation.ValueSource.DSLParameterName) == "":
 			problems = append(problems, fmt.Sprintf("semantic mutation operation %q requires semantic mutation value intent for manifest field %q", mutation.OperationKind, entry.ValueField))
-		case mutation.OperationKind == "set_property" && mutationValueSourceIncomplete(mutation.ValueSource):
-			problems = append(problems, fmt.Sprintf("semantic mutation operation %q requires semantic mutation value intent for manifest field %q", mutation.OperationKind, entry.ValueField))
-		case mutation.OperationKind != "set_parameter" && mutation.OperationKind != "set_property" && entry.Value == nil && mutation.ValueSource.BooleanState == nil:
+		case mutation.OperationKind != "set_parameter" && entry.Value == nil && mutation.ValueSource.BooleanState == nil:
 			problems = append(problems, fmt.Sprintf("semantic mutation operation %q requires semantic mutation value intent for manifest field %q", mutation.OperationKind, entry.ValueField))
 		}
 	}
@@ -411,16 +390,6 @@ func missingMutationIntentProblems(mutation semantic.MutationIntent, entry Mutat
 		problems = append(problems, fmt.Sprintf("semantic mutation operation %q requires semantic mutation scope intent", mutation.OperationKind))
 	}
 	return problems
-}
-
-func mutationValueSourceIncomplete(source semantic.MutationValueSource) bool {
-	if strings.TrimSpace(source.DSLParameterName) != "" {
-		return false
-	}
-	if !source.Scalar.IsZero() {
-		return false
-	}
-	return source.BooleanState == nil
 }
 
 func resolveOutputManifestTargetName(_ *SemanticMap, model *semantic.Model, linkage *IdentityLinkage, output semantic.OutputIntent) (string, error) {
@@ -444,7 +413,7 @@ func resolveMutationCollectionTarget(mutation semantic.MutationIntent, entry Mut
 		collectionKind = collectionKind[idx+1:]
 	}
 	switch collectionKind {
-	case "parameters", "properties", "suppression", "visibility", "deletion":
+	case "parameters", "suppression", "visibility", "deletion":
 	default:
 		return "", "", &ProjectionError{
 			Code:     projectionCodeNonProjectableMutation,
@@ -498,23 +467,6 @@ func resolveMutationManifestTarget(contract *SemanticMap, model *semantic.Model,
 			return "", "", wrapProjectionEntityError(err, projectionCodeNonProjectableMutation, mutation.OperationKind, "mutation")
 		}
 		return objectName, parameter.Name, nil
-	case "set_property":
-		metadata, ok := findMetadataByID(model, mutation.TargetSemanticID)
-		if !ok {
-			return "", "", &ProjectionError{
-				Code:     projectionCodeNonProjectableMutation,
-				Message:  fmt.Sprintf("semantic mutation operation %q references unknown semantic metadata %q", mutation.OperationKind, mutation.TargetSemanticID),
-				Problems: []string{fmt.Sprintf("semantic mutation operation %q target semantic ID %q does not resolve to semantic metadata", mutation.OperationKind, mutation.TargetSemanticID)},
-			}
-		}
-		if _, err := requireIdentityLink(linkage, identityKindMetadata, metadata.ID); err != nil {
-			return "", "", wrapProjectionEntityError(err, projectionCodeNonProjectableMutation, mutation.OperationKind, "mutation")
-		}
-		objectName, err := resolveOwnerManifestName(contract, model, linkage, metadata.OwnerKind, metadata.OwnerID)
-		if err != nil {
-			return "", "", wrapProjectionEntityError(err, projectionCodeNonProjectableMutation, mutation.OperationKind, "mutation")
-		}
-		return objectName, metadata.Key, nil
 	case "suppress", "unsuppress", "hide", "unhide", "delete":
 		objectName, err := ResolveTargetNativeObject(model, linkage, mutation.TargetEntityKind, mutation.TargetSemanticID)
 		if err != nil {
@@ -769,15 +721,6 @@ func findParameterByID(model *semantic.Model, id string) (semantic.Parameter, bo
 	return semantic.Parameter{}, false
 }
 
-func findMetadataByID(model *semantic.Model, id string) (semantic.Metadata, bool) {
-	for _, metadata := range model.Metadata {
-		if metadata.ID == id {
-			return metadata, true
-		}
-	}
-	return semantic.Metadata{}, false
-}
-
 func compareOutputIntents(a, b semantic.OutputIntent) int {
 	if result := compareStrings(a.OutputType, b.OutputType); result != 0 {
 		return result
@@ -837,13 +780,6 @@ func compareManifestParameterMutations(a, b ManifestParameterMutation) int {
 		return result
 	}
 	return compareStrings(a.ValueParam, b.ValueParam)
-}
-
-func compareManifestPropertyMutations(a, b ManifestPropertyMutation) int {
-	if result := compareStrings(a.Object, b.Object); result != 0 {
-		return result
-	}
-	return compareStrings(a.Property, b.Property)
 }
 
 func compareManifestSuppressionMutations(a, b ManifestSuppressionMutation) int {

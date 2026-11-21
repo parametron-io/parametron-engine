@@ -518,15 +518,14 @@ func TestPlannerTargetMutationProjection_PrivateFamiliesNeverLeakIntoPublicPlan(
 	}
 }
 
-// 73. No public plan / manifest payload type carries a Task 10 mutation-family
-// field, and the public export mutation collection still has exactly the three
-// pre-Task-10 families.
+// 73. The public export mutation collection carries the planner mutation
+// families without leaking semantic target metadata.
 func TestPlannerTargetMutationProjection_NoPublicTask10Field(t *testing.T) {
 	assertNoTask10FieldInType(t, reflect.TypeOf(ExecutionPlan{}))
 	assertNoTask10FieldInType(t, reflect.TypeOf(WriteExportManifestPayload{}))
 
 	rt := reflect.TypeOf(ExportManifestMutationCollection{})
-	want := []string{"Parameters", "Properties", "Suppression", "Visibility", "Deletion"}
+	want := []string{"Parameters", "Metadata", "Suppression", "Visibility", "Deletion"}
 	if rt.NumField() != len(want) {
 		t.Fatalf("public ExportManifestMutationCollection field count changed: want %d, got %d", len(want), rt.NumField())
 	}

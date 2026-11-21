@@ -512,8 +512,8 @@ func TestNew_ManifestMutationsAffectIDDeterministically(t *testing.T) {
 				SchemaVersion:    planner.ExportManifestSchemaVersion,
 				Product:          planner.ExportManifestProduct{ID: "widget"},
 				AssemblyMutations: &planner.ExportManifestMutationCollection{
-					Properties: []planner.ExportManifestPropertyMutation{
-						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"alpha": 1, "beta": true}},
+					Metadata: []planner.ExportManifestMetadataMutation{
+						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"alpha": 1, "beta": true}, ValueKind: "string"},
 					},
 				},
 			},
@@ -532,8 +532,8 @@ func TestNew_ManifestMutationsAffectIDDeterministically(t *testing.T) {
 				SchemaVersion:    planner.ExportManifestSchemaVersion,
 				Product:          planner.ExportManifestProduct{ID: "widget"},
 				AssemblyMutations: &planner.ExportManifestMutationCollection{
-					Properties: []planner.ExportManifestPropertyMutation{
-						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"beta": true, "alpha": 1}},
+					Metadata: []planner.ExportManifestMetadataMutation{
+						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"beta": true, "alpha": 1}, ValueKind: "string"},
 					},
 				},
 			},
@@ -556,8 +556,8 @@ func TestNew_ManifestMutationsAffectIDDeterministically(t *testing.T) {
 				SchemaVersion:    planner.ExportManifestSchemaVersion,
 				Product:          planner.ExportManifestProduct{ID: "widget"},
 				AssemblyMutations: &planner.ExportManifestMutationCollection{
-					Properties: []planner.ExportManifestPropertyMutation{
-						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"alpha": 2, "beta": true}},
+					Metadata: []planner.ExportManifestMetadataMutation{
+						{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"alpha": 2, "beta": true}, ValueKind: "string"},
 					},
 				},
 			},

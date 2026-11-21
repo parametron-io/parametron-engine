@@ -20,8 +20,6 @@ const (
 	DSLIntentDiagnosticCodeSourceModelLogicalIDMismatch        = "source_model_logical_id_mismatch"
 	DSLIntentDiagnosticCodeSemanticParameterReferenceNotFound  = "semantic_parameter_reference_not_found"
 	DSLIntentDiagnosticCodeSemanticParameterReferenceAmbiguous = "semantic_parameter_reference_ambiguous"
-	DSLIntentDiagnosticCodeSemanticMetadataReferenceNotFound   = "semantic_metadata_reference_not_found"
-	DSLIntentDiagnosticCodeSemanticMetadataReferenceAmbiguous  = "semantic_metadata_reference_ambiguous"
 	DSLIntentDiagnosticCodeSemanticFeatureReferenceNotFound    = "semantic_feature_reference_not_found"
 	DSLIntentDiagnosticCodeSemanticFeatureReferenceAmbiguous   = "semantic_feature_reference_ambiguous"
 	DSLIntentDiagnosticCodeSemanticComponentReferenceNotFound  = "semantic_component_reference_not_found"

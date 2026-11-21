@@ -135,16 +135,16 @@ func TestWriteExportManifest_WritesMutationCollections(t *testing.T) {
 			Parameters: []planner.ExportManifestParameterMutation{
 				{Object: "Assembly", Property: "Length", ValueParam: "width", Type: "number", Unit: "mm"},
 			},
-			Properties: []planner.ExportManifestPropertyMutation{
-				{Object: "Assembly", Property: "PartNumber", Value: "W-120"},
-				{Object: "Assembly", Property: "Mass", Value: 12.5},
-				{Object: "Assembly", Property: "Visible", Value: true},
+			Metadata: []planner.ExportManifestMetadataMutation{
+				{Object: "Assembly", Property: "PartNumber", Value: "W-120", ValueKind: "string"},
+				{Object: "Assembly", Property: "Mass", Value: 12.5, ValueKind: "number"},
+				{Object: "Assembly", Property: "Visible", Value: true, ValueKind: "boolean"},
 			},
 		},
 		PartMutations: &planner.ExportManifestMutationCollection{
-			Properties: []planner.ExportManifestPropertyMutation{
-				{Object: "Pad", Property: "Label", Value: "PAD-120"},
-				{Object: "Pad", Property: "Visible", Value: false},
+			Metadata: []planner.ExportManifestMetadataMutation{
+				{Object: "Pad", Property: "Label", Value: "PAD-120", ValueKind: "string"},
+				{Object: "Pad", Property: "Visible", Value: false, ValueKind: "boolean"},
 			},
 			Suppression: []planner.ExportManifestSuppressionMutation{
 				{Object: "Pocket", Suppressed: true},
@@ -176,29 +176,29 @@ func TestWriteExportManifest_WritesMutationCollections(t *testing.T) {
 	if got := decoded.AssemblyMutations.Parameters[0]; got != (planner.ExportManifestParameterMutation{Object: "Assembly", Property: "Length", ValueParam: "width", Type: "number", Unit: "mm"}) {
 		t.Fatalf("unexpected assembly parameter mutation: %+v", got)
 	}
-	wantAssemblyProperties := []planner.ExportManifestPropertyMutation{
-		{Object: "Assembly", Property: "PartNumber", Value: "W-120"},
-		{Object: "Assembly", Property: "Mass", Value: 12.5},
-		{Object: "Assembly", Property: "Visible", Value: true},
+	wantAssemblyMetadata := []planner.ExportManifestMetadataMutation{
+		{Object: "Assembly", Property: "PartNumber", Value: "W-120", ValueKind: "string"},
+		{Object: "Assembly", Property: "Mass", Value: 12.5, ValueKind: "number"},
+		{Object: "Assembly", Property: "Visible", Value: true, ValueKind: "boolean"},
 	}
-	if len(decoded.AssemblyMutations.Properties) != len(wantAssemblyProperties) {
-		t.Fatalf("unexpected assembly property count: %+v", decoded.AssemblyMutations.Properties)
+	if len(decoded.AssemblyMutations.Metadata) != len(wantAssemblyMetadata) {
+		t.Fatalf("unexpected assembly metadata count: %+v", decoded.AssemblyMutations.Metadata)
 	}
-	for i, want := range wantAssemblyProperties {
-		if got := decoded.AssemblyMutations.Properties[i]; got != want {
-			t.Fatalf("unexpected assembly property mutation at %d: %+v", i, got)
+	for i, want := range wantAssemblyMetadata {
+		if got := decoded.AssemblyMutations.Metadata[i]; !reflect.DeepEqual(got, want) {
+			t.Fatalf("unexpected assembly metadata mutation at %d: %+v", i, got)
 		}
 	}
-	wantPartProperties := []planner.ExportManifestPropertyMutation{
-		{Object: "Pad", Property: "Label", Value: "PAD-120"},
-		{Object: "Pad", Property: "Visible", Value: false},
+	wantPartMetadata := []planner.ExportManifestMetadataMutation{
+		{Object: "Pad", Property: "Label", Value: "PAD-120", ValueKind: "string"},
+		{Object: "Pad", Property: "Visible", Value: false, ValueKind: "boolean"},
 	}
-	if len(decoded.PartMutations.Properties) != len(wantPartProperties) {
-		t.Fatalf("unexpected part property count: %+v", decoded.PartMutations.Properties)
+	if len(decoded.PartMutations.Metadata) != len(wantPartMetadata) {
+		t.Fatalf("unexpected part metadata count: %+v", decoded.PartMutations.Metadata)
 	}
-	for i, want := range wantPartProperties {
-		if got := decoded.PartMutations.Properties[i]; got != want {
-			t.Fatalf("unexpected part property mutation at %d: %+v", i, got)
+	for i, want := range wantPartMetadata {
+		if got := decoded.PartMutations.Metadata[i]; !reflect.DeepEqual(got, want) {
+			t.Fatalf("unexpected part metadata mutation at %d: %+v", i, got)
 		}
 	}
 	if got := decoded.PartMutations.Suppression[0]; got != (planner.ExportManifestSuppressionMutation{Object: "Pocket", Suppressed: true}) {
