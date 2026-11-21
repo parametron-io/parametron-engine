@@ -173,12 +173,25 @@ product Box {
     ],
     "features": [],
     "relationships": [],
-    "parameterGroups": [],
+    "parameterGroups": [
+      {
+        "id": "grp.root.vars",
+        "ownerComponentId": "cmp.root",
+        "name": "Variables",
+        "displayName": "Variables",
+        "groupKind": "varset",
+        "cadType": "App::VarSet",
+        "observable": true,
+        "writable": true,
+        "stabilityClass": "stable",
+        "annotations": {"description": "", "comment": "", "purpose": ""}
+      }
+    ],
     "parameters": [
       {
         "id": "par.root.width",
-        "ownerKind": "component",
-        "ownerId": "cmp.root",
+        "ownerKind": "group",
+        "ownerId": "grp.root.vars",
         "componentId": "cmp.root",
         "name": "width",
         "displayName": "Width",
@@ -279,17 +292,17 @@ func task13WantPartMutations() *planner.ExportManifestMutationCollection {
 	}
 }
 
-// The fixture's "width" parameter is owned by cmp.root ("MainAssembly", an
-// assembly-kind component), so the planner's implicit parameter-target
-// fallback records its resolved Object.Property in AssemblyMutations.
-// Parameters at the plan level (this internal bookkeeping is what the Task
-// 11 runtime projector filters out -- see
-// TestTask13CLI_JSONPlanMatchesProductRuntimeManifest, which asserts it is
+// The fixture's "width" parameter is owned by the "Variables" parameter
+// group in cmp.root ("MainAssembly", an assembly-kind component), so the
+// planner's implicit parameter-target fallback records its resolved
+// Object.Property in AssemblyMutations. Parameters at the plan level (this
+// internal bookkeeping is what the Task 11 runtime projector filters out --
+// see TestTask13CLI_JSONPlanMatchesProductRuntimeManifest, which asserts it is
 // absent from the written runtime manifest).
 func task13WantAssemblyMutations() *planner.ExportManifestMutationCollection {
 	return &planner.ExportManifestMutationCollection{
 		Parameters: []planner.ExportManifestParameterMutation{
-			{Object: "MainAssembly", Property: "width", ValueParam: "width", Type: "number", Unit: "mm"},
+			{Object: "Variables", Property: "width", ValueParam: "width", Type: "number", Unit: "mm"},
 		},
 		Suppression: []planner.ExportManifestSuppressionMutation{
 			{Object: "SubSuppress", Suppressed: true},

@@ -22,7 +22,10 @@ func writeNativeTargetContractFixture(t *testing.T, action string) string {
 		t.Fatal(err)
 	}
 	capture["sourceDocument"] = original["sourceDocument"]
-	capture["entities"].(map[string]any)["parameters"] = original["entities"].(map[string]any)["parameters"]
+	captureEntities := capture["entities"].(map[string]any)
+	originalEntities := original["entities"].(map[string]any)
+	captureEntities["parameters"] = originalEntities["parameters"]
+	captureEntities["parameterGroups"] = originalEntities["parameterGroups"]
 	data, err = json.Marshal(capture)
 	if err != nil {
 		t.Fatal(err)

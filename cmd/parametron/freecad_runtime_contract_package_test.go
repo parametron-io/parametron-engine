@@ -127,12 +127,25 @@ product Box {
     ],
     "features": [],
     "relationships": [],
-    "parameterGroups": [],
+    "parameterGroups": [
+      {
+        "id": "grp.root.vars",
+        "ownerComponentId": "cmp.root",
+        "name": "Variables",
+        "displayName": "Variables",
+        "groupKind": "varset",
+        "cadType": "App::VarSet",
+        "observable": true,
+        "writable": true,
+        "stabilityClass": "stable",
+        "annotations": {"description": "", "comment": "", "purpose": ""}
+      }
+    ],
     "parameters": [
       {
         "id": "par.root.width",
-        "ownerKind": "component",
-        "ownerId": "cmp.root",
+        "ownerKind": "group",
+        "ownerId": "grp.root.vars",
         "componentId": "cmp.root",
         "name": "width",
         "displayName": "Width",

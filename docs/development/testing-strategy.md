@@ -280,6 +280,22 @@ record packaging.
   facts. This permanent proof covers the normal CLI path, not HTTP API
   target-mutation submission, and does not claim real FreeCAD-native mutation or
   observation.
+- **Target-Scoped Metadata End-to-End Rehearsal (`cmd/parametron/metadata_end_to_end_test.go`)**:
+  Drives captured target metadata from DSL authoring with omitted and empty
+  metadata settings blocks through planning, the schema-1.0 native metadata
+  manifest, the controlled external runtime, Engine expected-versus-observed
+  metadata verification, and normalized record-package emission. The fixture
+  deliberately separates semantic target names (`Bracket`, `Assembly`,
+  `Chamfer`) from native owners (`Body01`, `Assembly01`, `Chamfer01`), and
+  covers string, integer, number, and boolean metadata alongside suppression,
+  hide, and delete actions plus a numeric parameter assignment. A companion
+  authoring-order permutation test proves the metadata manifest family,
+  expected metadata, and target-state request are order-independent. Engine
+  verification intent now survives the scheduler's handoff package clone, so
+  expected parameter and metadata observations reach the runtime request on the
+  normal CLI path. This proof uses controlled evidence and does not establish
+  real FreeCAD-native metadata mutation or observation; that remains with
+  `parametron-freecad#45`.
 - **Declared Resources on the Normal CLI Path (`cmd/parametron/declared_resources_test.go`)**:
   Reuses the controlled contract-package runtime participant to prove the
   project-input, CLI, scheduler, executor, orchestration, attempt, and outcome
