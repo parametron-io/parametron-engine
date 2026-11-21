@@ -279,9 +279,10 @@ func TestTargetMutationIdentity_HandoffCloneDoesNotSort(t *testing.T) {
 // TestTargetMutationIdentity_Handoff_PlanRoundTripPreservesCanonicalOrder
 // scopes its round-trip assertion to the Task 12 mutation-family surface
 // only (PartMutations / AssemblyMutations via pkg.Manifest and via
-// pkg.Plan()'s reconstructed WriteExportManifest step): other manifest
-// fields such as Verification are a pre-existing, unrelated handoff
-// round-trip gap that is out of Task 12 scope.
+// pkg.Plan()'s reconstructed WriteExportManifest step). Engine-private
+// verification intent also survives this in-memory handoff clone, but it is
+// asserted separately by TestFromJob_RetainsVerificationIntentForInMemoryExecution
+// and remains absent from the runtime-facing manifest JSON shape.
 func TestTargetMutationIdentity_Handoff_PlanRoundTripPreservesCanonicalOrder(t *testing.T) {
 	plan := mutationIdentityPlan(t, "    target Slot: action = hide\n    target Pad: action = hide")
 	originalPayload := manifestPayloadFromPlanSteps(t, plan.Steps)
