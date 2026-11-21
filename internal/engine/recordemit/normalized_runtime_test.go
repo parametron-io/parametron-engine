@@ -304,13 +304,17 @@ func newRuntimeMaterialWith(t *testing.T, withTargetState bool, tweak func(*obse
 		t.Fatalf("derive verification contract: %v", err)
 	}
 	meta, ref := contract.Expected.Metadata[0], contract.Expected.References[0]
-	metaValue, err := observed.NewValue([]byte(`"` + meta.Value + `"`))
+	digest, err := meta.StringValue()
+	if err != nil {
+		t.Fatal(err)
+	}
+	metaValue, err := observed.NewValue(meta.Value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	obs := &observed.Observed{
 		SchemaVersion: observed.SchemaVersion,
-		WorkingCopy:   observed.WorkingCopy{Path: ref.Name, SHA256: meta.Value},
+		WorkingCopy:   observed.WorkingCopy{Path: ref.Name, SHA256: digest},
 		Observation: observed.Observation{
 			Parameters: []observed.Parameter{},
 			Metadata:   []observed.Metadata{{ID: "working-copy:sha256", Key: meta.Key, Value: metaValue, ValueKind: "string"}},

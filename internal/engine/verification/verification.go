@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -252,11 +253,21 @@ type ObservedParameterBinding struct {
 }
 
 type ExpectedMetadata struct {
-	ID        string `json:"id,omitempty"`
-	Key       string `json:"key"`
-	OwnerID   string `json:"ownerId"`
-	Value     string `json:"value"`
-	ValueKind string `json:"valueKind,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	Key       string          `json:"key"`
+	OwnerID   string          `json:"ownerId"`
+	Value     json.RawMessage `json:"value"`
+	ValueKind string          `json:"valueKind,omitempty"`
+}
+
+// StringValue returns the decoded string value for a metadata expectation whose
+// value is a JSON string. It is used by working-copy correlation and tests.
+func (entry ExpectedMetadata) StringValue() (string, error) {
+	var value string
+	if err := json.Unmarshal(entry.Value, &value); err != nil {
+		return "", fmt.Errorf("metadata value must be a JSON string: %w", err)
+	}
+	return value, nil
 }
 
 type ExpectedReference struct {
@@ -470,20 +481,36 @@ func Validate(contract *Contract) error {
 		}
 	}
 	for index, entry := range contract.Expected.Metadata {
+		location := fmt.Sprintf("expected.metadata[%d]", index)
 		if entry.ID != "" && strings.TrimSpace(entry.ID) == "" {
-			return &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].id must not be blank", index)}
+			return &ValidationError{Message: location + ".id must not be blank"}
 		}
 		if strings.TrimSpace(entry.Key) == "" {
-			return &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].key is required", index)}
+			return &ValidationError{Message: location + ".key is required"}
 		}
-		if entry.OwnerID != "" && strings.TrimSpace(entry.OwnerID) == "" {
-			return &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].ownerId must not be blank", index)}
+		if strings.TrimSpace(entry.Key) != entry.Key || strings.ContainsRune(entry.Key, '\x00') {
+			return &ValidationError{Message: location + ".key must be an exact native property key"}
 		}
-		if strings.TrimSpace(entry.Value) == "" {
-			return &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].value is required", index)}
+		if len(entry.Value) == 0 {
+			return &ValidationError{Message: location + ".value is required"}
 		}
-		if entry.ID != "" && !isSupportedExpectedMetadataValueKind(entry.ValueKind) {
-			return &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].valueKind must be one of %q, %q, %q, or %q when id is present", index, "number", "integer", "string", "boolean")}
+		if entry.ID == "" {
+			if err := validateExpectedMetadataValueKind("string", entry.Value); err != nil {
+				return &ValidationError{Message: fmt.Sprintf("%s.value %s", location, err.Error())}
+			}
+			if value, ok := expectedMetadataStringValue(entry.Value); !ok || strings.TrimSpace(value) == "" {
+				return &ValidationError{Message: location + ".value is required"}
+			}
+			continue
+		}
+		if entry.OwnerID == "" || strings.TrimSpace(entry.OwnerID) != entry.OwnerID || strings.ContainsRune(entry.OwnerID, '\x00') {
+			return &ValidationError{Message: location + ".ownerId must be an exact native owner object selector"}
+		}
+		if !isSupportedExpectedMetadataValueKind(entry.ValueKind) {
+			return &ValidationError{Message: fmt.Sprintf("%s.valueKind must be one of %q, %q, %q, or %q", location, "number", "integer", "string", "boolean")}
+		}
+		if err := validateExpectedMetadataValueKind(entry.ValueKind, entry.Value); err != nil {
+			return &ValidationError{Message: fmt.Sprintf("%s.value %s", location, err.Error())}
 		}
 	}
 	for index, entry := range contract.Expected.References {
@@ -525,12 +552,18 @@ func Validate(contract *Contract) error {
 	}
 	seenMetadataKeys := make(map[string]int, len(contract.Expected.Metadata))
 	seenMetadataIDs := make(map[string]int, len(contract.Expected.Metadata))
+	seenMetadataNative := make(map[string]int, len(contract.Expected.Metadata))
 	for index, entry := range contract.Expected.Metadata {
 		if entry.ID != "" {
 			if previous, exists := seenMetadataIDs[entry.ID]; exists {
 				return &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].id %q duplicates expected.metadata[%d].id", index, entry.ID, previous)}
 			}
 			seenMetadataIDs[entry.ID] = index
+			nativeKey := entry.OwnerID + "\x00" + entry.Key
+			if previous, exists := seenMetadataNative[nativeKey]; exists {
+				return &ValidationError{Message: fmt.Sprintf("expected.metadata[%d] duplicates expected.metadata[%d] for native owner %q and property %q", index, previous, entry.OwnerID, entry.Key)}
+			}
+			seenMetadataNative[nativeKey] = index
 			continue
 		}
 		if previous, exists := seenMetadataKeys[entry.Key]; exists {
@@ -630,11 +663,22 @@ func DeriveFromManifestAndWorkingCopy(manifest planner.WriteExportManifestPayloa
 	if err != nil {
 		return nil, &ValidationError{Message: err.Error()}
 	}
+	authoredMetadata, err := deriveExpectedMetadataFromVerificationIntent(manifest.Verification.ExpectedMetadata)
+	if err != nil {
+		return nil, &ValidationError{Message: err.Error()}
+	}
 	workingCopyBytes, err := os.ReadFile(workingCopyPath)
 	if err != nil {
 		return nil, &FileError{Path: workingCopyPath, Err: err}
 	}
 	sum := sha256.Sum256(workingCopyBytes)
+	workingCopyDigest, err := EncodeExpectedMetadataValue("string", hex.EncodeToString(sum[:]))
+	if err != nil {
+		return nil, &ValidationError{Message: "working copy digest: " + err.Error()}
+	}
+	metadata := make([]ExpectedMetadata, 0, len(authoredMetadata)+1)
+	metadata = append(metadata, ExpectedMetadata{Key: "working_copy_sha256", Value: workingCopyDigest})
+	metadata = append(metadata, authoredMetadata...)
 
 	contract := &Contract{
 		SchemaVersion: SchemaVersion,
@@ -650,10 +694,7 @@ func DeriveFromManifestAndWorkingCopy(manifest planner.WriteExportManifestPayloa
 		Expected: Expected{
 			Components: []ExpectedComponent{},
 			Parameters: assignments,
-			Metadata: []ExpectedMetadata{{
-				Key:   "working_copy_sha256",
-				Value: hex.EncodeToString(sum[:]),
-			}},
+			Metadata:   metadata,
 			References: []ExpectedReference{{
 				Kind: "working_copy_path",
 				Name: workingCopyPath,
@@ -815,6 +856,55 @@ func deriveExpectedParametersFromVerificationIntent(expectedParameters []planner
 		}
 	}
 
+	return expected, nil
+}
+
+func deriveExpectedMetadataFromVerificationIntent(entries []planner.VerificationExpectedMetadata) ([]ExpectedMetadata, error) {
+	if len(entries) == 0 {
+		return []ExpectedMetadata{}, nil
+	}
+
+	expected := make([]ExpectedMetadata, 0, len(entries))
+	for index, entry := range entries {
+		location := fmt.Sprintf("verification.expectedMetadata[%d]", index)
+		for _, field := range []struct {
+			name  string
+			value string
+		}{{location + ".id", entry.ID}, {location + ".key", entry.Key}, {location + ".ownerId", entry.OwnerID}} {
+			if field.value == "" || strings.TrimSpace(field.value) != field.value || strings.ContainsRune(field.value, '\x00') {
+				return nil, fmt.Errorf("%s must be a non-blank exact native identity", field.name)
+			}
+		}
+		if !isSupportedExpectedMetadataValueKind(entry.ValueKind) {
+			return nil, fmt.Errorf("%s.valueKind must be one of %q, %q, %q, or %q", location, "number", "integer", "string", "boolean")
+		}
+		value, err := EncodeExpectedMetadataValue(entry.ValueKind, entry.Value)
+		if err != nil {
+			return nil, fmt.Errorf("%s.value %s", location, err.Error())
+		}
+		expected = append(expected, ExpectedMetadata{
+			ID:        entry.ID,
+			Key:       entry.Key,
+			OwnerID:   entry.OwnerID,
+			Value:     value,
+			ValueKind: entry.ValueKind,
+		})
+	}
+
+	slices.SortFunc(expected, compareExpectedMetadata)
+	seenIDs := make(map[string]int, len(expected))
+	seenNative := make(map[string]int, len(expected))
+	for index, entry := range expected {
+		if previous, exists := seenIDs[entry.ID]; exists {
+			return nil, fmt.Errorf("verification.expectedMetadata[%d].id %q duplicates verification.expectedMetadata[%d].id", index, entry.ID, previous)
+		}
+		seenIDs[entry.ID] = index
+		nativeKey := entry.OwnerID + "\x00" + entry.Key
+		if previous, exists := seenNative[nativeKey]; exists {
+			return nil, fmt.Errorf("verification.expectedMetadata[%d] duplicates verification.expectedMetadata[%d] for native owner %q and property %q", index, previous, entry.OwnerID, entry.Key)
+		}
+		seenNative[nativeKey] = index
+	}
 	return expected, nil
 }
 
@@ -1031,21 +1121,23 @@ func verifyMetadata(expected []ExpectedMetadata, actual []observed.Metadata) Cat
 			if matched.ValueKind != entry.ValueKind {
 				return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q valueKind mismatch: want %q, got %q", entry.ID, entry.ValueKind, matched.ValueKind))
 			}
-			value := observedMetadataIdentityComparableValue(matched)
-			if value != entry.Value {
-				return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q mismatch: want %q, got %q", entry.ID, entry.Value, value))
+			if err := validateExpectedMetadataValueKind(matched.ValueKind, matched.Value.Raw()); err != nil {
+				return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q value %s", entry.ID, err.Error()))
+			}
+			if !bytes.Equal(entry.Value, matched.Value.Raw()) {
+				return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q mismatch: want %s, got %s", entry.ID, expectedMetadataValueDisplay(entry.Value), expectedMetadataValueDisplay(matched.Value.Raw())))
 			}
 			continue
 		}
 
 		count := 0
-		value := ""
+		var matched observed.Metadata
 		for _, observedEntry := range actual {
 			if observedEntry.Key != entry.Key {
 				continue
 			}
 			count++
-			value = observedMetadataComparableValue(observedEntry)
+			matched = observedEntry
 		}
 		if count == 0 {
 			return failedCategoryResult(true, FailureClassRequiredObservationMissing, fmt.Sprintf("required observed metadata %q is missing", entry.Key))
@@ -1053,8 +1145,14 @@ func verifyMetadata(expected []ExpectedMetadata, actual []observed.Metadata) Cat
 		if count > 1 {
 			return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q is not unique", entry.Key))
 		}
-		if value != entry.Value {
-			return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q mismatch: want %q, got %q", entry.Key, entry.Value, value))
+		if matched.ValueKind != "string" {
+			return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q valueKind mismatch: want %q, got %q", entry.Key, "string", matched.ValueKind))
+		}
+		if err := validateExpectedMetadataValueKind("string", matched.Value.Raw()); err != nil {
+			return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q value %s", entry.Key, err.Error()))
+		}
+		if !bytes.Equal(entry.Value, matched.Value.Raw()) {
+			return failedCategoryResult(true, FailureClassMetadataMismatch, fmt.Sprintf("observed metadata %q mismatch: want %s, got %s", entry.Key, expectedMetadataValueDisplay(entry.Value), expectedMetadataValueDisplay(matched.Value.Raw())))
 		}
 	}
 	return passedCategoryResult(true, fmt.Sprintf("verified %d metadata entries", len(expected)))
@@ -1087,30 +1185,6 @@ func verifyParameters(expected []ExpectedParameter, actual []observed.Parameter)
 		}
 	}
 	return passedCategoryResult(true, fmt.Sprintf("verified %d parameters", len(expected)))
-}
-
-func observedMetadataComparableValue(entry observed.Metadata) string {
-	raw := entry.Value.Raw()
-	if len(raw) == 0 {
-		return ""
-	}
-	var stringValue string
-	if err := json.Unmarshal(raw, &stringValue); err == nil {
-		return stringValue
-	}
-	return strconv.Quote(string(raw))
-}
-
-func observedMetadataIdentityComparableValue(entry observed.Metadata) string {
-	raw := entry.Value.Raw()
-	if len(raw) == 0 {
-		return ""
-	}
-	var stringValue string
-	if err := json.Unmarshal(raw, &stringValue); err == nil {
-		return stringValue
-	}
-	return string(raw)
 }
 
 func verifyReferences(expected []ExpectedReference, actual []observed.Reference) CategoryResult {
@@ -1709,9 +1783,17 @@ func parseExpectedMetadataField(root map[string]any) ([]ExpectedMetadata, error)
 				return nil, &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].ownerId must be a string or null", index)}
 			}
 		}
-		value, err := requiredStringField(object, "value")
+		value, ok := object["value"]
+		if !ok {
+			return nil, &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].value is required", index)}
+		}
+		rawValue, err := json.Marshal(value)
 		if err != nil {
-			return nil, wrapIndexedFieldError("expected.metadata", index, err)
+			return nil, &DecodeError{Err: err}
+		}
+		scalar, err := observed.NewValue(rawValue)
+		if err != nil {
+			return nil, &ValidationError{Message: fmt.Sprintf("expected.metadata[%d].value %s", index, err.Error())}
 		}
 		valueKind := ""
 		if rawValueKind, ok := object["valueKind"]; ok {
@@ -1721,7 +1803,7 @@ func parseExpectedMetadataField(root map[string]any) ([]ExpectedMetadata, error)
 			}
 			valueKind = typed
 		}
-		entries = append(entries, ExpectedMetadata{ID: id, Key: key, OwnerID: ownerID, Value: value, ValueKind: valueKind})
+		entries = append(entries, ExpectedMetadata{ID: id, Key: key, OwnerID: ownerID, Value: json.RawMessage(scalar.Raw()), ValueKind: valueKind})
 	}
 	return entries, nil
 }
@@ -1972,7 +2054,11 @@ func writeExpected(out *bytes.Buffer, expected Expected) {
 		}
 		writeJSONString(out, "value")
 		out.WriteByte(':')
-		writeJSONString(out, entry.Value)
+		if len(entry.Value) == 0 {
+			out.WriteString("null")
+		} else {
+			out.Write(entry.Value)
+		}
 		if entry.ID != "" {
 			out.WriteByte(',')
 			writeJSONString(out, "valueKind")
@@ -2097,8 +2183,8 @@ func compareExpectedMetadata(left, right ExpectedMetadata) int {
 	if left.OwnerID != right.OwnerID {
 		return strings.Compare(left.OwnerID, right.OwnerID)
 	}
-	if left.Value != right.Value {
-		return strings.Compare(left.Value, right.Value)
+	if !bytes.Equal(left.Value, right.Value) {
+		return strings.Compare(string(left.Value), string(right.Value))
 	}
 	return strings.Compare(left.ValueKind, right.ValueKind)
 }
@@ -2119,6 +2205,80 @@ func isSupportedExpectedMetadataValueKind(kind string) bool {
 	default:
 		return false
 	}
+}
+
+// EncodeExpectedMetadataValue canonicalizes a resolved metadata value into the
+// JSON scalar used by the verification contract and validates it against the
+// declared value kind.
+func EncodeExpectedMetadataValue(valueKind string, value any) (json.RawMessage, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, fmt.Errorf("must be a JSON scalar: %w", err)
+	}
+	scalar, err := observed.NewValue(raw)
+	if err != nil {
+		return nil, fmt.Errorf("must be a JSON scalar: %w", err)
+	}
+	canonical := scalar.Raw()
+	if err := validateExpectedMetadataValueKind(valueKind, canonical); err != nil {
+		return nil, err
+	}
+	return json.RawMessage(canonical), nil
+}
+
+func validateExpectedMetadataValueKind(kind string, raw json.RawMessage) error {
+	if len(raw) == 0 {
+		return fmt.Errorf("is required")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var decoded any
+	if err := decoder.Decode(&decoded); err != nil {
+		return fmt.Errorf("must be a valid JSON scalar: %w", err)
+	}
+	if err := ensureNoTrailingJSON(decoder); err != nil {
+		return fmt.Errorf("%s", err.Error())
+	}
+	switch kind {
+	case "string":
+		if _, ok := decoded.(string); !ok {
+			return fmt.Errorf("must be a string for valueKind %q", kind)
+		}
+	case "boolean":
+		if _, ok := decoded.(bool); !ok {
+			return fmt.Errorf("must be a boolean for valueKind %q", kind)
+		}
+	case "number", "integer":
+		number, ok := decoded.(json.Number)
+		if !ok {
+			return fmt.Errorf("must be a number for valueKind %q", kind)
+		}
+		parsed, err := number.Float64()
+		if err != nil || math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+			return fmt.Errorf("must be a finite number for valueKind %q", kind)
+		}
+		if kind == "integer" && math.Trunc(parsed) != parsed {
+			return fmt.Errorf("must be an exact integral number for valueKind %q", kind)
+		}
+	default:
+		return fmt.Errorf("valueKind must be one of %q, %q, %q, or %q", "number", "integer", "string", "boolean")
+	}
+	return nil
+}
+
+func expectedMetadataValueDisplay(raw json.RawMessage) string {
+	if value, ok := expectedMetadataStringValue(raw); ok {
+		return strconv.Quote(value)
+	}
+	return string(raw)
+}
+
+func expectedMetadataStringValue(raw json.RawMessage) (string, bool) {
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", false
+	}
+	return value, true
 }
 
 func expectedOptionalIdentity(value string) string {

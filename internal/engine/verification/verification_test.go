@@ -254,7 +254,7 @@ func TestCanonicalJSON_StableWithComponentsAndMetadataIdentity(t *testing.T) {
 		t.Fatalf("canonical JSON changed across repeated richer-structure calls\nfirst:  %s\nsecond: %s", first, second)
 	}
 
-	want := []byte(`{"schemaVersion":"1.0","observe":{"components":true,"parameters":false,"metadata":true,"references":true},"observationContext":{"parameters":[]},"expected":{"components":[{"id":"cmp.part.leg","kind":"part","name":"Leg","parentId":"cmp.root"},{"id":"cmp.root","kind":"assembly","name":"Widget","parentId":null}],"parameters":[{"id":"par.root.height","name":"height","type":"number","unit":"mm","value":5},{"id":"par.root.length","name":"length","type":"number","unit":"mm","value":35}],"metadata":[{"id":"meta.mass","key":"mass","ownerId":"cmp.part.leg","value":"12.5","valueKind":"number"}],"references":[{"kind":"working_copy_path","name":"/tmp/out/_working/widget.FCStd"}]},"checks":{"components":{"enabled":true},"parameters":{"enabled":false},"metadata":{"enabled":true},"references":{"enabled":true}}}`)
+	want := []byte(`{"schemaVersion":"1.0","observe":{"components":true,"parameters":false,"metadata":true,"references":true},"observationContext":{"parameters":[]},"expected":{"components":[{"id":"cmp.part.leg","kind":"part","name":"Leg","parentId":"cmp.root"},{"id":"cmp.root","kind":"assembly","name":"Widget","parentId":null}],"parameters":[{"id":"par.root.height","name":"height","type":"number","unit":"mm","value":5},{"id":"par.root.length","name":"length","type":"number","unit":"mm","value":35}],"metadata":[{"id":"meta.mass","key":"mass","ownerId":"cmp.part.leg","value":12.5,"valueKind":"number"}],"references":[{"kind":"working_copy_path","name":"/tmp/out/_working/widget.FCStd"}]},"checks":{"components":{"enabled":true},"parameters":{"enabled":false},"metadata":{"enabled":true},"references":{"enabled":true}}}`)
 	if !bytes.Equal(first, want) {
 		t.Fatalf("unexpected richer canonical JSON\nwant: %s\ngot:  %s", want, first)
 	}
@@ -525,7 +525,7 @@ func TestVerify_DoesNotInvokeObservedIdentityComparabilityImplicitly(t *testing.
 			ID:        "meta.unknown",
 			Key:       contract.Expected.Metadata[0].Key,
 			OwnerID:   "owner.unknown",
-			Value:     mustObservedMetadataValue(contract.Expected.Metadata[0].Value),
+			Value:     mustObservedMetadataValue(expectedMetadataString(contract.Expected.Metadata[0])),
 			ValueKind: "string",
 		},
 	}
@@ -1432,7 +1432,7 @@ func TestVerify_RicherStructureFailuresRemainDeterministic(t *testing.T) {
 		ID:        "meta.mass",
 		Key:       "mass",
 		OwnerID:   "cmp.part.leg",
-		Value:     "12.5",
+		Value:     json.RawMessage("12.5"),
 		ValueKind: "number",
 	}}
 	obs := matchingObserved(contract)
@@ -1828,25 +1828,32 @@ func metadataIdentityContract() *Contract {
 		ID:        "meta.mass",
 		Key:       "mass",
 		OwnerID:   "cmp.part.leg",
-		Value:     "12.5",
+		Value:     json.RawMessage("12.5"),
 		ValueKind: "number",
 	}}
 	return contract
 }
 
 func matchingObserved(contract *Contract) *observed.Observed {
+	workingCopyEntry, hasWorkingCopy := workingCopyExpectedMetadata(contract)
+	workingCopyKey := ""
+	workingCopySHA := ""
+	if hasWorkingCopy {
+		workingCopyKey = workingCopyEntry.Key
+		workingCopySHA = expectedMetadataString(workingCopyEntry)
+	}
 	obs := &observed.Observed{
 		SchemaVersion: observed.SchemaVersion,
 		WorkingCopy: observed.WorkingCopy{
 			Path:   contract.Expected.References[0].Name,
-			SHA256: contract.Expected.Metadata[0].Value,
+			SHA256: workingCopySHA,
 		},
 		Observation: observed.Observation{
 			Parameters: []observed.Parameter{},
 			Metadata: []observed.Metadata{{
 				ID:        "working-copy:sha256",
-				Key:       contract.Expected.Metadata[0].Key,
-				Value:     mustObservedMetadataValue(contract.Expected.Metadata[0].Value),
+				Key:       workingCopyKey,
+				Value:     mustObservedMetadataValue(workingCopySHA),
 				ValueKind: "string",
 			}},
 			References: []observed.Reference{{
@@ -1912,19 +1919,40 @@ func matchingObservedComponents(contract *Contract) []observed.Component {
 func matchingObservedMetadata(contract *Contract) []observed.Metadata {
 	entries := make([]observed.Metadata, 0, len(contract.Expected.Metadata))
 	for _, entry := range contract.Expected.Metadata {
-		value := mustObservedMetadataValue(entry.Value)
-		if entry.ValueKind != "" && entry.ValueKind != "string" {
-			value = mustObservedScalarValue(entry.Value)
-		}
 		entries = append(entries, observed.Metadata{
 			ID:        entry.ID,
 			Key:       entry.Key,
 			OwnerID:   entry.OwnerID,
-			Value:     value,
+			Value:     mustObservedRawValue(entry.Value),
 			ValueKind: entry.ValueKind,
 		})
 	}
 	return entries
+}
+
+func workingCopyExpectedMetadata(contract *Contract) (ExpectedMetadata, bool) {
+	for _, entry := range contract.Expected.Metadata {
+		if entry.ID == "" && entry.Key == "working_copy_sha256" {
+			return entry, true
+		}
+	}
+	return ExpectedMetadata{}, false
+}
+
+func expectedMetadataString(entry ExpectedMetadata) string {
+	value, err := entry.StringValue()
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
+func mustObservedRawValue(raw json.RawMessage) observed.Value {
+	value, err := observed.NewValue(raw)
+	if err != nil {
+		panic(err)
+	}
+	return value
 }
 
 func cloneObserved(in *observed.Observed) *observed.Observed {

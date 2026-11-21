@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -121,6 +122,7 @@ type ExportManifestParameterAssignment struct {
 
 type VerificationManifestIntent struct {
 	ExpectedParameters        []VerificationExpectedParameter
+	ExpectedMetadata          []VerificationExpectedMetadata
 	ObservationParameterLinks []VerificationObservationParameterLink
 }
 
@@ -130,6 +132,14 @@ type VerificationExpectedParameter struct {
 	Value float64
 	Type  string
 	Unit  string
+}
+
+type VerificationExpectedMetadata struct {
+	ID        string
+	Key       string
+	OwnerID   string
+	Value     any
+	ValueKind string
 }
 
 type VerificationObservationParameterLink struct {
@@ -1239,6 +1249,27 @@ func projectSemanticManifestIntent(request *semanticManifestProjectionRequest) (
 			GroupName: groupName,
 		})
 	}
+	for _, mutation := range request.MetadataMutations {
+		out.Verification.ExpectedMetadata = append(out.Verification.ExpectedMetadata, VerificationExpectedMetadata{
+			ID:        mutation.MetadataID,
+			Key:       mutation.NativeProperty,
+			OwnerID:   mutation.NativeObject,
+			Value:     mutation.Value,
+			ValueKind: mutation.ValueKind,
+		})
+	}
+	slices.SortFunc(out.Verification.ExpectedMetadata, func(left, right VerificationExpectedMetadata) int {
+		if result := strings.Compare(left.ID, right.ID); result != 0 {
+			return result
+		}
+		if result := strings.Compare(left.OwnerID, right.OwnerID); result != 0 {
+			return result
+		}
+		if result := strings.Compare(left.Key, right.Key); result != 0 {
+			return result
+		}
+		return strings.Compare(left.ValueKind, right.ValueKind)
+	})
 	return out, nil
 }
 

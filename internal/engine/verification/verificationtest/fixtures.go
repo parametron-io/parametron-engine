@@ -1,6 +1,7 @@
 package verificationtest
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -64,7 +65,7 @@ func validContract() *verification.Contract {
 				{ID: "par.root.length", Name: "length", Type: "number", Unit: "mm", Value: 35},
 			},
 			Metadata: []verification.ExpectedMetadata{
-				{Key: "working_copy_sha256", Value: strings.Repeat("a", 64)},
+				{Key: "working_copy_sha256", Value: mustExpectedMetadataValue(strings.Repeat("a", 64))},
 			},
 			References: []verification.ExpectedReference{
 				{Kind: "working_copy_path", Name: "/tmp/out/_working/widget.FCStd"},
@@ -96,14 +97,14 @@ func MatchingObserved(contract *verification.Contract) *observed.Observed {
 		SchemaVersion: observed.SchemaVersion,
 		WorkingCopy: observed.WorkingCopy{
 			Path:   contract.Expected.References[0].Name,
-			SHA256: contract.Expected.Metadata[0].Value,
+			SHA256: mustExpectedMetadataString(contract.Expected.Metadata[0]),
 		},
 		Observation: observed.Observation{
 			Parameters: []observed.Parameter{},
 			Metadata: []observed.Metadata{{
 				ID:        "working-copy:sha256",
 				Key:       contract.Expected.Metadata[0].Key,
-				Value:     mustObservedMetadataValue(contract.Expected.Metadata[0].Value),
+				Value:     mustObservedMetadataValue(mustExpectedMetadataString(contract.Expected.Metadata[0])),
 				ValueKind: "string",
 			}},
 			References: []observed.Reference{{
@@ -149,7 +150,7 @@ func matchingObservedParameters(contract *verification.Contract) []observed.Para
 func MetadataMismatchObserved(contract *verification.Contract) *observed.Observed {
 	obs := MatchingObserved(contract)
 	obs.Observation.Metadata[0].Value = mustObservedMetadataValue(strings.Repeat("0", 64))
-	obs.WorkingCopy.SHA256 = contract.Expected.Metadata[0].Value
+	obs.WorkingCopy.SHA256 = mustExpectedMetadataString(contract.Expected.Metadata[0])
 	return obs
 }
 
@@ -170,6 +171,22 @@ func MissingRequiredReferenceObserved(contract *verification.Contract) *observed
 	obs := MatchingObserved(contract)
 	obs.Observation.References = []observed.Reference{}
 	return obs
+}
+
+func mustExpectedMetadataValue(value string) json.RawMessage {
+	raw, err := verification.EncodeExpectedMetadataValue("string", value)
+	if err != nil {
+		panic(err)
+	}
+	return raw
+}
+
+func mustExpectedMetadataString(entry verification.ExpectedMetadata) string {
+	value, err := entry.StringValue()
+	if err != nil {
+		panic(err)
+	}
+	return value
 }
 
 func mustObservedMetadataValue(value string) observed.Value {

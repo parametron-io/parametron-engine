@@ -46,6 +46,17 @@ type FreeCADRuntimeObservationRequestError struct {
 	Err       error
 }
 
+// WorkingCopySHA256 returns the prepared-source digest expectation carried by
+// the observation request's working-copy metadata entry.
+func (m FreeCADRuntimeObservationRequestMaterialization) WorkingCopySHA256() (string, error) {
+	for _, entry := range m.Contract.Expected.Metadata {
+		if entry.ID == "" && entry.Key == "working_copy_sha256" {
+			return entry.StringValue()
+		}
+	}
+	return "", fmt.Errorf("working_copy_sha256 metadata expectation is missing")
+}
+
 func (e *FreeCADRuntimeObservationRequestError) Error() string {
 	if e == nil {
 		return ""
@@ -218,6 +229,10 @@ func deriveFreeCADRuntimeObservationRequestPath(manifest freecad.FreeCADRuntimeM
 }
 
 func validateFreeCADVerificationIntent(intent planner.VerificationManifestIntent) (string, error) {
+	if field, err := validateFreeCADVerificationExpectedMetadata(intent.ExpectedMetadata); err != nil {
+		return field, err
+	}
+
 	expectedIDs := make(map[string]int, len(intent.ExpectedParameters))
 	for index, parameter := range intent.ExpectedParameters {
 		prefix := fmt.Sprintf("Manifest.Verification.ExpectedParameters[%d]", index)
@@ -276,6 +291,40 @@ func validateFreeCADVerificationIntent(intent planner.VerificationManifestIntent
 	return "", nil
 }
 
+func validateFreeCADVerificationExpectedMetadata(entries []planner.VerificationExpectedMetadata) (string, error) {
+	seenIDs := make(map[string]int, len(entries))
+	seenNative := make(map[string]int, len(entries))
+	for index, entry := range entries {
+		prefix := fmt.Sprintf("Manifest.Verification.ExpectedMetadata[%d]", index)
+		for _, field := range []struct {
+			name  string
+			value string
+		}{{prefix + ".ID", entry.ID}, {prefix + ".Key", entry.Key}, {prefix + ".OwnerID", entry.OwnerID}} {
+			if field, err := validateExactNonEmptyString(field.name, field.value); err != nil {
+				return field, err
+			}
+		}
+		switch entry.ValueKind {
+		case "number", "integer", "string", "boolean":
+		default:
+			return prefix + ".ValueKind", fmt.Errorf("must be one of %q, %q, %q, or %q", "number", "integer", "string", "boolean")
+		}
+		if _, err := verification.EncodeExpectedMetadataValue(entry.ValueKind, entry.Value); err != nil {
+			return prefix + ".Value", err
+		}
+		if previous, exists := seenIDs[entry.ID]; exists {
+			return prefix + ".ID", fmt.Errorf("duplicates ExpectedMetadata[%d].ID", previous)
+		}
+		seenIDs[entry.ID] = index
+		nativeKey := entry.OwnerID + "\x00" + entry.Key
+		if previous, exists := seenNative[nativeKey]; exists {
+			return prefix, fmt.Errorf("duplicates ExpectedMetadata[%d] for native owner %q and property %q", previous, entry.OwnerID, entry.Key)
+		}
+		seenNative[nativeKey] = index
+	}
+	return "", nil
+}
+
 func validateFreeCADVerificationContract(contract *verification.Contract) (string, error) {
 	if err := verification.Validate(contract); err != nil {
 		return "", err
@@ -283,10 +332,8 @@ func validateFreeCADVerificationContract(contract *verification.Contract) (strin
 	if contract.Observe.Components || contract.Checks.Components.Enabled || len(contract.Expected.Components) != 0 {
 		return "components", fmt.Errorf("component observation is not supported")
 	}
-	if !contract.Observe.Metadata || !contract.Checks.Metadata.Enabled ||
-		len(contract.Expected.Metadata) != 1 ||
-		contract.Expected.Metadata[0].Key != "working_copy_sha256" {
-		return "metadata", fmt.Errorf("must request exactly working_copy_sha256 metadata")
+	if field, err := validateFreeCADMetadataExpectationBoundary(contract); err != nil {
+		return field, err
 	}
 	if !contract.Observe.References || !contract.Checks.References.Enabled ||
 		len(contract.Expected.References) != 1 ||
@@ -313,6 +360,41 @@ func validateFreeCADVerificationContract(contract *verification.Contract) (strin
 		if _, exists := expected[binding.ID]; !exists || binding.Name == "" || binding.GroupName == "" {
 			return fmt.Sprintf("observationContext.parameters[%d]", index), fmt.Errorf("must explicitly bind id, name, and groupName")
 		}
+	}
+	return "", nil
+}
+
+func validateFreeCADMetadataExpectationBoundary(contract *verification.Contract) (string, error) {
+	if !contract.Observe.Metadata || !contract.Checks.Metadata.Enabled {
+		return "metadata", fmt.Errorf("metadata observation and checks must be enabled")
+	}
+	workingCopyEntries := 0
+	seenIDs := make(map[string]int, len(contract.Expected.Metadata))
+	seenNative := make(map[string]int, len(contract.Expected.Metadata))
+	for index, entry := range contract.Expected.Metadata {
+		prefix := fmt.Sprintf("expected.metadata[%d]", index)
+		if entry.ID == "" {
+			if entry.Key != "working_copy_sha256" {
+				return prefix + ".key", fmt.Errorf("must be %q for the working-copy metadata expectation", "working_copy_sha256")
+			}
+			workingCopyEntries++
+			continue
+		}
+		if entry.OwnerID == "" {
+			return prefix + ".ownerId", fmt.Errorf("must be a non-empty native owner selector")
+		}
+		if previous, exists := seenIDs[entry.ID]; exists {
+			return prefix + ".id", fmt.Errorf("duplicates expected.metadata[%d].id", previous)
+		}
+		seenIDs[entry.ID] = index
+		nativeKey := entry.OwnerID + "\x00" + entry.Key
+		if previous, exists := seenNative[nativeKey]; exists {
+			return prefix, fmt.Errorf("duplicates expected.metadata[%d] for native owner %q and property %q", previous, entry.OwnerID, entry.Key)
+		}
+		seenNative[nativeKey] = index
+	}
+	if workingCopyEntries != 1 {
+		return "metadata", fmt.Errorf("must request exactly one working_copy_sha256 metadata expectation")
 	}
 	return "", nil
 }
