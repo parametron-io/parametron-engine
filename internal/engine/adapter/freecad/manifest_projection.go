@@ -28,9 +28,17 @@ type FreeCADRuntimeExportManifest struct {
 }
 
 type FreeCADRuntimeMutationCollection struct {
+	Metadata    []FreeCADRuntimeMetadataMutation    `json:"metadata,omitempty"`
 	Suppression []FreeCADRuntimeSuppressionMutation `json:"suppression,omitempty"`
 	Visibility  []FreeCADRuntimeVisibilityMutation  `json:"visibility,omitempty"`
 	Deletion    []FreeCADRuntimeDeletionMutation    `json:"deletion,omitempty"`
+}
+
+type FreeCADRuntimeMetadataMutation struct {
+	Object    string `json:"object"`
+	Property  string `json:"property"`
+	Value     any    `json:"value"`
+	ValueKind string `json:"valueKind"`
 }
 
 type FreeCADRuntimeSuppressionMutation struct {
@@ -95,8 +103,14 @@ func ProjectFreeCADRuntimeExportManifest(payload planner.WriteExportManifestPayl
 		return nil, err
 	}
 
-	assemblyMutations := projectFreeCADRuntimeMutationCollection(payload.AssemblyMutations)
-	partMutations := projectFreeCADRuntimeMutationCollection(payload.PartMutations)
+	assemblyMutations, err := projectFreeCADRuntimeMutationCollection("assemblyMutations", payload.AssemblyMutations)
+	if err != nil {
+		return nil, err
+	}
+	partMutations, err := projectFreeCADRuntimeMutationCollection("partMutations", payload.PartMutations)
+	if err != nil {
+		return nil, err
+	}
 
 	return &FreeCADRuntimeExportManifest{
 		SchemaVersion:        schemaVersion,
@@ -120,15 +134,22 @@ func ValidateFreeCADRuntimeExportManifestSchema(payload planner.WriteExportManif
 	return nil
 }
 
-func hasPlannerRuntimeTargetMutations(collection *planner.ExportManifestMutationCollection) bool {
-	return collection != nil && (len(collection.Suppression) > 0 || len(collection.Visibility) > 0 || len(collection.Deletion) > 0)
+func hasPlannerRuntimeMutations(collection *planner.ExportManifestMutationCollection) bool {
+	return collection != nil && (len(collection.Metadata) > 0 || len(collection.Suppression) > 0 || len(collection.Visibility) > 0 || len(collection.Deletion) > 0)
 }
 
-func projectFreeCADRuntimeMutationCollection(collection *planner.ExportManifestMutationCollection) *FreeCADRuntimeMutationCollection {
-	if !hasPlannerRuntimeTargetMutations(collection) {
-		return nil
+func projectFreeCADRuntimeMutationCollection(section string, collection *planner.ExportManifestMutationCollection) (*FreeCADRuntimeMutationCollection, error) {
+	if !hasPlannerRuntimeMutations(collection) {
+		return nil, nil
 	}
+
+	metadata, err := projectFreeCADRuntimeMetadataMutations(section+".metadata", collection.Metadata)
+	if err != nil {
+		return nil, err
+	}
+
 	projected := &FreeCADRuntimeMutationCollection{
+		Metadata:    metadata,
 		Suppression: make([]FreeCADRuntimeSuppressionMutation, 0, len(collection.Suppression)),
 		Visibility:  make([]FreeCADRuntimeVisibilityMutation, 0, len(collection.Visibility)),
 		Deletion:    make([]FreeCADRuntimeDeletionMutation, 0, len(collection.Deletion)),
@@ -142,7 +163,132 @@ func projectFreeCADRuntimeMutationCollection(collection *planner.ExportManifestM
 	for _, mutation := range collection.Deletion {
 		projected.Deletion = append(projected.Deletion, FreeCADRuntimeDeletionMutation{Object: mutation.Object})
 	}
-	return projected
+	return projected, nil
+}
+
+// projectFreeCADRuntimeMetadataMutations validates and projects exact native
+// metadata mutations without introducing semantic names, metadata keys,
+// display labels, or mutation policy. Input order is preserved; the planner is
+// the only canonical-ordering boundary.
+func projectFreeCADRuntimeMetadataMutations(fieldPrefix string, mutations []planner.ExportManifestMetadataMutation) ([]FreeCADRuntimeMetadataMutation, error) {
+	if len(mutations) == 0 {
+		return nil, nil
+	}
+
+	projected := make([]FreeCADRuntimeMetadataMutation, 0, len(mutations))
+	seen := make(map[[2]string]int, len(mutations))
+	for i, mutation := range mutations {
+		field := fmt.Sprintf("%s[%d]", fieldPrefix, i)
+		object, err := validateFreeCADRuntimeMetadataField(field+".object", "native owner object selector", mutation.Object)
+		if err != nil {
+			return nil, err
+		}
+		property, err := validateFreeCADRuntimeMetadataField(field+".property", "native property key", mutation.Property)
+		if err != nil {
+			return nil, err
+		}
+		if err := validateFreeCADRuntimeMetadataValueKind(field+".valueKind", mutation.ValueKind); err != nil {
+			return nil, err
+		}
+		if err := validateFreeCADRuntimeMetadataValue(field+".value", mutation.ValueKind, mutation.Value); err != nil {
+			return nil, err
+		}
+
+		key := [2]string{object, property}
+		if firstIndex, exists := seen[key]; exists {
+			return nil, projectionErrorf(field, "duplicates %s[%d] for native object %q and property %q", fieldPrefix, firstIndex, object, property)
+		}
+		seen[key] = i
+
+		projected = append(projected, FreeCADRuntimeMetadataMutation{
+			Object:    object,
+			Property:  property,
+			Value:     mutation.Value,
+			ValueKind: mutation.ValueKind,
+		})
+	}
+	return projected, nil
+}
+
+func validateFreeCADRuntimeMetadataField(field, label, value string) (string, error) {
+	if value == "" {
+		return "", projectionErrorf(field, "is required for %s", label)
+	}
+	if strings.TrimSpace(value) != value {
+		return "", projectionErrorf(field, "must be an exact %s without surrounding whitespace", label)
+	}
+	if strings.ContainsRune(value, '\x00') {
+		return "", projectionErrorf(field, "must not contain NUL")
+	}
+	return value, nil
+}
+
+func validateFreeCADRuntimeMetadataValueKind(field, kind string) error {
+	switch kind {
+	case "string", "boolean", "number", "integer":
+		return nil
+	default:
+		return projectionErrorf(field, "%q is not supported", kind)
+	}
+}
+
+func validateFreeCADRuntimeMetadataValue(field, kind string, value any) error {
+	switch kind {
+	case "string":
+		if _, ok := value.(string); !ok {
+			return projectionErrorf(field, "must be a string for valueKind %q", kind)
+		}
+	case "boolean":
+		if _, ok := value.(bool); !ok {
+			return projectionErrorf(field, "must be a boolean for valueKind %q", kind)
+		}
+	case "number", "integer":
+		number, ok := freeCADRuntimeMetadataNumber(value)
+		if !ok {
+			return projectionErrorf(field, "must be a number for valueKind %q", kind)
+		}
+		if math.IsNaN(number) || math.IsInf(number, 0) {
+			return projectionError(field, "must be finite")
+		}
+		if kind == "integer" && math.Trunc(number) != number {
+			return projectionErrorf(field, "must be an exact integral number for valueKind %q", kind)
+		}
+	}
+	return nil
+}
+
+func freeCADRuntimeMetadataNumber(value any) (float64, bool) {
+	switch typed := value.(type) {
+	case float64:
+		return typed, true
+	case float32:
+		return float64(typed), true
+	case int:
+		return float64(typed), true
+	case int8:
+		return float64(typed), true
+	case int16:
+		return float64(typed), true
+	case int32:
+		return float64(typed), true
+	case int64:
+		return float64(typed), true
+	case uint:
+		return float64(typed), true
+	case uint8:
+		return float64(typed), true
+	case uint16:
+		return float64(typed), true
+	case uint32:
+		return float64(typed), true
+	case uint64:
+		return float64(typed), true
+	case json.Number:
+		number, err := typed.Float64()
+		return number, err == nil
+	default:
+		return 0, false
+	}
 }
 
 func MarshalFreeCADRuntimeExportManifestJSON(manifest *FreeCADRuntimeExportManifest) ([]byte, error) {

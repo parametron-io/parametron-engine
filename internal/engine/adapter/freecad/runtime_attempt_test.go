@@ -131,7 +131,7 @@ func enrichFreeCADRuntimeAttemptRequest(req *adapter.CADRuntimeOrchestrationRequ
 	req.Manifest.Values = map[string]interface{}{"width": 10.0, "nested": map[string]interface{}{"labels": []interface{}{"a", "b"}}}
 	req.Manifest.ParameterAssignments = []planner.ExportManifestParameterAssignment{{Name: "width", Target: "Body.Width", Value: 10, Type: "number", Unit: "mm"}}
 	req.Manifest.AssemblyMutations = &planner.ExportManifestMutationCollection{
-		Metadata:    []planner.ExportManifestMetadataMutation{{Object: "Assembly", Property: "Metadata", Value: map[string]interface{}{"label": "widget"}, ValueKind: "string"}},
+		Metadata:    []planner.ExportManifestMetadataMutation{{Object: "Assembly", Property: "PartNumber", Value: "W-120", ValueKind: "string"}},
 		Suppression: []planner.ExportManifestSuppressionMutation{{Object: "Bracket", Suppressed: true}},
 	}
 	req.Manifest.PartMutations = &planner.ExportManifestMutationCollection{
