@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "freecad-capture-drawing-multi-sheet",
+  "dsl": "drawing-multi-sheet.project.dsl",
+  "resources": {
+    "models": {
+      "drawing_multi_sheet_model": "input/model.FCStd"
+    }
+  }
+}

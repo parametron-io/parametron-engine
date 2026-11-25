@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "freecad-capture-drawing-single-sheet",
+  "dsl": "drawing-single-sheet.project.dsl",
+  "resources": {
+    "models": {
+      "drawing_single_sheet_model": "input/model.FCStd"
+    }
+  }
+}

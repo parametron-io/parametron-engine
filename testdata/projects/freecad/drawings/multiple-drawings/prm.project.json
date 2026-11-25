@@ -1,0 +1,10 @@
+{
+  "version": "1.0",
+  "projectId": "freecad-capture-drawing-multiple-drawings",
+  "dsl": "drawing-multiple-drawings.project.dsl",
+  "resources": {
+    "models": {
+      "drawing_multiple_drawings_model": "input/model.FCStd"
+    }
+  }
+}
