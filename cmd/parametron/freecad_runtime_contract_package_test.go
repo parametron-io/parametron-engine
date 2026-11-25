@@ -159,7 +159,8 @@ product Box {
         "annotations": {"description": "", "comment": "", "purpose": ""}
       }
     ],
-    "metadata": []
+    "metadata": [],
+    "drawings": []
   },
   "structure": {
     "rootComponentId": "cmp.root",

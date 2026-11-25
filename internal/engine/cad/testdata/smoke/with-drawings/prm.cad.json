@@ -1,0 +1,170 @@
+{
+  "schemaVersion": "1.0",
+  "captureId": "cap.drawings",
+  "adapter": {
+    "name": "freecad",
+    "version": ""
+  },
+  "cadSystem": {
+    "name": "FreeCAD",
+    "version": ""
+  },
+  "sourceDocument": {
+    "logicalId": "drawing_model",
+    "path": "input/Drawings.FCStd",
+    "fingerprint": "sha256:drawings"
+  },
+  "rootProduct": {
+    "id": "cmp.root"
+  },
+  "annotations": {
+    "description": "",
+    "comment": "",
+    "purpose": ""
+  },
+  "entities": {
+    "components": [
+      {
+        "id": "cmp.root",
+        "kind": "assembly",
+        "name": "RootAssembly",
+        "displayName": "Root Assembly",
+        "cadType": "App::Part",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.root"
+        },
+        "stabilityClass": "stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      },
+      {
+        "id": "cmp.bracket",
+        "kind": "part",
+        "name": "Bracket",
+        "displayName": "Bracket",
+        "cadType": "Part::Feature",
+        "quantity": 1,
+        "material": "",
+        "identitySource": {
+          "kind": "parent_scoped_path",
+          "path": "cmp.bracket"
+        },
+        "stabilityClass": "stable",
+        "targetability": {
+          "suppress": false,
+          "unsuppress": false,
+          "hide": true,
+          "unhide": true,
+          "delete": false
+        },
+        "annotations": {
+          "description": "",
+          "comment": "",
+          "purpose": ""
+        }
+      }
+    ],
+    "features": [],
+    "relationships": [],
+    "parameterGroups": [],
+    "parameters": [],
+    "metadata": [],
+    "drawings": [
+      {
+        "id": "drw.manufacturing",
+        "name": "manufacturing",
+        "displayName": "Manufacturing Drawing",
+        "componentIds": [
+          "cmp.root",
+          "cmp.bracket"
+        ],
+        "resource": {
+          "topology": "embedded"
+        },
+        "sheets": [
+          {
+            "id": "sht.manufacturing.assembly",
+            "name": "assembly",
+            "displayName": "Assembly",
+            "order": 1,
+            "cadType": "TechDraw::DrawPage",
+            "identitySource": {
+              "kind": "native_ref",
+              "nativeRef": "Page"
+            }
+          },
+          {
+            "id": "sht.manufacturing.detail",
+            "name": "detail",
+            "displayName": "Detail",
+            "order": 2,
+            "cadType": "TechDraw::DrawPage",
+            "identitySource": {
+              "kind": "native_ref",
+              "nativeRef": "Page001"
+            }
+          }
+        ],
+        "identitySource": {
+          "kind": "native_ref",
+          "nativeRef": "Drawing"
+        }
+      },
+      {
+        "id": "drw.inspection",
+        "name": "inspection",
+        "displayName": "Inspection Drawing",
+        "componentIds": [
+          "cmp.bracket"
+        ],
+        "resource": {
+          "topology": "separate",
+          "path": "drawings/inspection.FCStd"
+        },
+        "sheets": [
+          {
+            "id": "sht.inspection.sheetOne",
+            "name": "sheetOne",
+            "displayName": "Sheet One",
+            "order": 1,
+            "cadType": "TechDraw::DrawPage",
+            "identitySource": {
+              "kind": "native_ref",
+              "nativeRef": "Page"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "structure": {
+    "rootComponentId": "cmp.root",
+    "nodes": [
+      {
+        "componentId": "cmp.root",
+        "parentComponentId": "",
+        "children": [
+          "cmp.bracket"
+        ]
+      },
+      {
+        "componentId": "cmp.bracket",
+        "parentComponentId": "cmp.root",
+        "children": []
+      }
+    ]
+  }
+}

@@ -77,7 +77,8 @@
           "purpose": ""
         }
       }
-    ]
+    ],
+    "drawings": []
   },
   "structure": {
     "rootComponentId": "cmp.root",

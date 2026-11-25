@@ -53,6 +53,7 @@ type Entities struct {
 	ParameterGroups []ParameterGroup `json:"parameterGroups"`
 	Parameters      []Parameter      `json:"parameters"`
 	Metadata        []Metadata       `json:"metadata"`
+	Drawings        []Drawing        `json:"drawings"`
 }
 
 type IdentitySource struct {
@@ -162,6 +163,30 @@ type Metadata struct {
 	IdentitySource *IdentitySource `json:"identitySource,omitempty"`
 	StabilityClass string          `json:"stabilityClass,omitempty"`
 	Annotations    Annotations     `json:"annotations"`
+}
+
+type Drawing struct {
+	ID             string          `json:"id"`
+	Name           string          `json:"name"`
+	DisplayName    string          `json:"displayName"`
+	ComponentIDs   []string        `json:"componentIds"`
+	Resource       DrawingResource `json:"resource"`
+	Sheets         []DrawingSheet  `json:"sheets"`
+	IdentitySource *IdentitySource `json:"identitySource,omitempty"`
+}
+
+type DrawingResource struct {
+	Topology string `json:"topology"`
+	Path     string `json:"path,omitempty"`
+}
+
+type DrawingSheet struct {
+	ID             string         `json:"id"`
+	Name           string         `json:"name"`
+	DisplayName    string         `json:"displayName"`
+	Order          int            `json:"order"`
+	CADType        string         `json:"cadType"`
+	IdentitySource IdentitySource `json:"identitySource"`
 }
 
 type Structure struct {
@@ -386,7 +411,7 @@ func parseEntitiesField(root map[string]any, field string) (Entities, []string) 
 		return Entities{}, errs
 	}
 	errs = append(errs, ensureAllowedKeys(object, field,
-		"components", "features", "relationships", "parameterGroups", "parameters", "metadata")...)
+		"components", "features", "relationships", "parameterGroups", "parameters", "metadata", "drawings")...)
 	components, more := parseComponentsField(object, field+".components")
 	errs = append(errs, more...)
 	features, more := parseFeaturesField(object, field+".features")
@@ -399,6 +424,8 @@ func parseEntitiesField(root map[string]any, field string) (Entities, []string) 
 	errs = append(errs, more...)
 	metadata, more := parseMetadataField(object, field+".metadata")
 	errs = append(errs, more...)
+	drawings, more := parseDrawingsField(object, field+".drawings")
+	errs = append(errs, more...)
 	return Entities{
 		Components:      components,
 		Features:        features,
@@ -406,6 +433,7 @@ func parseEntitiesField(root map[string]any, field string) (Entities, []string) 
 		ParameterGroups: parameterGroups,
 		Parameters:      parameters,
 		Metadata:        metadata,
+		Drawings:        drawings,
 	}, errs
 }
 
@@ -843,11 +871,132 @@ func parseMetadataEntry(root map[string]any, location string) (Metadata, []strin
 	}, errs
 }
 
+func parseDrawingsField(root map[string]any, location string) ([]Drawing, []string) {
+	items, errs := requiredArrayField(root, "drawings")
+	errs = prefixProblems("entities", errs)
+	drawings := make([]Drawing, 0, len(items))
+	for index, item := range items {
+		entryLocation := fmt.Sprintf("%s[%d]", location, index)
+		object, ok := item.(map[string]any)
+		if !ok {
+			errs = append(errs, entryLocation+" must be an object")
+			continue
+		}
+		drawing, more := parseDrawing(object, entryLocation)
+		errs = append(errs, more...)
+		drawings = append(drawings, drawing)
+	}
+	return drawings, errs
+}
+
+func parseDrawing(root map[string]any, location string) (Drawing, []string) {
+	var errs []string
+	errs = append(errs, ensureAllowedKeys(root, location,
+		"id", "name", "displayName", "componentIds", "resource", "sheets", "identitySource")...)
+	id, more := requiredStringField(root, "id")
+	errs = append(errs, prefixProblems(location, more)...)
+	name, more := requiredStringField(root, "name")
+	errs = append(errs, prefixProblems(location, more)...)
+	displayName, more := requiredStringAllowEmpty(root, "displayName")
+	errs = append(errs, prefixProblems(location, more)...)
+	componentIDs, more := requiredStringArrayField(root, "componentIds")
+	errs = append(errs, prefixProblems(location, more)...)
+	resource, more := parseDrawingResourceField(root, location)
+	errs = append(errs, more...)
+	sheets, more := parseDrawingSheetsField(root, location)
+	errs = append(errs, more...)
+	identitySource, more := parseOptionalIdentitySource(root, location)
+	errs = append(errs, more...)
+	return Drawing{
+		ID:             id,
+		Name:           name,
+		DisplayName:    displayName,
+		ComponentIDs:   componentIDs,
+		Resource:       resource,
+		Sheets:         sheets,
+		IdentitySource: identitySource,
+	}, errs
+}
+
+func parseDrawingResourceField(root map[string]any, location string) (DrawingResource, []string) {
+	object, errs := requiredObjectField(root, "resource")
+	if object == nil {
+		return DrawingResource{}, prefixProblems(location, errs)
+	}
+	resourceLocation := location + ".resource"
+	errs = append(errs, ensureAllowedKeys(object, resourceLocation, "topology", "path")...)
+	topology, more := requiredStringField(object, "topology")
+	errs = append(errs, prefixProblems(resourceLocation, more)...)
+	pathValue, more := optionalStringAllowEmpty(object, "path")
+	errs = append(errs, prefixProblems(resourceLocation, more)...)
+	return DrawingResource{Topology: topology, Path: pathValue}, errs
+}
+
+func parseDrawingSheetsField(root map[string]any, location string) ([]DrawingSheet, []string) {
+	items, errs := requiredArrayField(root, "sheets")
+	errs = prefixProblems(location, errs)
+	sheets := make([]DrawingSheet, 0, len(items))
+	for index, item := range items {
+		sheetLocation := fmt.Sprintf("%s.sheets[%d]", location, index)
+		object, ok := item.(map[string]any)
+		if !ok {
+			errs = append(errs, sheetLocation+" must be an object")
+			continue
+		}
+		sheet, more := parseDrawingSheet(object, sheetLocation)
+		errs = append(errs, more...)
+		sheets = append(sheets, sheet)
+	}
+	return sheets, errs
+}
+
+func parseDrawingSheet(root map[string]any, location string) (DrawingSheet, []string) {
+	var errs []string
+	errs = append(errs, ensureAllowedKeys(root, location,
+		"id", "name", "displayName", "order", "cadType", "identitySource")...)
+	id, more := requiredStringField(root, "id")
+	errs = append(errs, prefixProblems(location, more)...)
+	name, more := requiredStringField(root, "name")
+	errs = append(errs, prefixProblems(location, more)...)
+	displayName, more := requiredStringAllowEmpty(root, "displayName")
+	errs = append(errs, prefixProblems(location, more)...)
+	order, more := requiredIntField(root, "order")
+	errs = append(errs, prefixProblems(location, more)...)
+	cadType, more := requiredStringField(root, "cadType")
+	errs = append(errs, prefixProblems(location, more)...)
+	identitySource, more := parseRequiredIdentitySource(root, location)
+	errs = append(errs, more...)
+	return DrawingSheet{
+		ID:             id,
+		Name:           name,
+		DisplayName:    displayName,
+		Order:          order,
+		CADType:        cadType,
+		IdentitySource: identitySource,
+	}, errs
+}
+
 func parseOptionalIdentitySource(root map[string]any, location string) (*IdentitySource, []string) {
 	value, ok := root["identitySource"]
 	if !ok {
 		return nil, nil
 	}
+	return parseIdentitySourceValue(value, location)
+}
+
+func parseRequiredIdentitySource(root map[string]any, location string) (IdentitySource, []string) {
+	value, ok := root["identitySource"]
+	if !ok {
+		return IdentitySource{}, []string{location + ".identitySource is required"}
+	}
+	identity, errs := parseIdentitySourceValue(value, location)
+	if identity == nil {
+		return IdentitySource{}, errs
+	}
+	return *identity, errs
+}
+
+func parseIdentitySourceValue(value any, location string) (*IdentitySource, []string) {
 	object, ok := value.(map[string]any)
 	if !ok {
 		return nil, []string{location + ".identitySource must be an object"}
@@ -967,6 +1116,28 @@ func requiredArrayField(root map[string]any, field string) ([]any, []string) {
 		return nil, []string{field + " must be an array"}
 	}
 	return items, nil
+}
+
+func requiredStringArrayField(root map[string]any, field string) ([]string, []string) {
+	items, errs := requiredArrayField(root, field)
+	if errs != nil {
+		return nil, errs
+	}
+	values := make([]string, 0, len(items))
+	var problems []string
+	for index, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			problems = append(problems, fmt.Sprintf("%s[%d] must be a string", field, index))
+			continue
+		}
+		if strings.TrimSpace(text) == "" {
+			problems = append(problems, fmt.Sprintf("%s[%d] is required", field, index))
+			continue
+		}
+		values = append(values, text)
+	}
+	return values, problems
 }
 
 func requiredStringField(root map[string]any, field string) (string, []string) {

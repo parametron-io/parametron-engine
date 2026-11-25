@@ -15,6 +15,7 @@ func TestSmokeFixturesParseAndValidate(t *testing.T) {
 		"minimal-valid",
 		"with-parameter-group",
 		"with-hierarchy",
+		"with-drawings",
 	}
 
 	for _, fixture := range fixtures {
@@ -116,7 +117,7 @@ func TestErrorsAreClassified(t *testing.T) {
 }
 
 func TestParseRejectsTrailingJSON(t *testing.T) {
-	payload := []byte(`{"schemaVersion":"1.0","captureId":"cap.minimal","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":""},"entities":{"components":[],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[]},"structure":{"rootComponentId":"cmp.root","nodes":[]}} true`)
+	payload := []byte(`{"schemaVersion":"1.0","captureId":"cap.minimal","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":""},"entities":{"components":[],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[],"drawings":[]},"structure":{"rootComponentId":"cmp.root","nodes":[]}} true`)
 	_, err := Parse(payload)
 	if err == nil {
 		t.Fatal("expected Parse to fail")
@@ -137,22 +138,22 @@ func TestParseRejectsUnknownFieldsAtStrictBoundaries(t *testing.T) {
 	}{
 		{
 			name:    "root",
-			payload: `{"schemaVersion":"1.0","captureId":"cap","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":""},"entities":{"components":[],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[]},"structure":{"rootComponentId":"cmp.root","nodes":[]},"extra":true}`,
+			payload: `{"schemaVersion":"1.0","captureId":"cap","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":""},"entities":{"components":[],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[],"drawings":[]},"structure":{"rootComponentId":"cmp.root","nodes":[]},"extra":true}`,
 			want:    `root has unknown field "extra"`,
 		},
 		{
 			name:    "annotations",
-			payload: `{"schemaVersion":"1.0","captureId":"cap","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":"","extra":true},"entities":{"components":[],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[]},"structure":{"rootComponentId":"cmp.root","nodes":[]}}`,
+			payload: `{"schemaVersion":"1.0","captureId":"cap","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":"","extra":true},"entities":{"components":[],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[],"drawings":[]},"structure":{"rootComponentId":"cmp.root","nodes":[]}}`,
 			want:    `annotations has unknown field "extra"`,
 		},
 		{
 			name:    "component",
-			payload: `{"schemaVersion":"1.0","captureId":"cap","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":""},"entities":{"components":[{"id":"cmp.root","kind":"assembly","name":"Root","displayName":"Root","cadType":"App::Part","quantity":1,"material":"","identitySource":{"kind":"parent_scoped_path","path":"cmp.root"},"targetability":{"suppress":false,"unsuppress":false,"hide":true,"unhide":true,"delete":false},"annotations":{"description":"","comment":"","purpose":""},"extra":true}],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[]},"structure":{"rootComponentId":"cmp.root","nodes":[{"componentId":"cmp.root","parentComponentId":"","children":[]}]}}`,
+			payload: `{"schemaVersion":"1.0","captureId":"cap","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":""},"entities":{"components":[{"id":"cmp.root","kind":"assembly","name":"Root","displayName":"Root","cadType":"App::Part","quantity":1,"material":"","identitySource":{"kind":"parent_scoped_path","path":"cmp.root"},"targetability":{"suppress":false,"unsuppress":false,"hide":true,"unhide":true,"delete":false},"annotations":{"description":"","comment":"","purpose":""},"extra":true}],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[],"drawings":[]},"structure":{"rootComponentId":"cmp.root","nodes":[{"componentId":"cmp.root","parentComponentId":"","children":[]}]}}`,
 			want:    `entities.components[0] has unknown field "extra"`,
 		},
 		{
 			name:    "identitySource",
-			payload: `{"schemaVersion":"1.0","captureId":"cap","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":""},"entities":{"components":[{"id":"cmp.root","kind":"assembly","name":"Root","displayName":"Root","cadType":"App::Part","quantity":1,"material":"","identitySource":{"kind":"parent_scoped_path","path":"cmp.root","extra":true},"targetability":{"suppress":false,"unsuppress":false,"hide":true,"unhide":true,"delete":false},"annotations":{"description":"","comment":"","purpose":""}}],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[]},"structure":{"rootComponentId":"cmp.root","nodes":[{"componentId":"cmp.root","parentComponentId":"","children":[]}]}}`,
+			payload: `{"schemaVersion":"1.0","captureId":"cap","adapter":{"name":"freecad","version":""},"cadSystem":{"name":"FreeCAD","version":""},"sourceDocument":{"logicalId":"m","path":"input/M.FCStd","fingerprint":"sha256:x"},"rootProduct":{"id":"cmp.root"},"annotations":{"description":"","comment":"","purpose":""},"entities":{"components":[{"id":"cmp.root","kind":"assembly","name":"Root","displayName":"Root","cadType":"App::Part","quantity":1,"material":"","identitySource":{"kind":"parent_scoped_path","path":"cmp.root","extra":true},"targetability":{"suppress":false,"unsuppress":false,"hide":true,"unhide":true,"delete":false},"annotations":{"description":"","comment":"","purpose":""}}],"features":[],"relationships":[],"parameterGroups":[],"parameters":[],"metadata":[],"drawings":[]},"structure":{"rootComponentId":"cmp.root","nodes":[{"componentId":"cmp.root","parentComponentId":"","children":[]}]}}`,
 			want:    `entities.components[0].identitySource has unknown field "extra"`,
 		},
 	}
