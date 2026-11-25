@@ -131,6 +131,49 @@ the normalized record and raw evidence. Native traversal identity keeps accepted
 contract-relative fallback coordinates, while relationship keys and ordering are
 unchanged.
 
+## Technical drawing capture coverage
+
+Technical drawings are first-class, CAD-neutral capture entities in
+`prm.cad.json` (`entities.drawings[]`) and in `semantic.Model` (`drawings[]`).
+They are logical drawing relationships with ordered, native-bound sheets, not
+DSL targets, planner inputs, export semantics, or reference-record edges.
+Capture may declare zero, one, or multiple drawings per part/assembly; each
+drawing carries drawing-level `componentIds` and `resource`, and each sheet
+carries an explicit positive `order` and required
+`identitySource.kind: "native_ref"`.
+
+| Permanent test file | Verification responsibility |
+|:--------------------|:----------------------------|
+| `internal/engine/cad/drawings_test.go` | Closed-field drawing/resource/sheet parsing, required non-null `entities.drawings`, global ID uniqueness, component resolution, sheet ordering, embedded/separate resource rules, and canonical byte stability |
+| `internal/engine/semantic/drawings_test.go` | Projection into `semantic.Model`, internal `NativeRef` retention and JSON exclusion, canonical drawing/component/sheet ordering, `DrawingsForComponent` query readiness, and validation failure determinism |
+| `internal/engine/semantic/drawings_real_capture_test.go` | Committed real FreeCAD drawing captures from parametron-freecad #93/#97 validate and project deterministically for zero, single-sheet, multi-sheet, and multiple-drawing cases; native selectors stay out of semantic JSON |
+| `cmd/parametron/drawings_real_capture_project_test.go` | The same real capture projects pass `validate --project` repeatedly through both project entrypoints without structural repair |
+| `cmd/parametron/drawings_project_boundary_test.go` | CLI project ingestion accepts zero/one/multiple drawings and both topologies, and rejects an unresolved drawing component |
+| `internal/engine/semanticmap/drawings_boundary_test.go` | Strict semantic-map parsing has no `captureToSemantic.drawings`; identity linkage ignores semantic drawings and adds no drawing operation capability |
+| `internal/engine/recordmap/semantic_drawings_boundary_test.go` | Native traversal mapping never emits `ReferenceKindDrawing` and semantic drawings never enter reference records |
+| `internal/engine/cad/fixture_alignment_test.go` | Every parseable repository `prm.cad.json` declares a non-null `entities.drawings` array |
+
+Real FreeCAD capture fixtures are committed under
+`testdata/projects/freecad/drawings/` as verbatim snapshots of the
+`parametron-freecad` #93/#97 capture outputs (single-sheet, multi-sheet,
+multiple-drawings) together with their source `.FCStd` fixtures. The
+zero-drawing case uses the existing rehearsal cube fixture. Engine validates
+and projects these captured contracts deterministically; no test performs live
+FreeCAD execution.
+
+`embedded` and `separate` are CAD-neutral resource topologies. FreeCAD v1.0
+capture emits `embedded` drawings because it promotes active-document pages
+only; `separate` is exercised by Engine fixtures. `resource.path` is
+project-relative and does not enter declared-resource inventory, reference
+records, or integrity records in v1.0. Sheet `NativeRef` values are retained
+internally and are never exposed in semantic-model JSON.
+
+Canonical ordering is drawings by `id`, `componentIds` lexicographically, and
+sheets by `order` then `id`. Drawing layout automation and export semantics
+remain deferred to `parametron-strategy#7` and `#8`; v1.0 adds no drawing DSL
+target, no `captureToSemantic.drawings` policy, and no `ReferenceKindDrawing`
+traversal mapping.
+
 ## Multi-outcome engineering observation coverage
 
 Permanent tests prove the removal of the single-eligible-outcome evidence-loss
