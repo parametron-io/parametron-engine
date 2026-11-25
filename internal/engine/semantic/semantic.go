@@ -33,6 +33,7 @@ type Model struct {
 	ParameterGroups         []ParameterGroup `json:"parameterGroups"`
 	Parameters              []Parameter      `json:"parameters"`
 	Metadata                []Metadata       `json:"metadata"`
+	Drawings                []Drawing        `json:"drawings"`
 	ProductIntents          []ProductIntent  `json:"productIntents,omitempty"`
 }
 
@@ -102,6 +103,34 @@ type Metadata struct {
 	Observable   bool        `json:"observable"`
 	Writable     bool        `json:"writable"`
 	CurrentValue ScalarValue `json:"currentValue,omitempty"`
+}
+
+type Drawing struct {
+	// NativeRef retains optional capture-backed drawing-level native identity.
+	// It is independent of semantic names and excluded from the JSON contract.
+	NativeRef    string          `json:"-"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	DisplayName  string          `json:"displayName"`
+	ComponentIDs []string        `json:"componentIds"`
+	Resource     DrawingResource `json:"resource"`
+	Sheets       []DrawingSheet  `json:"sheets"`
+}
+
+type DrawingResource struct {
+	Topology string `json:"topology"`
+	Path     string `json:"path,omitempty"`
+}
+
+type DrawingSheet struct {
+	// NativeRef retains the required capture-backed native page selector.
+	// It is independent of semantic names and excluded from the JSON contract.
+	NativeRef   string `json:"-"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	DisplayName string `json:"displayName"`
+	Order       int    `json:"order"`
+	NativeType  string `json:"nativeType"`
 }
 
 type ProductIntent struct {
@@ -234,6 +263,7 @@ func Clone(model *Model) *Model {
 	out.ParameterGroups = cloneParameterGroups(model.ParameterGroups)
 	out.Parameters = cloneParameters(model.Parameters)
 	out.Metadata = cloneMetadata(model.Metadata)
+	out.Drawings = cloneDrawings(model.Drawings)
 	out.ProductIntents = cloneProductIntents(model.ProductIntents)
 	return &out
 }
@@ -280,6 +310,37 @@ func (m *Model) CanonicalMetadata() []Metadata {
 	}
 	out := cloneMetadata(m.Metadata)
 	sortMetadata(out)
+	return out
+}
+
+func (m *Model) CanonicalDrawings() []Drawing {
+	if m == nil {
+		return nil
+	}
+	out := cloneDrawings(m.Drawings)
+	sortDrawings(out)
+	return out
+}
+
+// DrawingsForComponent returns defensive copies of the drawings that reference
+// componentID, in canonical drawing order with each drawing's sheets ordered by
+// Order then ID. This is the Engine query path from a component semantic ID to
+// drawings, ordered sheets, and retained native sheet bindings.
+func (m *Model) DrawingsForComponent(componentID string) []Drawing {
+	if m == nil {
+		return nil
+	}
+	matched := make([]Drawing, 0)
+	for _, drawing := range m.Drawings {
+		for _, candidate := range drawing.ComponentIDs {
+			if candidate == componentID {
+				matched = append(matched, drawing)
+				break
+			}
+		}
+	}
+	out := cloneDrawings(matched)
+	sortDrawings(out)
 	return out
 }
 
