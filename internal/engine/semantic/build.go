@@ -29,6 +29,7 @@ func BuildFromCapture(contract *cad.CADContract) (*Model, error) {
 		ParameterGroups:         make([]ParameterGroup, 0, len(contract.Entities.ParameterGroups)),
 		Parameters:              make([]Parameter, 0, len(contract.Entities.Parameters)),
 		Metadata:                make([]Metadata, 0, len(contract.Entities.Metadata)),
+		Drawings:                make([]Drawing, 0, len(contract.Entities.Drawings)),
 	}
 
 	for _, component := range contract.Entities.Components {
@@ -104,6 +105,32 @@ func BuildFromCapture(contract *cad.CADContract) (*Model, error) {
 			Observable:   entry.Observable,
 			Writable:     entry.Writable,
 			CurrentValue: copyScalarValue(entry.CurrentValue),
+		})
+	}
+
+	for _, drawing := range contract.Entities.Drawings {
+		sheets := make([]DrawingSheet, 0, len(drawing.Sheets))
+		for _, sheet := range drawing.Sheets {
+			sheets = append(sheets, DrawingSheet{
+				NativeRef:   sheet.IdentitySource.NativeRef,
+				ID:          sheet.ID,
+				Name:        sheet.Name,
+				DisplayName: sheet.DisplayName,
+				Order:       sheet.Order,
+				NativeType:  sheet.CADType,
+			})
+		}
+		model.Drawings = append(model.Drawings, Drawing{
+			NativeRef:    capturedNativeRef(drawing.IdentitySource),
+			ID:           drawing.ID,
+			Name:         drawing.Name,
+			DisplayName:  drawing.DisplayName,
+			ComponentIDs: append([]string(nil), drawing.ComponentIDs...),
+			Resource: DrawingResource{
+				Topology: drawing.Resource.Topology,
+				Path:     drawing.Resource.Path,
+			},
+			Sheets: sheets,
 		})
 	}
 

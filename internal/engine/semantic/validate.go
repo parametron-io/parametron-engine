@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+
+	"parametron/internal/engine/resourcebinding"
 )
 
 func validateModel(model *Model) []string {
@@ -36,13 +38,20 @@ func validateModel(model *Model) []string {
 	metadataIDs, metadataProblems := collectIDs("metadata", len(model.Metadata), func(i int) string {
 		return model.Metadata[i].ID
 	})
+	drawingIDs, drawingProblems := collectIDs("drawings", len(model.Drawings), func(i int) string {
+		return model.Drawings[i].ID
+	})
+	sheetIDs, sheetProblems := collectSheetIDs(model)
 
 	problems = append(problems, componentProblems...)
 	problems = append(problems, featureProblems...)
 	problems = append(problems, groupProblems...)
 	problems = append(problems, parameterProblems...)
 	problems = append(problems, metadataProblems...)
-	problems = append(problems, collectCrossCollectionIDConflicts(componentIDs, featureIDs, groupIDs, parameterIDs, metadataIDs)...)
+	problems = append(problems, drawingProblems...)
+	problems = append(problems, sheetProblems...)
+	problems = append(problems, collectCrossCollectionIDConflicts(componentIDs, featureIDs, groupIDs, parameterIDs, metadataIDs, drawingIDs)...)
+	problems = append(problems, collectSheetIDConflicts(componentIDs, featureIDs, groupIDs, parameterIDs, metadataIDs, drawingIDs, sheetIDs)...)
 
 	if model.RootComponentID != "" {
 		if _, ok := componentIDs[model.RootComponentID]; !ok {
@@ -141,6 +150,19 @@ func validateModel(model *Model) []string {
 				problems = append(problems, fmt.Sprintf("%s.ownerId %q must resolve to an existing feature", location, entry.OwnerID))
 			} else if ok && model.Features[featureIndex].ComponentID != entry.ComponentID {
 				problems = append(problems, fmt.Sprintf("%s.componentId %q must match owner feature component %q", location, entry.ComponentID, model.Features[featureIndex].ComponentID))
+			}
+		}
+	}
+
+	drawingNames := map[string]int{}
+	for i, drawing := range model.Drawings {
+		location := fmt.Sprintf("drawings[%d]", i)
+		problems = append(problems, validateDrawing(location, drawing, componentIDs)...)
+		if strings.TrimSpace(drawing.Name) != "" {
+			if previous, ok := drawingNames[drawing.Name]; ok {
+				problems = append(problems, fmt.Sprintf("%s.name %q duplicates drawing name already declared at drawings[%d].name", location, drawing.Name, previous))
+			} else {
+				drawingNames[drawing.Name] = i
 			}
 		}
 	}
@@ -253,7 +275,113 @@ func collectIDs(prefix string, count int, idAt func(index int) string) (map[stri
 	return ids, problems
 }
 
-func collectCrossCollectionIDConflicts(componentIDs, featureIDs, groupIDs, parameterIDs, metadataIDs map[string]int) []string {
+func collectSheetIDs(model *Model) (map[string]string, []string) {
+	ids := map[string]string{}
+	var problems []string
+	for i, drawing := range model.Drawings {
+		for j, sheet := range drawing.Sheets {
+			location := fmt.Sprintf("drawings[%d].sheets[%d]", i, j)
+			if strings.TrimSpace(sheet.ID) == "" {
+				problems = append(problems, location+".id is required")
+				continue
+			}
+			if previous, ok := ids[sheet.ID]; ok {
+				problems = append(problems, fmt.Sprintf("%s.id duplicates stable ID %q already declared at %s.id", location, sheet.ID, previous))
+				continue
+			}
+			ids[sheet.ID] = location
+		}
+	}
+	return ids, problems
+}
+
+func validateDrawing(location string, drawing Drawing, componentIDs map[string]int) []string {
+	var problems []string
+	if strings.TrimSpace(drawing.Name) == "" {
+		problems = append(problems, location+".name is required")
+	}
+	problems = append(problems, validateDrawingResource(location, drawing.Resource)...)
+
+	if len(drawing.ComponentIDs) == 0 {
+		problems = append(problems, location+".componentIds must not be empty")
+	}
+	seenComponents := map[string]int{}
+	for index, componentID := range drawing.ComponentIDs {
+		if strings.TrimSpace(componentID) == "" {
+			problems = append(problems, fmt.Sprintf("%s.componentIds[%d] is required", location, index))
+			continue
+		}
+		if previous, ok := seenComponents[componentID]; ok {
+			problems = append(problems, fmt.Sprintf("%s.componentIds[%d] duplicates component ID %q already declared at %s.componentIds[%d]", location, index, componentID, location, previous))
+		} else {
+			seenComponents[componentID] = index
+		}
+		if _, ok := componentIDs[componentID]; !ok {
+			problems = append(problems, fmt.Sprintf("%s.componentIds[%d] %q must resolve to an existing component", location, index, componentID))
+		}
+	}
+
+	if len(drawing.Sheets) == 0 {
+		problems = append(problems, location+".sheets must not be empty")
+	}
+	sheetNames := map[string]int{}
+	sheetOrders := map[int]int{}
+	for index, sheet := range drawing.Sheets {
+		sheetLocation := fmt.Sprintf("%s.sheets[%d]", location, index)
+		problems = append(problems, validateDrawingSheet(sheetLocation, sheet)...)
+		if strings.TrimSpace(sheet.Name) != "" {
+			if previous, ok := sheetNames[sheet.Name]; ok {
+				problems = append(problems, fmt.Sprintf("%s.name %q duplicates sheet name already declared at %s.sheets[%d].name", sheetLocation, sheet.Name, location, previous))
+			} else {
+				sheetNames[sheet.Name] = index
+			}
+		}
+		if sheet.Order >= 1 {
+			if previous, ok := sheetOrders[sheet.Order]; ok {
+				problems = append(problems, fmt.Sprintf("%s.order %d duplicates sheet order already declared at %s.sheets[%d].order", sheetLocation, sheet.Order, location, previous))
+			} else {
+				sheetOrders[sheet.Order] = index
+			}
+		}
+	}
+
+	return problems
+}
+
+func validateDrawingResource(location string, resource DrawingResource) []string {
+	var problems []string
+	switch resource.Topology {
+	case "embedded":
+		if resource.Path != "" {
+			problems = append(problems, location+".resource.path must be empty when topology is \"embedded\"")
+		}
+	case "separate":
+		if strings.TrimSpace(resource.Path) == "" {
+			problems = append(problems, location+".resource.path is required when topology is \"separate\"")
+		} else if err := resourcebinding.ValidateCoordinate(resource.Path); err != nil {
+			problems = append(problems, fmt.Sprintf("%s.resource.path %v", location, err))
+		}
+	default:
+		problems = append(problems, location+".resource.topology must be one of \"embedded\" or \"separate\"")
+	}
+	return problems
+}
+
+func validateDrawingSheet(location string, sheet DrawingSheet) []string {
+	var problems []string
+	if strings.TrimSpace(sheet.Name) == "" {
+		problems = append(problems, location+".name is required")
+	}
+	if strings.TrimSpace(sheet.NativeType) == "" {
+		problems = append(problems, location+".nativeType is required")
+	}
+	if sheet.Order < 1 {
+		problems = append(problems, location+".order must be a positive integer")
+	}
+	return problems
+}
+
+func collectCrossCollectionIDConflicts(componentIDs, featureIDs, groupIDs, parameterIDs, metadataIDs, drawingIDs map[string]int) []string {
 	type collection struct {
 		name string
 		ids  map[string]int
@@ -265,6 +393,7 @@ func collectCrossCollectionIDConflicts(componentIDs, featureIDs, groupIDs, param
 		{name: "parameterGroups", ids: groupIDs},
 		{name: "parameters", ids: parameterIDs},
 		{name: "metadata", ids: metadataIDs},
+		{name: "drawings", ids: drawingIDs},
 	}
 
 	var problems []string
@@ -279,6 +408,33 @@ func collectCrossCollectionIDConflicts(componentIDs, featureIDs, groupIDs, param
 				}
 				problems = append(problems, fmt.Sprintf("%s[%d].id duplicates stable ID %q already declared at %s[%d].id", right.name, rightIndex, id, left.name, leftIndex))
 			}
+		}
+	}
+	return problems
+}
+
+func collectSheetIDConflicts(componentIDs, featureIDs, groupIDs, parameterIDs, metadataIDs, drawingIDs map[string]int, sheetIDs map[string]string) []string {
+	type collection struct {
+		name string
+		ids  map[string]int
+	}
+	collections := []collection{
+		{name: "components", ids: componentIDs},
+		{name: "features", ids: featureIDs},
+		{name: "parameterGroups", ids: groupIDs},
+		{name: "parameters", ids: parameterIDs},
+		{name: "metadata", ids: metadataIDs},
+		{name: "drawings", ids: drawingIDs},
+	}
+
+	var problems []string
+	for id, location := range sheetIDs {
+		for _, collection := range collections {
+			index, ok := collection.ids[id]
+			if !ok {
+				continue
+			}
+			problems = append(problems, fmt.Sprintf("%s.id duplicates stable ID %q already declared at %s[%d].id", location, id, collection.name, index))
 		}
 	}
 	return problems

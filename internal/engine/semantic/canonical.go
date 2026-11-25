@@ -60,6 +60,27 @@ func cloneMetadata(in []Metadata) []Metadata {
 	return out
 }
 
+func cloneDrawings(in []Drawing) []Drawing {
+	if in == nil {
+		return nil
+	}
+	out := make([]Drawing, len(in))
+	copy(out, in)
+	for i := range out {
+		if in[i].ComponentIDs == nil {
+			out[i].ComponentIDs = nil
+		} else {
+			out[i].ComponentIDs = append([]string(nil), in[i].ComponentIDs...)
+		}
+		if in[i].Sheets == nil {
+			out[i].Sheets = nil
+		} else {
+			out[i].Sheets = append([]DrawingSheet(nil), in[i].Sheets...)
+		}
+	}
+	return out
+}
+
 func cloneProductIntents(in []ProductIntent) []ProductIntent {
 	if in == nil {
 		return nil
@@ -100,6 +121,7 @@ func sortForCanonical(model *Model) {
 	sortParameterGroups(model.ParameterGroups)
 	sortParameters(model.Parameters)
 	sortMetadata(model.Metadata)
+	sortDrawings(model.Drawings)
 	sortProductIntents(model.ProductIntents)
 }
 
@@ -119,12 +141,23 @@ func normalizeSlices(model *Model) {
 	if model.Metadata == nil {
 		model.Metadata = []Metadata{}
 	}
+	if model.Drawings == nil {
+		model.Drawings = []Drawing{}
+	}
 	if model.ProductIntents == nil {
 		model.ProductIntents = []ProductIntent{}
 	}
 	for i := range model.Components {
 		if model.Components[i].ChildrenIDs == nil {
 			model.Components[i].ChildrenIDs = []string{}
+		}
+	}
+	for i := range model.Drawings {
+		if model.Drawings[i].ComponentIDs == nil {
+			model.Drawings[i].ComponentIDs = []string{}
+		}
+		if model.Drawings[i].Sheets == nil {
+			model.Drawings[i].Sheets = []DrawingSheet{}
 		}
 	}
 	for i := range model.ProductIntents {
@@ -169,6 +202,22 @@ func sortParameters(parameters []Parameter) {
 
 func sortMetadata(metadata []Metadata) {
 	slices.SortFunc(metadata, func(a, b Metadata) int { return compareStrings(a.ID, b.ID) })
+}
+
+func sortDrawings(drawings []Drawing) {
+	slices.SortFunc(drawings, func(a, b Drawing) int { return compareStrings(a.ID, b.ID) })
+	for i := range drawings {
+		slices.Sort(drawings[i].ComponentIDs)
+		slices.SortFunc(drawings[i].Sheets, func(a, b DrawingSheet) int {
+			if a.Order != b.Order {
+				if a.Order < b.Order {
+					return -1
+				}
+				return 1
+			}
+			return compareStrings(a.ID, b.ID)
+		})
+	}
 }
 
 func sortProductIntents(intents []ProductIntent) {
