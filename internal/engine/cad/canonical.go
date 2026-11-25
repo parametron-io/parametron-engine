@@ -27,6 +27,7 @@ func cloneContract(in *CADContract) *CADContract {
 	out.Entities.ParameterGroups = cloneParameterGroups(in.Entities.ParameterGroups)
 	out.Entities.Parameters = cloneParameters(in.Entities.Parameters)
 	out.Entities.Metadata = cloneMetadata(in.Entities.Metadata)
+	out.Entities.Drawings = cloneDrawings(in.Entities.Drawings)
 	out.Structure.Nodes = cloneStructureNodes(in.Structure.Nodes)
 
 	for i := range out.Entities.Components {
@@ -139,6 +140,31 @@ func cloneMetadata(in []Metadata) []Metadata {
 	return out
 }
 
+func cloneDrawings(in []Drawing) []Drawing {
+	if in == nil {
+		return nil
+	}
+	out := make([]Drawing, len(in))
+	copy(out, in)
+	for i := range out {
+		if in[i].ComponentIDs == nil {
+			out[i].ComponentIDs = nil
+		} else {
+			out[i].ComponentIDs = append([]string{}, in[i].ComponentIDs...)
+		}
+		if in[i].Sheets == nil {
+			out[i].Sheets = nil
+		} else {
+			out[i].Sheets = append([]DrawingSheet{}, in[i].Sheets...)
+		}
+		if in[i].IdentitySource != nil {
+			copyValue := *in[i].IdentitySource
+			out[i].IdentitySource = &copyValue
+		}
+	}
+	return out
+}
+
 func cloneStructureNodes(in []StructureNode) []StructureNode {
 	if in == nil {
 		return nil
@@ -162,6 +188,19 @@ func sortForCanonical(contract *CADContract) {
 	slices.SortFunc(contract.Entities.ParameterGroups, func(a, b ParameterGroup) int { return compareStrings(a.ID, b.ID) })
 	slices.SortFunc(contract.Entities.Parameters, func(a, b Parameter) int { return compareStrings(a.ID, b.ID) })
 	slices.SortFunc(contract.Entities.Metadata, func(a, b Metadata) int { return compareStrings(a.ID, b.ID) })
+	slices.SortFunc(contract.Entities.Drawings, func(a, b Drawing) int { return compareStrings(a.ID, b.ID) })
+	for i := range contract.Entities.Drawings {
+		slices.Sort(contract.Entities.Drawings[i].ComponentIDs)
+		slices.SortFunc(contract.Entities.Drawings[i].Sheets, func(a, b DrawingSheet) int {
+			if a.Order != b.Order {
+				if a.Order < b.Order {
+					return -1
+				}
+				return 1
+			}
+			return compareStrings(a.ID, b.ID)
+		})
+	}
 	slices.SortFunc(contract.Structure.Nodes, func(a, b StructureNode) int { return compareStrings(a.ComponentID, b.ComponentID) })
 	for i := range contract.Structure.Nodes {
 		slices.Sort(contract.Structure.Nodes[i].Children)

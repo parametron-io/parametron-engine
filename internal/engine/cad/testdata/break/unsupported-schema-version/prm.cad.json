@@ -28,7 +28,8 @@
     "relationships": [],
     "parameterGroups": [],
     "parameters": [],
-    "metadata": []
+    "metadata": [],
+    "drawings": []
   },
   "structure": {
     "rootComponentId": "cmp.root",

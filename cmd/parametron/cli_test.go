@@ -3770,7 +3770,8 @@ product Box {
     "parameters": [
 `+strings.Join(parametersJSON, ",\n")+`
     ],
-    "metadata": []
+    "metadata": [],
+    "drawings": []
   },
   "structure": {
     "rootComponentId": "cmp.root",

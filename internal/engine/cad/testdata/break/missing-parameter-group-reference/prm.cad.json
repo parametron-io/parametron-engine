@@ -79,7 +79,8 @@
         }
       }
     ],
-    "metadata": []
+    "metadata": [],
+    "drawings": []
   },
   "structure": {
     "rootComponentId": "cmp.root",

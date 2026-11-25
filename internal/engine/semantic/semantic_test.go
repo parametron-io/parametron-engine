@@ -2537,6 +2537,7 @@ func largeSyntheticCapture(t *testing.T, componentCount int) *cad.CADContract {
 			ParameterGroups: make([]cad.ParameterGroup, 0, componentCount/3),
 			Parameters:      make([]cad.Parameter, 0, componentCount/3),
 			Metadata:        make([]cad.Metadata, 0, componentCount),
+			Drawings:        []cad.Drawing{},
 		},
 		Structure: cad.Structure{
 			RootComponentID: "cmp.000",

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"parametron/internal/engine/resourcebinding"
 )
 
 func Validate(contract *CADContract) error {
@@ -57,6 +59,9 @@ func validateContract(contract *CADContract) []string {
 	}
 	if contract.Entities.Metadata == nil {
 		problems = append(problems, "entities.metadata is required")
+	}
+	if contract.Entities.Drawings == nil {
+		problems = append(problems, "entities.drawings is required")
 	}
 	if contract.Structure.Nodes == nil {
 		problems = append(problems, "structure.nodes is required")
@@ -133,6 +138,24 @@ func validateContract(contract *CADContract) []string {
 		addStableID(location, entry.ID)
 		if entry.ID != "" {
 			metadataIDs[entry.ID] = index
+		}
+	}
+
+	drawingNames := map[string]int{}
+	for index, drawing := range contract.Entities.Drawings {
+		location := fmt.Sprintf("entities.drawings[%d]", index)
+		problems = append(problems, validateDrawing(location, drawing, componentIDs)...)
+		addStableID(location, drawing.ID)
+		if strings.TrimSpace(drawing.Name) != "" {
+			if prev, ok := drawingNames[drawing.Name]; ok {
+				problems = append(problems, fmt.Sprintf("%s.name %q duplicates drawing name already declared at entities.drawings[%d].name", location, drawing.Name, prev))
+			} else {
+				drawingNames[drawing.Name] = index
+			}
+		}
+		for sheetIndex, sheet := range drawing.Sheets {
+			sheetLocation := fmt.Sprintf("%s.sheets[%d]", location, sheetIndex)
+			addStableID(sheetLocation, sheet.ID)
 		}
 	}
 
@@ -390,6 +413,111 @@ func validateMetadata(location string, entry Metadata) []string {
 	problems = append(problems, validateIdentitySource(location, "metadata", entry.IdentitySource)...)
 	problems = append(problems, validateStabilityClass(location, entry.StabilityClass)...)
 	problems = append(problems, validateAnnotationPresence(location+".annotations", entry.Annotations)...)
+	return problems
+}
+
+func validateDrawing(location string, drawing Drawing, componentIDs map[string]int) []string {
+	var problems []string
+	problems = append(problems, requireText(location+".id", drawing.ID)...)
+	problems = append(problems, requireText(location+".name", drawing.Name)...)
+	problems = append(problems, validateDrawingResource(location, drawing.Resource)...)
+	problems = append(problems, validateDrawingIdentitySource(location, drawing.IdentitySource)...)
+
+	if len(drawing.ComponentIDs) == 0 {
+		problems = append(problems, location+".componentIds must not be empty")
+	}
+	seenComponentIDs := map[string]int{}
+	for index, componentID := range drawing.ComponentIDs {
+		if strings.TrimSpace(componentID) == "" {
+			problems = append(problems, fmt.Sprintf("%s.componentIds[%d] is required", location, index))
+			continue
+		}
+		if prev, ok := seenComponentIDs[componentID]; ok {
+			problems = append(problems, fmt.Sprintf("%s.componentIds[%d] duplicates component ID %q already declared at %s.componentIds[%d]", location, index, componentID, location, prev))
+		} else {
+			seenComponentIDs[componentID] = index
+		}
+		if _, ok := componentIDs[componentID]; !ok {
+			problems = append(problems, fmt.Sprintf("%s.componentIds[%d] %q must resolve to an existing component", location, index, componentID))
+		}
+	}
+
+	if len(drawing.Sheets) == 0 {
+		problems = append(problems, location+".sheets must not be empty")
+	}
+	seenSheetNames := map[string]int{}
+	seenSheetOrders := map[int]int{}
+	for index, sheet := range drawing.Sheets {
+		sheetLocation := fmt.Sprintf("%s.sheets[%d]", location, index)
+		problems = append(problems, validateDrawingSheet(sheetLocation, sheet)...)
+		if strings.TrimSpace(sheet.Name) != "" {
+			if prev, ok := seenSheetNames[sheet.Name]; ok {
+				problems = append(problems, fmt.Sprintf("%s.name %q duplicates sheet name already declared at %s.sheets[%d].name", sheetLocation, sheet.Name, location, prev))
+			} else {
+				seenSheetNames[sheet.Name] = index
+			}
+		}
+		if sheet.Order >= 1 {
+			if prev, ok := seenSheetOrders[sheet.Order]; ok {
+				problems = append(problems, fmt.Sprintf("%s.order %d duplicates sheet order already declared at %s.sheets[%d].order", sheetLocation, sheet.Order, location, prev))
+			} else {
+				seenSheetOrders[sheet.Order] = index
+			}
+		}
+	}
+
+	return problems
+}
+
+func validateDrawingResource(location string, resource DrawingResource) []string {
+	var problems []string
+	switch resource.Topology {
+	case "embedded":
+		if resource.Path != "" {
+			problems = append(problems, location+".resource.path must be empty when topology is \"embedded\"")
+		}
+	case "separate":
+		if strings.TrimSpace(resource.Path) == "" {
+			problems = append(problems, location+".resource.path is required when topology is \"separate\"")
+		} else if err := resourcebinding.ValidateCoordinate(resource.Path); err != nil {
+			problems = append(problems, fmt.Sprintf("%s.resource.path %v", location, err))
+		}
+	default:
+		problems = append(problems, location+".resource.topology must be one of \"embedded\" or \"separate\"")
+	}
+	return problems
+}
+
+func validateDrawingIdentitySource(location string, identity *IdentitySource) []string {
+	if identity == nil {
+		return nil
+	}
+	var problems []string
+	if strings.TrimSpace(identity.Kind) == "" {
+		return []string{location + ".identitySource.kind is required"}
+	}
+	if identity.Kind == "native_ref" && strings.TrimSpace(identity.NativeRef) == "" {
+		problems = append(problems, location+".identitySource.nativeRef is required")
+	}
+	return problems
+}
+
+func validateDrawingSheet(location string, sheet DrawingSheet) []string {
+	var problems []string
+	problems = append(problems, requireText(location+".id", sheet.ID)...)
+	problems = append(problems, requireText(location+".name", sheet.Name)...)
+	problems = append(problems, requireText(location+".cadType", sheet.CADType)...)
+	if sheet.Order < 1 {
+		problems = append(problems, location+".order must be a positive integer")
+	}
+	if strings.TrimSpace(sheet.IdentitySource.Kind) == "" {
+		problems = append(problems, location+".identitySource.kind is required")
+	} else if sheet.IdentitySource.Kind != "native_ref" {
+		problems = append(problems, location+".identitySource.kind must be \"native_ref\"")
+	}
+	if strings.TrimSpace(sheet.IdentitySource.NativeRef) == "" {
+		problems = append(problems, location+".identitySource.nativeRef is required")
+	}
 	return problems
 }
 
